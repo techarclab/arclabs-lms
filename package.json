@@ -16,7 +16,7 @@
     "infra:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker/docker-compose.yml down",
     "infra:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
-    "emulators": "firebase emulators:start --only auth --project demo-arc-labs",
+    "emulators": "firebase emulators:start --only auth --project demo-arc-labs --import=infra/firebase/emulator-data --export-on-exit",
     "db:migrate": "pnpm --filter @arc/api db:migrate",
     "db:seed": "pnpm --filter @arc/api db:seed",
     "db:studio": "pnpm --filter @arc/api db:studio"

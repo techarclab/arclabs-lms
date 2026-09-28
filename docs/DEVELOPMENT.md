@@ -22,7 +22,8 @@ pnpm db:seed                    # ARC LABS organization + a sample course
 
 ## Every day
 
-Terminal 1 — Firebase Auth emulator (no real Firebase project needed locally):
+Terminal 1 — Firebase Auth emulator (no real Firebase project needed locally).
+Accounts are saved to `infra/firebase/emulator-data` when you stop it with **Ctrl+C**:
 
 ```powershell
 pnpm emulators

@@ -13,6 +13,25 @@ import { Button, Card } from '@arc/ui';
 import { useAuth } from '@/components/AuthProvider';
 import { firebaseAuth } from '@/lib/firebase';
 
+const FRIENDLY_ERRORS: Record<string, string> = {
+  'auth/user-not-found': 'No account with this email. Click "Create an account" to sign up.',
+  'auth/wrong-password': 'Incorrect password.',
+  'auth/invalid-credential': 'Incorrect email or password.',
+  'auth/invalid-email': 'Please enter a valid email address.',
+  'auth/email-already-in-use': 'An account with this email already exists. Sign in instead.',
+  'auth/weak-password': 'Password is too weak — use at least 8 characters.',
+  'auth/too-many-requests': 'Too many attempts. Please wait a minute and try again.',
+  'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
+  'auth/network-request-failed':
+    'Network error — check your connection (or that the auth emulator is running).',
+};
+
+function friendlyError(e: unknown): string {
+  const code = (e as { code?: string })?.code;
+  if (code && FRIENDLY_ERRORS[code]) return FRIENDLY_ERRORS[code];
+  return e instanceof Error ? e.message.replace('Firebase: ', '') : 'Something went wrong';
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { me } = useAuth();
@@ -32,7 +51,7 @@ export default function LoginPage() {
     try {
       await fn();
     } catch (e) {
-      setMessage(e instanceof Error ? e.message.replace('Firebase: ', '') : 'Something went wrong');
+      setMessage(friendlyError(e));
     } finally {
       setBusy(false);
     }
