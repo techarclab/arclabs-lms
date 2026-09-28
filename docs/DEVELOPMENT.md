@@ -13,7 +13,7 @@ Node 24 · pnpm · Git · Docker Desktop (WSL 2) · Java 21 · Firebase CLI — 
 cd C:\dev\arclabs-lms          # or your project folder
 pnpm install                    # installs everything + generates the Prisma client
 pnpm infra:up                   # Postgres, Redis, MinIO, Mailpit in Docker
-pnpm db:migrate -- --name init  # creates the database tables (first time only)
+pnpm db:migrate --name init     # creates the database tables (first time only)
 pnpm db:seed                    # ARC LABS organization + a sample course
 ```
 
@@ -53,7 +53,7 @@ pnpm dev
 | --------------------------------------------- | --------------------------------------------- |
 | `pnpm build` / `pnpm typecheck` / `pnpm test` | across all apps                               |
 | `pnpm format`                                 | Prettier on the repo                          |
-| `pnpm db:migrate -- --name <change>`          | after editing `apps/api/prisma/schema.prisma` |
+| `pnpm db:migrate --name <change>`          | after editing `apps/api/prisma/schema.prisma` |
 | `pnpm infra:down`                             | stop Docker services (data is kept)           |
 
 ## Troubleshooting
