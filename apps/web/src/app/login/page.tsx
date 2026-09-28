@@ -64,7 +64,7 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/dashboard';
-  const { me, refresh } = useAuth();
+  const { me, refresh, error: authError, firebaseUser, loading: authLoading } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(
     params.get('mode') === 'signup' ? 'signup' : 'signin',
   );
@@ -79,6 +79,16 @@ function LoginInner() {
   useEffect(() => {
     if (me) router.replace(next.startsWith('/') ? next : '/dashboard');
   }, [me, router, next]);
+
+  // Firebase accepted the password but the ARC LABS API didn't (unreachable, CORS, rejected token).
+  useEffect(() => {
+    if (authLoading || !firebaseUser || me || !authError) return;
+    setError(
+      /fetch|network/i.test(authError)
+        ? 'Signed in, but the ARC LABS server could not be reached. Please try again in a minute.'
+        : `Signed in, but the ARC LABS server refused it: ${authError}`,
+    );
+  }, [authLoading, firebaseUser, me, authError]);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
