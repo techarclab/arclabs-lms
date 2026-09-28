@@ -1,9 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Building, Check, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DepartmentSummary, ExamDetail, MemberSummary, Paginated } from '@arc/types';
+import type {
+  DepartmentSummary,
+  ExamDetail,
+  MemberCounts,
+  MemberSummary,
+  Paginated,
+} from '@arc/types';
 import {
   Avatar,
   Button,
@@ -28,6 +35,12 @@ export function AudiencePicker({
   onSaved: (e: ExamDetail) => void;
 }) {
   const mutate = useApiMutation();
+  // Only admins can read member counts; for others this stays undefined and no hint is shown.
+  const { data: counts } = useApi<MemberCounts>('/members/summary', {
+    orgId,
+    shouldRetryOnError: false,
+  });
+  const learnerCount = counts ? (counts.byRole.LEARNER ?? 0) : null;
   const [all, setAll] = useState(exam.audience.assignToAll);
   const [depts, setDepts] = useState<string[]>(exam.audience.departments.map((d) => d.id));
   const [people, setPeople] = useState(exam.audience.users);
@@ -216,6 +229,15 @@ export function AudiencePicker({
               )}
             </div>
           </>
+        )}
+        {learnerCount === 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            This organization has no learners yet.{' '}
+            <Link href="/users" className="font-medium underline underline-offset-2">
+              Invite students in People
+            </Link>{' '}
+            (role: Learner), then come back and save the audience.
+          </div>
         )}
       </CardContent>
       <CardFooter>

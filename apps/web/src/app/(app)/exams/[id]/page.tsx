@@ -68,6 +68,7 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState('questions');
 
   if (error) {
     return (
@@ -118,16 +119,27 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
   };
 
   const checklist = [
-    { label: 'Questions added', done: exam.questionCount > 0 },
-    { label: 'Duration set', done: Boolean(exam.durationMinutes) },
+    { label: 'Questions added', done: exam.questionCount > 0, tab: 'questions' },
+    { label: 'Duration set', done: Boolean(exam.durationMinutes), tab: 'settings' },
     {
       label: 'Window scheduled',
       done:
         Boolean(exam.startsAt && exam.endsAt) &&
-        !exam.publishIssues.some((i) => i.includes('window') || i.includes('past')),
+        !exam.publishIssues.some((i) => /window|past|closing/i.test(i)),
+      tab: 'settings',
     },
-    { label: 'Audience chosen', done: exam.assignedCount > 0 },
+    { label: 'Audience chosen', done: exam.assignedCount > 0, tab: 'audience' },
   ];
+  const firstMissing = checklist.find((c) => !c.done);
+  /** Publish when ready; otherwise explain what's missing and jump to the right tab. */
+  const tryPublish = () => {
+    if (exam.publishIssues.length) {
+      toast.error('Not ready to publish yet', { description: exam.publishIssues.join(' · ') });
+      if (firstMissing) setTab(firstMissing.tab);
+      return;
+    }
+    void action('publish', 'Exam published — candidates can see it now');
+  };
 
   return (
     <>
@@ -174,9 +186,9 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
           )}
           {exam.state === 'DRAFT' ? (
             <Button
-              disabled={exam.publishIssues.length > 0}
+              className={exam.publishIssues.length ? 'opacity-60' : undefined}
               loading={busy}
-              onClick={() => action('publish', 'Exam published — candidates can see it now')}
+              onClick={tryPublish}
             >
               <Rocket /> Publish
             </Button>
@@ -227,7 +239,7 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <Tabs defaultValue="questions">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-6">
             <TabsTrigger value="questions">
               <ListChecks /> Questions{' '}
@@ -349,13 +361,29 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
               <CardContent className="space-y-4">
                 <ul className="space-y-2.5">
                   {checklist.map((c) => (
-                    <li key={c.label} className="flex items-center gap-2.5 text-sm">
-                      {c.done ? (
-                        <CheckCircle2 className="size-[18px] text-emerald-500" />
-                      ) : (
-                        <Circle className="size-[18px] text-ink-300" />
-                      )}
-                      <span className={c.done ? 'text-ink-700' : 'text-ink-500'}>{c.label}</span>
+                    <li key={c.label}>
+                      <button
+                        onClick={() => setTab(c.tab)}
+                        className="group flex w-full items-center gap-2.5 rounded-lg px-1 py-0.5 text-left text-sm transition hover:bg-ink-50"
+                      >
+                        {c.done ? (
+                          <CheckCircle2 className="size-[18px] text-emerald-500" />
+                        ) : (
+                          <Circle className="size-[18px] text-ink-300" />
+                        )}
+                        <span
+                          className={
+                            c.done ? 'text-ink-700' : 'text-ink-500 group-hover:text-brand-700'
+                          }
+                        >
+                          {c.label}
+                        </span>
+                        {!c.done && (
+                          <span className="ml-auto text-xs text-brand-600 opacity-0 transition group-hover:opacity-100">
+                            Set up →
+                          </span>
+                        )}
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -367,10 +395,9 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
                   </ul>
                 )}
                 <Button
-                  className="w-full"
-                  disabled={exam.publishIssues.length > 0}
+                  className={cn('w-full', exam.publishIssues.length > 0 && 'opacity-60')}
                   loading={busy}
-                  onClick={() => action('publish', 'Exam published')}
+                  onClick={tryPublish}
                 >
                   <Rocket /> Publish exam
                 </Button>
