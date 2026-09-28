@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "prisma generate && nest build",
+    "build": "prisma generate && nest build && node scripts/bundle-serverless.mjs",
     "dev": "prisma generate && nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -48,6 +48,7 @@
     "@types/nodemailer": "^7.0.12",
     "@types/pg": "^8.15.0",
     "@types/supertest": "^6.0.3",
+    "esbuild": "0.28.2",
     "prisma": "~7.10.0",
     "supertest": "^7.1.0",
     "tsx": "^4.20.0",
