@@ -3,10 +3,12 @@
 Status: Accepted (Sept 2026) — supersedes the storage part of ADR 0002
 
 ## Context
+
 Firebase Storage now requires the Blaze (pay-as-you-go) plan. We want to start
 without a paid plan and keep storage portable.
 
 ## Decision
+
 - **Production:** Cloudflare R2 (10 GB/month free, zero egress fees, S3 API).
 - **Local development:** MinIO in Docker (S3 API).
 - **Code:** one `StorageService` using the AWS S3 SDK; switching provider
@@ -18,8 +20,10 @@ without a paid plan and keep storage portable.
   video provider (Bunny Stream / Vimeo / Cloudflare Stream) can be added later behind the same lesson model.
 
 ## Unchanged from ADR 0002
+
 Firebase Authentication (free tier, no Blaze needed) for identity; PostgreSQL as system of record.
 
 ## Object key layout
+
 `org/{organizationId}/{area}/{entityId}/{uuid}-{safeFileName}`
 areas: `courses`, `lessons`, `submissions`, `projects`, `certificates`, `branding`, `avatars`.

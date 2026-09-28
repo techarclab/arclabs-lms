@@ -5,8 +5,9 @@
 
 // Prisma 7: the connection URL lives in apps/api/prisma.config.ts (DATABASE_URL).
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {

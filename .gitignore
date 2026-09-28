@@ -9,3 +9,9 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+next-env.d.ts
+*.tsbuildinfo
+apps/api/src/generated/
+firebase-debug.log
+ui-debug.log
+.firebase/

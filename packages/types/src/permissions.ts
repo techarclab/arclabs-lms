@@ -1,0 +1,109 @@
+import type { OrgRole } from './roles';
+
+/**
+ * Permission keys. Source of truth for docs/architecture/tenancy-and-rbac.md.
+ * "Scoped" permissions (own / assigned) are further narrowed in the API service layer.
+ */
+export const PERMISSIONS = [
+  'org.settings.manage',
+  'department.manage',
+  'user.manage',
+  'user.role.assign',
+  'course.manage',
+  'course.publish',
+  'course.view',
+  'quiz.author',
+  'program.manage',
+  'program.view',
+  'batch.manage',
+  'batch.view',
+  'enrollment.manage',
+  'session.manage',
+  'attendance.mark',
+  'attendance.view',
+  'assignment.manage',
+  'submission.grade',
+  'project.manage',
+  'project.evaluate',
+  'certificate.template.manage',
+  'certificate.issue',
+  'certificate.view',
+  'analytics.view',
+  'audit.view',
+  'learning.participate', // consume content, attempt quizzes, submit work
+] as const;
+export type Permission = (typeof PERMISSIONS)[number];
+
+export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
+  ORG_ADMIN: [
+    'org.settings.manage',
+    'department.manage',
+    'user.manage',
+    'user.role.assign',
+    'course.manage',
+    'course.publish',
+    'course.view',
+    'quiz.author',
+    'program.manage',
+    'program.view',
+    'batch.manage',
+    'batch.view',
+    'enrollment.manage',
+    'session.manage',
+    'attendance.mark',
+    'attendance.view',
+    'assignment.manage',
+    'submission.grade',
+    'project.manage',
+    'project.evaluate',
+    'certificate.template.manage',
+    'certificate.issue',
+    'certificate.view',
+    'analytics.view',
+    'audit.view',
+  ],
+  CONTENT_MANAGER: [
+    'course.manage',
+    'course.publish',
+    'course.view',
+    'quiz.author',
+    'program.view',
+    'batch.view',
+    'assignment.manage',
+    'project.manage',
+    'analytics.view',
+  ],
+  INSTRUCTOR: [
+    'course.view',
+    'quiz.author',
+    'program.view',
+    'batch.view',
+    'enrollment.manage',
+    'session.manage',
+    'attendance.mark',
+    'attendance.view',
+    'assignment.manage',
+    'submission.grade',
+    'project.manage',
+    'project.evaluate',
+    'certificate.view',
+    'analytics.view',
+  ],
+  EVALUATOR: ['course.view', 'batch.view', 'submission.grade', 'project.evaluate'],
+  LEARNER: [
+    'course.view',
+    'batch.view',
+    'attendance.view',
+    'certificate.view',
+    'learning.participate',
+    'analytics.view',
+  ],
+};
+
+export function permissionsFor(roles: readonly OrgRole[]): Set<Permission> {
+  return new Set(roles.flatMap((r) => ROLE_PERMISSIONS[r]));
+}
+
+export function hasPermission(roles: readonly OrgRole[], permission: Permission): boolean {
+  return roles.some((r) => ROLE_PERMISSIONS[r].includes(permission));
+}

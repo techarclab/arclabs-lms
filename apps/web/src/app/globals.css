@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+@source "../../../../packages/ui/src";
+
+@theme {
+  --color-brand-50: #eef7ff;
+  --color-brand-100: #d9ecff;
+  --color-brand-500: #2f86f6;
+  --color-brand-600: #1f6ae0;
+  --color-brand-700: #1954b4;
+  --color-brand-900: #0f2d5c;
+  --font-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}

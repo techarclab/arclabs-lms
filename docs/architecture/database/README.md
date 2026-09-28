@@ -1,9 +1,9 @@
 # Database design (V1)
 
-Source of truth: [`schema.prisma`](./schema.prisma) — Prisma 7, PostgreSQL 16.
-Validated: 31 tables, 16 enums. Will move to `apps/api/prisma/` during scaffolding.
+Source of truth: [`apps/api/prisma/schema.prisma`](../../../apps/api/prisma/schema.prisma) — Prisma 7, PostgreSQL 16.
 
 ## Conventions
+
 - UUID primary keys; table names snake_case via `@@map`.
 - Every organization-owned table has `organizationId` (indexed).
 - Child tables that are always reached through a scoped parent (modules, lessons,
@@ -17,6 +17,7 @@ Validated: 31 tables, 16 enums. Will move to `apps/api/prisma/` during scaffoldi
   - `attendance`, `submissions`, `quiz_attempts`: `organization_id` must equal parent's (enforced by service layer + tests).
 
 ## Entity overview
+
 ```mermaid
 erDiagram
   ORGANIZATION ||--o{ DEPARTMENT : has
@@ -53,5 +54,6 @@ erDiagram
 ```
 
 ## Deferred to V2+ (not in schema yet)
+
 devices / device_credentials / device_telemetry, labs / experiments / lab_submissions,
 payments, internships, community. Lesson type `LAB` is reserved so the content model doesn't change.

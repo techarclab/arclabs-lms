@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc_dev_password
+          POSTGRES_DB: arc_lms
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U arc -d arc_lms" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://arc:arc_dev_password@localhost:5432/arc_lms?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - name: Apply migrations
+        run: pnpm --filter @arc/api exec prisma migrate deploy
+      - run: pnpm test
+      - run: pnpm build

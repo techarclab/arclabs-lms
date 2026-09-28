@@ -1,0 +1,5 @@
+{
+  "extends": "@arc/config/tsconfig/library.json",
+  "compilerOptions": { "declaration": false, "lib": ["ES2023"], "types": ["node"] },
+  "include": ["src"]
+}

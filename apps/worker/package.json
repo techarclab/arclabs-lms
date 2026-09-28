@@ -1,0 +1,25 @@
+{
+  "name": "@arc/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5.61.0",
+    "dotenv": "^17.2.0",
+    "ioredis": "^5.8.0",
+    "nodemailer": "^7.0.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@arc/config": "workspace:*",
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "^7.0.2",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}

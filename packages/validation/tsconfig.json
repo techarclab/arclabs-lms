@@ -1,0 +1,4 @@
+{
+  "extends": "@arc/config/tsconfig/library.json",
+  "include": ["src"]
+}

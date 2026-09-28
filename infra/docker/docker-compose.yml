@@ -1,0 +1,65 @@
+# Local development services for ARC LABS LMS.
+# Start: pnpm infra:up   Stop: pnpm infra:down
+name: arc-lms
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: arc
+      POSTGRES_PASSWORD: arc_dev_password
+      POSTGRES_DB: arc_lms
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U arc -d arc_lms']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: arc_minio
+      MINIO_ROOT_PASSWORD: arc_minio_password
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console -> http://localhost:9001
+    volumes:
+      - miniodata:/data
+
+  # Creates the private bucket once MinIO is up, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 arc_minio arc_minio_password; do sleep 1; done;
+      mc mb --ignore-existing local/arc-lms;
+      mc anonymous set none local/arc-lms;
+      exit 0;
+      "
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # inbox UI -> http://localhost:8025
+
+volumes:
+  pgdata:
+  miniodata:
