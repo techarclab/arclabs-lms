@@ -29,30 +29,19 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # S3-compatible object storage (replaces MinIO, whose images were removed from Docker Hub).
+  # The API creates the bucket on startup in development.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -dir=/data -s3 -s3.port=8333
     environment:
-      MINIO_ROOT_USER: arc_minio
-      MINIO_ROOT_PASSWORD: arc_minio_password
+      AWS_ACCESS_KEY_ID: arc_s3_key
+      AWS_SECRET_ACCESS_KEY: arc_s3_secret
     ports:
-      - '9000:9000' # S3 API
-      - '9001:9001' # web console -> http://localhost:9001
+      - '8333:8333' # S3 API
+      - '8888:8888' # file browser -> http://localhost:8888
     volumes:
-      - miniodata:/data
-
-  # Creates the private bucket once MinIO is up, then exits.
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set local http://minio:9000 arc_minio arc_minio_password; do sleep 1; done;
-      mc mb --ignore-existing local/arc-lms;
-      mc anonymous set none local/arc-lms;
-      exit 0;
-      "
+      - s3data:/data
 
   mailpit:
     image: axllent/mailpit:latest
@@ -62,4 +51,4 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  s3data:

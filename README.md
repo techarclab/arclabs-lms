@@ -13,14 +13,14 @@ Monorepo for the ARC LABS learning platform (V1 = LMS).
 | ORM / migrations           | Prisma 7 (driver adapter `@prisma/adapter-pg`)                                                                      |
 | Database                   | PostgreSQL 16 — Docker locally; managed provider (Cloud SQL, Neon, Supabase…) chosen before staging                 |
 | Cache / queues             | Redis 7 + BullMQ                                                                                                    |
-| Object storage             | S3-compatible: Cloudflare R2 in production, MinIO locally (ADR 0003)                                                |
+| Object storage             | S3-compatible: Cloudflare R2 in production, SeaweedFS locally (ADR 0003)                                                |
 | Auth                       | Firebase Authentication (email/password, Google); NestJS verifies Firebase ID tokens; roles/orgs stored in Postgres |
 | Validation                 | Zod (shared in `packages/validation`)                                                                               |
 | Tests                      | Vitest (unit + API integration via Supertest), Playwright (E2E later)                                               |
 | CI                         | GitHub Actions                                                                                                      |
 | Notifications              | Email via queue worker + Firebase Cloud Messaging (push)                                                            |
 | Hosting                    | To be decided before staging (Firebase App Hosting + Cloud Run need Blaze; free-tier alternatives will be compared) |
-| Local infra                | Docker Compose (Postgres, Redis, MinIO, Mailpit) + Firebase Auth emulator                                           |
+| Local infra                | Docker Compose (Postgres, Redis, SeaweedFS, Mailpit) + Firebase Auth emulator                                           |
 
 **Getting started:** see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 

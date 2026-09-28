@@ -9,7 +9,7 @@ Status: Accepted (Sept 2026) — auth, storage and hosting superseded by ADR 000
 3. **Auth:** Self-built in NestJS (JWT access 15 min + refresh 7–30 days, rotated, stored hashed). Passwords hashed with argon2id. Revisit a managed IdP when SSO for institutions is needed.
 4. **Tenancy:** Single database, shared schema, `organization_id` on every org-owned table, enforced in a backend guard/service layer (optionally Postgres RLS later).
 5. **Validation:** Zod schemas shared between web and API.
-6. **Local dev:** Docker Compose for Postgres, Redis, MinIO, Mailpit (email testing).
+6. **Local dev:** Docker Compose for Postgres, Redis, S3-compatible storage, Mailpit (email testing).
 7. **Environments:** local → staging → production from the start; secrets only in env vars.
 
 ## Consequences

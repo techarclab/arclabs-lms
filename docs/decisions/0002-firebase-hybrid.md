@@ -1,6 +1,6 @@
 # ADR 0002 – Firebase hybrid architecture
 
-Status: Accepted (Sept 2026) — amends ADR 0001. Storage section superseded by ADR 0003 (Cloudflare R2 / MinIO).
+Status: Accepted (Sept 2026) — amends ADR 0001. Storage section superseded by ADR 0003 (Cloudflare R2 / SeaweedFS).
 
 ## Context
 

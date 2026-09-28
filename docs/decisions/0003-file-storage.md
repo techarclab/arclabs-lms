@@ -10,9 +10,10 @@ without a paid plan and keep storage portable.
 ## Decision
 
 - **Production:** Cloudflare R2 (10 GB/month free, zero egress fees, S3 API).
-- **Local development:** MinIO in Docker (S3 API).
+- **Local development:** SeaweedFS in Docker (S3 API). MinIO was the first choice but its
+  free images were removed from Docker Hub in Sept 2026.
 - **Code:** one `StorageService` using the AWS S3 SDK; switching provider
-  (R2 / MinIO / Backblaze B2 / AWS S3 / GCS) is configuration only:
+  (R2 / SeaweedFS / Backblaze B2 / AWS S3 / GCS) is configuration only:
   `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`.
 - Bucket is private. Browser uploads/downloads use short-lived **presigned URLs** issued by the API
   after authorization checks. Postgres stores only object keys + metadata.
