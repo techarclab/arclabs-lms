@@ -9,14 +9,16 @@ Monorepo for the ARC LABS learning platform (V1 = LMS).
 | Web | Next.js (App Router) + React + TypeScript |
 | API | NestJS + TypeScript, REST `/api/v1`, OpenAPI/Swagger |
 | ORM / migrations | Prisma |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 16 — hosted on Google Cloud SQL (via Firebase SQL Connect); Docker Postgres locally |
 | Cache / queues | Redis 7 + BullMQ |
-| Object storage | S3-compatible (MinIO locally) |
-| Auth | JWT access token + rotating refresh token (httpOnly cookie), argon2 password hashing |
+| Object storage | Firebase Storage (Firebase Emulator locally) |
+| Auth | Firebase Authentication (email/password, Google); NestJS verifies Firebase ID tokens; roles/orgs stored in Postgres |
 | Validation | Zod (shared in `packages/validation`) |
 | Tests | Vitest/Jest (unit), Supertest (API integration), Playwright (E2E later) |
 | CI | GitHub Actions |
-| Local infra | Docker Compose |
+| Notifications | Email via queue worker + Firebase Cloud Messaging (push) |
+| Hosting | Firebase App Hosting (web), Cloud Run (API + worker) |
+| Local infra | Docker Compose (Postgres, Redis, Mailpit) + Firebase Emulator Suite |
 
 ## Planned layout
 ```

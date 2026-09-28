@@ -1,6 +1,6 @@
 # ADR 0001 – Tech stack and tooling
 
-Status: Accepted (Sept 2026)
+Status: Accepted (Sept 2026) — auth, storage and hosting superseded by ADR 0002
 
 ## Decisions
 1. **Monorepo:** pnpm workspaces + Turborepo – fast installs, shared TS packages, cached builds.
