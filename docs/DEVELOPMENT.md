@@ -57,6 +57,11 @@ pnpm dev
 | `pnpm db:migrate --name <change>`             | after editing `apps/api/prisma/schema.prisma` |
 | `pnpm infra:down`                             | stop Docker services (data is kept)           |
 
+## Tests
+`pnpm test` runs unit tests plus API integration tests against a **separate** database
+(`arc_lms_test`, created and migrated automatically — Docker must be running). Firebase is faked
+in tests, so the emulator is not needed. Your development data is never touched.
+
 ## Troubleshooting
 
 - **`pnpm` / `firebase` not recognized** → add `%APPDATA%\npm` to your user PATH, reopen PowerShell.

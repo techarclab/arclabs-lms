@@ -3,21 +3,15 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { ApiExceptionFilter } from './common/api-exception.filter';
-import { requestId } from './common/request-id.middleware';
+import { configureApp } from './app.setup';
 import { loadEnv } from './config/env';
 
 async function bootstrap() {
   const env = loadEnv();
   const app = await NestFactory.create(AppModule);
 
-  app.use(requestId);
-  app.use(helmet());
-  app.enableCors({ origin: env.WEB_ORIGIN.split(','), credentials: true });
-  app.setGlobalPrefix('api/v1');
-  app.useGlobalFilters(new ApiExceptionFilter());
+  configureApp(app, env);
   app.enableShutdownHooks();
 
   if (env.NODE_ENV !== 'production') {

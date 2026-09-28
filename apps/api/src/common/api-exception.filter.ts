@@ -19,6 +19,10 @@ const CODE_BY_STATUS: Record<number, string> = {
   429: 'RATE_LIMITED',
 };
 
+function isPrismaError(e: unknown, code: string): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === code;
+}
+
 /** Converts every error into the standard ApiErrorBody shape. */
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -41,6 +45,17 @@ export class ApiExceptionFilter implements ExceptionFilter {
         message: (obj.message as string) ?? exception.message,
         ...(obj.details !== undefined ? { details: obj.details } : {}),
       };
+    } else if (isPrismaError(exception, 'P2002')) {
+      status = HttpStatus.CONFLICT;
+      const target = (exception as { meta?: { target?: unknown } }).meta?.target;
+      body = {
+        code: 'CONFLICT',
+        message: 'A record with these values already exists',
+        details: { fields: target },
+      };
+    } else if (isPrismaError(exception, 'P2025')) {
+      status = HttpStatus.NOT_FOUND;
+      body = { code: 'NOT_FOUND', message: 'Not found' };
     } else {
       this.logger.error(exception instanceof Error ? exception.stack : String(exception));
     }

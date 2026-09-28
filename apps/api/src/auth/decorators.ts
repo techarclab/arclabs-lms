@@ -15,6 +15,10 @@ export const REQUIRED_PERMISSION = 'requiredPermission';
 export const RequirePermission = (permission: Permission) =>
   SetMetadata(REQUIRED_PERMISSION, permission);
 
+export const SUPER_ADMIN_ONLY = 'superAdminOnly';
+/** Platform-level routes (create organizations, platform analytics). */
+export const SuperAdminOnly = () => SetMetadata(SUPER_ADMIN_ONLY, true);
+
 export const CurrentUser = createParamDecorator(
   (_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<AuthedRequest>().user,
 );

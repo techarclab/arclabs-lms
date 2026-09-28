@@ -1,8 +1,11 @@
 {
-  "extends": "@arc/config/tsconfig/library.json",
+  "extends": "@arc/config/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": ["DOM", "ES2023"]
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true
   },
   "include": ["src"]
 }

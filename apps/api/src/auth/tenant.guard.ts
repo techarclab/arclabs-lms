@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { hasPermission, type OrgRole, type Permission } from '@arc/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { REQUIRED_PERMISSION } from './decorators';
+import { REQUIRED_PERMISSION, SUPER_ADMIN_ONLY } from './decorators';
 import type { AuthedRequest } from './auth.types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +26,19 @@ export class TenantGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    if (
+      this.reflector.getAllAndOverride<boolean>(SUPER_ADMIN_ONLY, [
+        ctx.getHandler(),
+        ctx.getClass(),
+      ])
+    ) {
+      const req = ctx.switchToHttp().getRequest<AuthedRequest>();
+      if (!req.user?.isSuperAdmin) {
+        throw new ForbiddenException({ message: 'Super Admin only' });
+      }
+      return true;
+    }
+
     const permission = this.reflector.getAllAndOverride<Permission | undefined>(
       REQUIRED_PERMISSION,
       [ctx.getHandler(), ctx.getClass()],

@@ -13,6 +13,7 @@ interface AuthState {
   error: string | null;
   getToken: () => Promise<string | undefined>;
   signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -46,9 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getToken = useCallback(async () => firebaseAuth().currentUser?.getIdToken(), []);
   const signOut = useCallback(() => fbSignOut(firebaseAuth()), []);
+  const refresh = useCallback(async () => {
+    const token = await firebaseAuth().currentUser?.getIdToken();
+    if (token) setMe(await api<MeResponse>('/auth/me', { token }));
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ loading, firebaseUser, me, error, getToken, signOut }}>
+    <AuthContext.Provider value={{ loading, firebaseUser, me, error, getToken, signOut, refresh }}>
       {children}
     </AuthContext.Provider>
   );

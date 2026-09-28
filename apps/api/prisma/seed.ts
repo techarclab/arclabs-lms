@@ -9,12 +9,13 @@ const prisma = new PrismaClient({
 async function main() {
   const arc = await prisma.organization.upsert({
     where: { slug: 'arc-labs' },
-    update: {},
+    update: { primaryColor: '#2F45EF' },
     create: {
       name: 'ARC LABS',
       slug: 'arc-labs',
       type: 'PLATFORM',
       contactEmail: 'deepakarclab@outlook.com',
+      primaryColor: '#2F45EF',
     },
   });
 
