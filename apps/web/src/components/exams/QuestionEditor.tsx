@@ -7,8 +7,15 @@ import type { QuestionItem } from '@arc/types';
 import { questionInputSchema } from '@arc/validation';
 import { Button, cn, Dialog, DialogContent, Field, Input, Textarea } from '@arc/ui';
 import { useApiMutation } from '@/lib/use-api';
+import {
+  blankCoding,
+  codingFromQuestion,
+  CodingSetup,
+  codingToInput,
+  type CodingDraft,
+} from './code/CodingSetup';
 
-type EditableType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'NUMERIC';
+type EditableType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'NUMERIC' | 'CODING';
 type Opt = { id?: string; text: string; correct: boolean };
 
 const TYPES: { value: EditableType; label: string }[] = [
@@ -16,6 +23,7 @@ const TYPES: { value: EditableType; label: string }[] = [
   { value: 'MULTIPLE_CHOICE', label: 'Multiple choice' },
   { value: 'TRUE_FALSE', label: 'True / False' },
   { value: 'NUMERIC', label: 'Numeric' },
+  { value: 'CODING', label: 'Coding' },
 ];
 
 const blankOptions = (): Opt[] => [
@@ -52,6 +60,7 @@ export function QuestionEditor({
   const [difficulty, setDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
   const [points, setPoints] = useState('1');
   const [negativeMarks, setNegativeMarks] = useState('0');
+  const [coding, setCoding] = useState<CodingDraft>(blankCoding);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,7 +86,9 @@ export function QuestionEditor({
       setDifficulty(question.difficulty);
       setPoints(String(question.points));
       setNegativeMarks(String(question.negativeMarks));
+      setCoding(question.coding ? codingFromQuestion(question.coding) : blankCoding());
     } else {
+      setCoding(blankCoding());
       setPrompt('');
       setOptions(blankOptions());
       setExplanation('');
@@ -98,6 +109,8 @@ export function QuestionEditor({
     };
     if (type === 'TRUE_FALSE') return { type, ...base, answer: tfAnswer };
     if (type === 'NUMERIC') return { type, ...base, value, tolerance };
+    if (type === 'CODING')
+      return { type, ...base, negativeMarks: 0, coding: codingToInput(coding) };
     return { type, ...base, options: options.filter((o) => o.text.trim()) };
   }
 
@@ -120,6 +133,7 @@ export function QuestionEditor({
         setOptions(blankOptions());
         setExplanation('');
         setValue('');
+        setCoding(blankCoding());
       } else onOpenChange(false);
     } catch (e) {
       setError((e as Error).message);
@@ -144,10 +158,10 @@ export function QuestionEditor({
       <DialogContent
         title={question ? 'Edit question' : 'New question'}
         icon={<CircleHelp />}
-        className="max-w-2xl"
+        className={type === 'CODING' ? 'max-w-4xl' : 'max-w-2xl'}
       >
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 pt-4 pb-6">
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-ink-100 p-1 sm:grid-cols-5">
             {TYPES.map((t) => (
               <button
                 key={t.value}
@@ -155,6 +169,7 @@ export function QuestionEditor({
                 disabled={Boolean(question)}
                 onClick={() => {
                   setType(t.value);
+                  if (t.value === 'CODING' && points === '1') setPoints('10');
                   if (t.value === 'SINGLE_CHOICE')
                     setOptions((os) =>
                       os.map((o, i) => ({
@@ -190,7 +205,11 @@ export function QuestionEditor({
               rows={4}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g. Which ESP32 pin supports capacitive touch?"
+              placeholder={
+                type === 'CODING'
+                  ? 'Describe the task, the input format and the expected output format…'
+                  : 'e.g. Which ESP32 pin supports capacitive touch?'
+              }
             />
           </Field>
 
@@ -300,6 +319,8 @@ export function QuestionEditor({
             </div>
           )}
 
+          {type === 'CODING' && <CodingSetup value={coding} onChange={setCoding} orgId={orgId} />}
+
           <div className="grid gap-4 sm:grid-cols-4">
             <Field label="Topic" htmlFor="q-topic" className="sm:col-span-2">
               <Input
@@ -323,14 +344,20 @@ export function QuestionEditor({
                 onChange={(e) => setPoints(e.target.value)}
               />
             </Field>
-            <Field label="Negative" htmlFor="q-neg" hint="If enabled on the exam">
-              <Input
-                id="q-neg"
-                inputMode="decimal"
-                value={negativeMarks}
-                onChange={(e) => setNegativeMarks(e.target.value)}
-              />
-            </Field>
+            {type === 'CODING' ? (
+              <p className="self-end pb-2 text-xs text-ink-500">
+                Split across test cases · no negative marks
+              </p>
+            ) : (
+              <Field label="Negative" htmlFor="q-neg" hint="If enabled on the exam">
+                <Input
+                  id="q-neg"
+                  inputMode="decimal"
+                  value={negativeMarks}
+                  onChange={(e) => setNegativeMarks(e.target.value)}
+                />
+              </Field>
+            )}
           </div>
 
           <div className="space-y-1.5">

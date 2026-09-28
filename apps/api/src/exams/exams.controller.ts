@@ -16,7 +16,11 @@ import {
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import {
+  checkCodingSchema,
   createExamSchema,
+  runCodeSchema,
+  type CheckCodingInput,
+  type RunCodeInput,
   listExamsQuery,
   listQuestionsQuery,
   proctorEventSchema,
@@ -39,6 +43,7 @@ import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
 import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
+import { CodeRunner } from './code-runner';
 import { AttemptsService } from './attempts.service';
 import { ExamAnalyticsService } from './exam-analytics.service';
 import { ExamsService } from './exams.service';
@@ -65,6 +70,13 @@ export class QuestionsController {
   @Get('topics')
   topics(@OrgContext() org: OrgContextInfo) {
     return this.questions.topics(org.organizationId);
+  }
+
+  /** Try a reference solution against test cases (nothing is saved). */
+  @Post('check-code')
+  @HttpCode(200)
+  checkCode(@Body(new ZodValidationPipe(checkCodingSchema)) body: CheckCodingInput) {
+    return this.questions.checkCoding(body);
   }
 
   @Post()
@@ -257,6 +269,16 @@ export class ExamsController {
     return this.analytics.attemptDetail(org.organizationId, id, attemptId);
   }
 
+  @Post(':id/evaluate-coding')
+  @HttpCode(200)
+  evaluateCoding(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.analytics.evaluateCoding(u, org.organizationId, id);
+  }
+
   @Post(':id/attempts/:attemptId/force-submit')
   @HttpCode(200)
   forceSubmit(
@@ -343,5 +365,33 @@ export class MyExamsController {
   @Get('attempts/:id/result')
   result(@CurrentUser() u: User, @Param('id', UuidPipe) id: string) {
     return this.attempts.result(u, id);
+  }
+
+  /** Run code during the exam: against the sample test cases, or with the student's own input. */
+  @ApiHeader({ name: 'X-Attempt-Session', required: true })
+  @Post('attempts/:id/run')
+  @HttpCode(200)
+  run(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+    @Body(new ZodValidationPipe(runCodeSchema)) body: RunCodeInput,
+  ) {
+    return this.attempts.runCode(u, id, session, body);
+  }
+}
+
+// ───────────── Code runner status ─────────────
+
+@ApiTags('exams')
+@ApiBearerAuth()
+@Controller('code-runner')
+export class CodeRunnerController {
+  constructor(private readonly runner: CodeRunner) {}
+
+  /** Whether coding answers can be run right now (any signed-in user). */
+  @Get('status')
+  status() {
+    return this.runner.status();
   }
 }

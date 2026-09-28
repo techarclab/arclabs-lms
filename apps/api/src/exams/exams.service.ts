@@ -242,7 +242,7 @@ export class ExamsService {
         id: { in: unique },
         organizationId: orgId,
         archived: false,
-        type: { in: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'NUMERIC'] },
+        type: { in: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'NUMERIC', 'CODING'] },
       },
       select: { id: true },
     });

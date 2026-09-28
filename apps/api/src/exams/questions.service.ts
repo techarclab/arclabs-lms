@@ -1,10 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Paginated, QuestionItem } from '@arc/types';
-import type { ListQuestionsQuery, QuestionInputParsed } from '@arc/validation';
+import type { Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
+import {
+  normalizeOutput,
+  type CheckCodingInput,
+  type ListQuestionsQuery,
+  type QuestionInputParsed,
+} from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CodeRunner, RunnerUnavailableError } from './code-runner';
 
 const optionId = () => randomBytes(4).toString('hex');
 
@@ -25,6 +31,7 @@ export function toQuestionItem(q: QuestionRow): QuestionItem {
     difficulty: q.difficulty,
     topic: q.topic,
     tags: q.tags,
+    coding: (q.coding ?? null) as QuestionItem['coding'],
     archived: q.archived,
     usedInExams: q.quizzes.length,
     locked: q.quizzes.some((x) => x.quiz.status === 'PUBLISHED'),
@@ -81,6 +88,30 @@ export function toColumns(
         options: [],
         correctAnswer: { value: input.value, tolerance: input.tolerance },
       };
+    case 'CODING': {
+      const c = input.coding;
+      const starter = Object.fromEntries(
+        Object.entries(c.starter).filter(([lang]) => c.languages.includes(lang as 'c')),
+      );
+      return {
+        ...base,
+        negativeMarks: 0,
+        options: [],
+        correctAnswer: {},
+        coding: {
+          languages: c.languages,
+          starter,
+          testCases: c.testCases.map((t) => ({
+            id: t.id || optionId(),
+            input: t.input,
+            output: t.output,
+            sample: t.sample,
+          })),
+          timeLimitMs: c.timeLimitMs,
+          solution: c.solution ?? null,
+        },
+      };
+    }
   }
 }
 
@@ -89,13 +120,44 @@ export class QuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly runner: CodeRunner,
   ) {}
+
+  /** Runs a reference solution against test cases so authors can verify expected outputs. */
+  async checkCoding(input: CheckCodingInput): Promise<RunCodeResponse> {
+    try {
+      const runs = await this.runner.runMany(
+        input.language,
+        input.code,
+        input.coding.testCases.map((t) => t.input),
+        input.coding.timeLimitMs,
+      );
+      return {
+        results: runs.map((r, i) => {
+          const t = input.coding.testCases[i]!;
+          return {
+            input: t.input,
+            expected: t.output,
+            output: r.stdout,
+            passed: r.status === 'OK' && normalizeOutput(r.stdout) === normalizeOutput(t.output),
+            status: r.status,
+            error: r.error,
+            timeMs: r.timeMs,
+          };
+        }),
+      };
+    } catch (e) {
+      if (e instanceof RunnerUnavailableError)
+        throw new ConflictException({ code: 'RUNNER_UNAVAILABLE', message: e.message });
+      throw e;
+    }
+  }
 
   async list(orgId: string, q: ListQuestionsQuery): Promise<Paginated<QuestionItem>> {
     const where: Prisma.QuestionWhereInput = {
       organizationId: orgId,
       archived: q.archived,
-      type: q.type ? q.type : { notIn: ['CODING', 'SHORT_ANSWER'] },
+      type: q.type ? q.type : { not: 'SHORT_ANSWER' },
       ...(q.difficulty ? { difficulty: q.difficulty } : {}),
       ...(q.topic ? { topic: { equals: q.topic, mode: 'insensitive' } } : {}),
       ...(q.search
@@ -208,6 +270,7 @@ export class QuestionsService {
         difficulty: src.difficulty,
         topic: src.topic,
         tags: src.tags,
+        coding: (src.coding ?? undefined) as Prisma.InputJsonValue | undefined,
       },
       include: questionInclude,
     });

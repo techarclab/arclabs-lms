@@ -3,6 +3,7 @@ import {
   discriminationIndex,
   distribution,
   gradeAttempt,
+  gradeQuestion,
   isCorrect,
   median,
   percentileOf,
@@ -86,5 +87,48 @@ describe('grading', () => {
       { total: 10, correct: false },
     ]);
     expect(d).toBe(1);
+  });
+
+  describe('coding questions', () => {
+    const code = {
+      id: 'c1',
+      type: 'CODING',
+      correctAnswer: {},
+      points: 10,
+      negativeMarks: 0,
+      topic: null,
+      difficulty: 'EASY',
+    };
+    const ans = { language: 'c', code: 'int main(){}' };
+
+    it('gives partial credit per test case passed, with no negative marks', () => {
+      expect(gradeQuestion(code, ans, true, { passed: 3, total: 4 })).toMatchObject({
+        answered: true,
+        correct: false,
+        marks: 7.5,
+        testsPassed: 3,
+        testsTotal: 4,
+      });
+      expect(gradeQuestion(code, ans, true, { passed: 4, total: 4 })).toMatchObject({
+        correct: true,
+        marks: 10,
+      });
+      expect(gradeQuestion(code, ans, true, { passed: 0, total: 4 }).marks).toBe(0);
+    });
+
+    it('treats blank code as unanswered and missing runner results as pending', () => {
+      expect(gradeQuestion(code, { language: 'c', code: '   ' }, true)).toMatchObject({
+        answered: false,
+        marks: 0,
+      });
+      expect(gradeQuestion(code, ans, true, 'pending')).toMatchObject({ pending: true, marks: 0 });
+      const g = gradeAttempt(
+        [code],
+        { c1: ans },
+        { negativeMarking: false, passPct: 40 },
+        { c1: 'pending' },
+      );
+      expect(g.codingPending).toBe(true);
+    });
   });
 });

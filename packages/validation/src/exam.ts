@@ -7,7 +7,75 @@ export const gradableTypeSchema = z.enum([
   'MULTIPLE_CHOICE',
   'TRUE_FALSE',
   'NUMERIC',
+  'CODING',
 ]);
+
+/** Languages students can write coding answers in. */
+export const codeLanguageSchema = z.enum(['c', 'python']);
+export type CodeLanguage = z.infer<typeof codeLanguageSchema>;
+export const CODE_LANGUAGES: { id: CodeLanguage; label: string }[] = [
+  { id: 'c', label: 'C' },
+  { id: 'python', label: 'Python 3' },
+];
+
+const MAX_CODE = 20_000;
+const MAX_IO = 10_000;
+
+export const testCaseSchema = z.object({
+  id: z.string().max(40).optional(),
+  input: z.string().max(MAX_IO).default(''),
+  output: z.string().max(MAX_IO),
+  sample: z.boolean().default(false), // shown to students (and runnable during the exam)
+});
+
+export const codingConfigSchema = z
+  .object({
+    languages: z.array(codeLanguageSchema).min(1, 'Pick at least one language').max(2),
+    starter: z.partialRecord(codeLanguageSchema, z.string().max(MAX_CODE)).default({}),
+    testCases: z
+      .array(testCaseSchema)
+      .min(1, 'Add at least one test case')
+      .max(30, 'Up to 30 test cases'),
+    timeLimitMs: z.coerce.number().int().min(500).max(10_000).default(2000),
+    solution: z
+      .object({ language: codeLanguageSchema, code: z.string().max(MAX_CODE) })
+      .optional()
+      .nullable(),
+  })
+  .superRefine((c, ctx) => {
+    if (!c.testCases.some((t) => t.sample)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['testCases'],
+        message: 'Mark at least one test case as a sample so students can check their code',
+      });
+    }
+    if (c.testCases.every((t) => t.sample)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['testCases'],
+        message: 'Keep at least one hidden test case for grading',
+      });
+    }
+  });
+export type CodingConfigInput = z.input<typeof codingConfigSchema>;
+
+/** A student's coding answer. */
+export const codeAnswerSchema = z.object({
+  language: codeLanguageSchema,
+  code: z.string().max(MAX_CODE),
+});
+export type CodeAnswer = z.infer<typeof codeAnswerSchema>;
+
+/** Output comparison: ignore trailing spaces on each line and trailing blank lines. */
+export function normalizeOutput(s: string) {
+  return s
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .replace(/\n+$/, '');
+}
 export const resultVisibilitySchema = z.enum([
   'SCORE_NOW_ANSWERS_AFTER_CLOSE',
   'IMMEDIATE',
@@ -51,6 +119,12 @@ export const questionInputSchema = z
       ...questionBase,
       value: z.coerce.number({ message: 'Enter the correct number' }).finite(),
       tolerance: z.coerce.number().min(0).default(0),
+    }),
+    z.object({
+      type: z.literal('CODING'),
+      ...questionBase,
+      negativeMarks: z.coerce.number().max(0, 'Coding questions have no negative marks').default(0),
+      coding: codingConfigSchema,
     }),
   ])
   .superRefine((q, ctx) => {
@@ -145,6 +219,7 @@ export const answerValueSchema = z.union([
   z.string().max(100),
   z.array(z.string().max(100)).max(20),
   z.number().finite(),
+  codeAnswerSchema,
   z.null(),
 ]);
 
@@ -169,3 +244,23 @@ export const proctorEventSchema = z.object({
   meta: z.record(z.string(), z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
 });
 export type ProctorEventInput = z.infer<typeof proctorEventSchema>;
+
+/** Student "Run" during the exam: sample test cases, or their own input. */
+export const runCodeSchema = z.object({
+  questionId: z.uuid(),
+  language: codeLanguageSchema,
+  code: z.string().min(1, 'Write some code first').max(MAX_CODE),
+  stdin: z.string().max(MAX_IO).optional(),
+});
+export type RunCodeInput = z.infer<typeof runCodeSchema>;
+
+/** Staff: check a coding question's test cases against a reference solution. */
+export const checkCodingSchema = z.object({
+  coding: z.object({
+    testCases: z.array(testCaseSchema).min(1).max(30),
+    timeLimitMs: z.coerce.number().int().min(500).max(10_000).default(2000),
+  }),
+  language: codeLanguageSchema,
+  code: z.string().min(1).max(MAX_CODE),
+});
+export type CheckCodingInput = z.infer<typeof checkCodingSchema>;

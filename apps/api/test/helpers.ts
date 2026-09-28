@@ -8,6 +8,7 @@ import { FIREBASE_AUTH } from '../src/auth/firebase-admin.provider';
 import { loadEnv } from '../src/config/env';
 import type { OrgRole } from '@arc/types';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { CODE_RUNNER_IMPL, type CodeRunnerImpl } from '../src/exams/code-runner';
 
 /** Test env: real Postgres (test DB) + Redis, fake Firebase. */
 export function applyTestEnv() {
@@ -46,11 +47,35 @@ const fakeFirebaseAuth = {
     `http://test.local/reset?email=${encodeURIComponent(email)}`,
 };
 
+/**
+ * Stand-in code runner. "Programs" are keywords: REVERSE prints the input reversed, ECHO prints it
+ * back, COMPILE_ERR fails to compile, LOOP times out. Set `fakeRunner.down` to simulate an outage.
+ */
+export const fakeRunner = { down: false, runs: 0 };
+const fakeRunnerImpl: CodeRunnerImpl = {
+  provider: 'local',
+  async run(_lang, code, stdin) {
+    fakeRunner.runs++;
+    if (fakeRunner.down) throw new Error('runner offline');
+    if (code.includes('COMPILE_ERR'))
+      return { status: 'COMPILE_ERROR', stdout: '', error: 'main.c:1: error', timeMs: null };
+    if (code.includes('LOOP'))
+      return { status: 'TIME_LIMIT', stdout: '', error: null, timeMs: 2000 };
+    const text = stdin.replace(/\n$/, '');
+    if (code.includes('REVERSE'))
+      return { status: 'OK', stdout: [...text].reverse().join('') + '\n', error: null, timeMs: 5 };
+    if (code.includes('ECHO')) return { status: 'OK', stdout: stdin, error: null, timeMs: 5 };
+    return { status: 'OK', stdout: '', error: null, timeMs: 5 };
+  },
+};
+
 export async function createTestApp() {
   applyTestEnv();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FIREBASE_AUTH)
     .useValue(fakeFirebaseAuth)
+    .overrideProvider(CODE_RUNNER_IMPL)
+    .useValue(fakeRunnerImpl)
     .compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, loadEnv());

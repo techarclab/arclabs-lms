@@ -20,13 +20,19 @@ import {
   ShieldAlert,
   Timer,
 } from 'lucide-react';
-import type { AttemptSession, ProctorEventResult } from '@arc/types';
+import type {
+  AttemptSession,
+  CodeLanguageName,
+  ProctorEventResult,
+  RunCodeResponse,
+} from '@arc/types';
 import { Button, cn, Dialog, DialogContent } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
 import { PromptText } from './AnswerView';
 import { CameraView, stopCamera, useCamera } from './camera';
+import { CodingAnswer } from './code/CodingAnswer';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
 
 type SaveState = 'saved' | 'saving' | 'offline';
@@ -286,6 +292,8 @@ export function ExamRunner({
 
   const isAnswered = (id: string) => {
     const a = answers[id];
+    if (a && typeof a === 'object' && !Array.isArray(a))
+      return Boolean((a as { code?: string }).code?.trim());
     return !(a === undefined || a === null || a === '' || (Array.isArray(a) && a.length === 0));
   };
   const answeredCount = useMemo(() => qs.filter((x) => isAnswered(x.id)).length, [answers, qs]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -443,10 +451,31 @@ export function ExamRunner({
                 ? 'Select all that apply'
                 : q.type === 'NUMERIC'
                   ? 'Type a number'
-                  : 'Choose one answer'}
+                  : q.type === 'CODING'
+                    ? 'Write your program'
+                    : 'Choose one answer'}
             </p>
 
-            {q.type === 'NUMERIC' ? (
+            {q.type === 'CODING' && q.coding ? (
+              <CodingAnswer
+                key={q.id}
+                question={q}
+                answer={answer as { language: CodeLanguageName; code: string } | null | undefined}
+                onChange={(a) => setAnswer(q.id, a, 1500)}
+                onRun={async (body) => {
+                  try {
+                    await flush();
+                    return await call<RunCodeResponse>(`/my/attempts/${session.attemptId}/run`, {
+                      questionId: q.id,
+                      ...body,
+                    });
+                  } catch (e) {
+                    handleError(e);
+                    throw e;
+                  }
+                }}
+              />
+            ) : q.type === 'NUMERIC' ? (
               <div className="mt-4 max-w-sm">
                 <input
                   id="num-answer"
@@ -522,13 +551,15 @@ export function ExamRunner({
             <Button variant="secondary" disabled={index === 0} onClick={() => go(index - 1)}>
               <ChevronLeft /> Previous
             </Button>
-            <Button
-              variant="ghost"
-              disabled={!isAnswered(q.id)}
-              onClick={() => setAnswer(q.id, null)}
-            >
-              <Eraser /> Clear
-            </Button>
+            {q.type !== 'CODING' && (
+              <Button
+                variant="ghost"
+                disabled={!isAnswered(q.id)}
+                onClick={() => setAnswer(q.id, null)}
+              >
+                <Eraser /> Clear
+              </Button>
+            )}
             <div className="ml-auto flex gap-2">
               {index < qs.length - 1 ? (
                 <Button onClick={() => go(index + 1)}>

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { SAMPLE_QUESTIONS } from './sample-questions';
+import { SAMPLE_CODING, SAMPLE_QUESTIONS } from './sample-questions';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -97,6 +97,26 @@ async function main() {
       n++;
     }
     console.log(`Added ${n} sample questions to the ARC LABS question bank.`);
+  }
+
+  // Coding samples are added once, even when the bank already had other questions.
+  if (!(await prisma.question.count({ where: { organizationId: arc.id, type: 'CODING' } }))) {
+    for (const q of SAMPLE_CODING) {
+      await prisma.question.create({
+        data: {
+          organizationId: arc.id,
+          type: 'CODING',
+          prompt: q.prompt,
+          topic: q.topic,
+          difficulty: q.difficulty,
+          points: q.points,
+          options: [],
+          correctAnswer: {},
+          coding: q.coding,
+        },
+      });
+    }
+    console.log(`Added ${SAMPLE_CODING.length} sample coding questions.`);
   }
 
   console.log(`Seeded organization "${arc.name}" (${arc.id}) and a sample course.`);

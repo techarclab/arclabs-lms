@@ -261,3 +261,59 @@ export const SAMPLE_QUESTIONS: Q[] = [
     correct: [0, 1, 3],
   },
 ];
+
+/** Starter coding questions (C and Python). Hidden tests are graded at submission. */
+export const SAMPLE_CODING = [
+  {
+    topic: 'C basics',
+    difficulty: 'EASY' as const,
+    points: 5,
+    prompt:
+      'Read two integers A and B from input (separated by a space) and print their sum.\n\nExample input:\n```\n3 5\n```\nExample output:\n```\n8\n```',
+    coding: {
+      languages: ['c', 'python'],
+      starter: {
+        c: '#include <stdio.h>\n\nint main(void) {\n    int a, b;\n    // read a and b, then print a + b\n\n    return 0;\n}\n',
+        python: '# read two integers and print their sum\n',
+      },
+      testCases: [
+        { id: 's1', input: '3 5\n', output: '8\n', sample: true },
+        { id: 's2', input: '-4 10\n', output: '6\n', sample: true },
+        { id: 'h1', input: '0 0\n', output: '0\n', sample: false },
+        { id: 'h2', input: '1000000 2500000\n', output: '3500000\n', sample: false },
+        { id: 'h3', input: '-7 -8\n', output: '-15\n', sample: false },
+      ],
+      timeLimitMs: 2000,
+      solution: {
+        language: 'c',
+        code: '#include <stdio.h>\nint main(void){long a,b;scanf("%ld %ld",&a,&b);printf("%ld\\n",a+b);return 0;}\n',
+      },
+    },
+  },
+  {
+    topic: 'Sensors',
+    difficulty: 'MEDIUM' as const,
+    points: 10,
+    prompt:
+      'A temperature sensor sends N readings. The first line of input is N, the second line has N integer readings.\n\nPrint the average rounded to 2 decimal places, then on the next line the number of readings above 30.\n\nExample input:\n```\n5\n28 31 35 29 30\n```\nExample output:\n```\n30.60\n2\n```',
+    coding: {
+      languages: ['c', 'python'],
+      starter: {
+        c: '#include <stdio.h>\n\nint main(void) {\n    int n;\n    scanf("%d", &n);\n    // read n readings, print the average (2 decimals) and the count above 30\n\n    return 0;\n}\n',
+        python:
+          'n = int(input())\nreadings = list(map(int, input().split()))\n# print the average (2 decimals) and the count above 30\n',
+      },
+      testCases: [
+        { id: 's1', input: '5\n28 31 35 29 30\n', output: '30.60\n2\n', sample: true },
+        { id: 'h1', input: '1\n25\n', output: '25.00\n0\n', sample: false },
+        { id: 'h2', input: '4\n31 32 33 34\n', output: '32.50\n4\n', sample: false },
+        { id: 'h3', input: '3\n-5 0 5\n', output: '0.00\n0\n', sample: false },
+      ],
+      timeLimitMs: 2000,
+      solution: {
+        language: 'python',
+        code: 'n = int(input())\nr = list(map(int, input().split()))\nprint(f"{sum(r)/n:.2f}")\nprint(sum(1 for x in r if x > 30))\n',
+      },
+    },
+  },
+];

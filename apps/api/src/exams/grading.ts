@@ -16,11 +16,22 @@ export interface QuestionResult {
   answered: boolean;
   correct: boolean;
   marks: number;
+  /** Coding questions only. */
+  testsPassed?: number;
+  testsTotal?: number;
+  pending?: boolean;
 }
+
+/** Outcome of running a coding answer against all its test cases, or 'pending' (no runner). */
+export type CodeOutcome = { passed: number; total: number } | 'pending';
 
 export function isAnswered(answer: unknown): boolean {
   if (answer === undefined || answer === null || answer === '') return false;
   if (Array.isArray(answer)) return answer.length > 0;
+  if (typeof answer === 'object') {
+    const code = (answer as { code?: unknown }).code;
+    return typeof code === 'string' && code.trim().length > 0;
+  }
   return true;
 }
 
@@ -52,8 +63,23 @@ export function gradeQuestion(
   q: GradableQuestion,
   answer: unknown,
   negativeMarking: boolean,
+  code?: CodeOutcome,
 ): QuestionResult {
   const answered = isAnswered(answer);
+  if (q.type === 'CODING') {
+    // Partial credit per test case passed; no negative marking for code.
+    if (!answered) return { answered, correct: false, marks: 0, testsPassed: 0, testsTotal: 0 };
+    if (!code || code === 'pending')
+      return { answered, correct: false, marks: 0, pending: true, testsPassed: 0, testsTotal: 0 };
+    const marks = code.total ? round2((q.points * code.passed) / code.total) : 0;
+    return {
+      answered,
+      correct: code.total > 0 && code.passed === code.total,
+      marks,
+      testsPassed: code.passed,
+      testsTotal: code.total,
+    };
+  }
   const correct = isCorrect(q, answer);
   const marks = correct ? q.points : answered && negativeMarking ? -q.negativeMarks : 0;
   return { answered, correct, marks };
@@ -68,6 +94,7 @@ export interface GradeSummary {
   correctCount: number;
   wrongCount: number;
   unansweredCount: number;
+  codingPending: boolean;
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -76,6 +103,7 @@ export function gradeAttempt(
   questions: GradableQuestion[],
   answers: Record<string, unknown>,
   opts: { negativeMarking: boolean; passPct: number },
+  code: Record<string, CodeOutcome> = {},
 ): GradeSummary {
   const results: Record<string, QuestionResult> = {};
   let raw = 0;
@@ -83,8 +111,10 @@ export function gradeAttempt(
   let correctCount = 0;
   let wrongCount = 0;
   let unansweredCount = 0;
+  let pending = false;
   for (const q of questions) {
-    const r = gradeQuestion(q, answers[q.id], opts.negativeMarking);
+    const r = gradeQuestion(q, answers[q.id], opts.negativeMarking, code[q.id]);
+    if (r.pending) pending = true;
     results[q.id] = r;
     raw += r.marks;
     maxScore += q.points;
@@ -103,6 +133,7 @@ export function gradeAttempt(
     correctCount,
     wrongCount,
     unansweredCount,
+    codingPending: pending,
   };
 }
 

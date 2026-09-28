@@ -26,7 +26,24 @@ const PLAIN_ALLOWED = new Set([
   'CapsLock',
 ]);
 /** Extra keys allowed while typing in an answer box (numeric answers). */
-const TYPING_ALLOWED = new Set(['Backspace', 'Delete', 'Home', 'End']);
+const TYPING_ALLOWED = new Set(['Backspace', 'Delete', 'Home', 'End', 'PageUp', 'PageDown']);
+/** Editing shortcuts allowed inside answer boxes / the code editor (never copy or paste). */
+const TYPING_MOD_ALLOWED = new Set([
+  'z',
+  'y',
+  'a',
+  'arrowleft',
+  'arrowright',
+  'arrowup',
+  'arrowdown',
+  'home',
+  'end',
+  'backspace',
+  'delete',
+  '[',
+  ']',
+  '/',
+]);
 
 type KeyboardLock = { lock?: (keys?: string[]) => Promise<void>; unlock?: () => void };
 const keyboard = () =>
@@ -119,6 +136,13 @@ export function useLockdown({
       const k = e.key;
       const lower = k.toLowerCase();
       const mod = e.ctrlKey || e.metaKey || e.altKey;
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        inTypingBox(e.target) &&
+        TYPING_MOD_ALLOWED.has(lower)
+      )
+        return;
       if (!mod) {
         if (PLAIN_ALLOWED.has(k)) return;
         if (inTypingBox(e.target) && (k.length === 1 || TYPING_ALLOWED.has(k))) return;

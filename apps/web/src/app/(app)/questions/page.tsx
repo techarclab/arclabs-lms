@@ -196,6 +196,7 @@ function Bank({ orgId }: { orgId: string }) {
                 <option value="MULTIPLE_CHOICE">Multiple choice</option>
                 <option value="TRUE_FALSE">True / False</option>
                 <option value="NUMERIC">Numeric</option>
+                <option value="CODING">Coding</option>
               </Select>
             </div>
             <div className="w-36">
@@ -240,6 +241,12 @@ function Bank({ orgId }: { orgId: string }) {
                   {qi.topic && <span className="text-xs text-ink-500">{qi.topic}</span>}
                   {qi.options.length > 0 && qi.type !== 'TRUE_FALSE' && (
                     <span className="text-xs text-ink-400">· {qi.options.length} options</span>
+                  )}
+                  {qi.coding && (
+                    <span className="text-xs text-ink-400">
+                      · {qi.coding.languages.map((l) => (l === 'c' ? 'C' : 'Python')).join(', ')} ·{' '}
+                      {qi.coding.testCases.length} tests
+                    </span>
                   )}
                   {qi.usedInExams > 0 && (
                     <span className="flex items-center gap-1 text-xs text-ink-400">

@@ -644,6 +644,7 @@ model QuizAttempt {
   questionOrder  Json          @default("[]") // [{questionId, optionOrder: [optionId]}] frozen at start
   answers        Json          @default("{}") // {questionId: answer}
   results        Json? // {questionId: {correct, marks}} written at grading
+  codingPending  Boolean       @default(false) // coding answers waiting for the code runner
   score          Decimal?      @db.Decimal(7, 2)
   maxScore       Decimal?      @db.Decimal(7, 2)
   percentage     Decimal?      @db.Decimal(5, 2)

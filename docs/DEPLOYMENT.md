@@ -123,6 +123,36 @@ This creates the ARC LABS organization and the sample question bank.
 4. Build the exam (Exams → New), audience **All learners**, schedule, **Publish**.
 5. After the exam, turn the registration link off (or press **New code**) before the next college.
 
+## 9. Coding questions — connect a code runner (when you're ready)
+
+Coding questions (C and Python) work without a runner: students write and save code, and their
+coding marks show as "being evaluated". Once a runner is connected, open the exam's **Results** page
+and click **Evaluate coding answers** — scores and ranks update automatically.
+
+The runner is [Judge0 CE](https://github.com/judge0/judge0) (free, open source). Two options:
+
+**A. Your own server (recommended for real exams)** — a small Linux VM (2 vCPU / 4 GB, Mumbai
+region, e.g. DigitalOcean, AWS Lightsail, Hetzner). Follow Judge0's official deployment guide
+(`CHANGELOG.md` → "Deployment procedure" in the Judge0 repo): install Docker, download the Judge0 CE
+release, set passwords and an `AUTHN_TOKEN` in `judge0.conf`, start it, and put it behind HTTPS (for
+example with Caddy). Then in Vercel → **arclabs-api** → Environment Variables:
+
+| Name                | Value                                    |
+| ------------------- | ---------------------------------------- |
+| `CODE_RUNNER`       | `judge0`                                 |
+| `JUDGE0_URL`        | `https://<your-judge0-domain>`           |
+| `JUDGE0_AUTH_TOKEN` | the `AUTHN_TOKEN` you set in judge0.conf |
+
+**B. Judge0 on RapidAPI (no server)** — subscribe to "Judge0 CE" on RapidAPI (the free tier is small;
+exams need a paid plan), then set `CODE_RUNNER=judge0`, `JUDGE0_URL=https://judge0-ce.p.rapidapi.com`
+and `JUDGE0_RAPIDAPI_KEY=<your key>`.
+
+Redeploy the API after changing variables. In the question bank, **Check test cases** on a coding
+question confirms the runner works.
+
+For local development only, `CODE_RUNNER=local` runs `gcc` / `python3` on your own machine — never use
+it in production (it is not a sandbox).
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

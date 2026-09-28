@@ -2,7 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { ExamState, SubmitReasonName } from '@arc/types';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { gradeAttempt, type GradableQuestion } from './grading';
+import { normalizeOutput } from '@arc/validation';
+import { CodeRunner, RunnerUnavailableError } from './code-runner';
+import { gradeAttempt, type CodeOutcome, type GradableQuestion } from './grading';
+
+/** Longest we spend running coding answers while submitting (serverless requests are capped). */
+const CODE_EVAL_BUDGET_MS = 20_000;
+
+type StoredCoding = {
+  languages: string[];
+  testCases: { input: string; output: string }[];
+  timeLimitMs?: number;
+};
 
 /** Seconds of network grace after the deadline before an answer save is refused. */
 export const SAVE_GRACE_SEC = 5;
@@ -43,7 +54,64 @@ export function toGradable(q: {
 export class ExamEngine {
   private readonly logger = new Logger(ExamEngine.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly runner: CodeRunner,
+  ) {}
+
+  /**
+   * Runs every coding answer against all its test cases. Questions that can't be evaluated right
+   * now (no runner, runner down, out of time) come back as 'pending' and can be re-evaluated later.
+   */
+  async evaluateCoding(
+    questions: { id: string; type: string; coding: unknown }[],
+    answers: Record<string, unknown>,
+  ): Promise<Record<string, CodeOutcome>> {
+    const out: Record<string, CodeOutcome> = {};
+    const coding = questions.filter((q) => q.type === 'CODING');
+    if (!coding.length) return out;
+    const started = Date.now();
+    for (const q of coding) {
+      const a = answers[q.id] as { language?: string; code?: string } | undefined;
+      const cfg = q.coding as StoredCoding | null;
+      if (!a?.code?.trim() || !cfg) continue; // unanswered: graded as 0 without running
+      if (!this.runner.configured || Date.now() - started > CODE_EVAL_BUDGET_MS) {
+        out[q.id] = 'pending';
+        continue;
+      }
+      if (!cfg.languages.includes(a.language ?? '')) {
+        out[q.id] = { passed: 0, total: cfg.testCases.length };
+        continue;
+      }
+      try {
+        const runs = await Promise.race([
+          this.runner.runMany(
+            a.language as 'c' | 'python',
+            a.code,
+            cfg.testCases.map((t) => t.input),
+            cfg.timeLimitMs ?? 2000,
+          ),
+          new Promise<null>((r) =>
+            setTimeout(() => r(null), Math.max(1000, CODE_EVAL_BUDGET_MS - (Date.now() - started))),
+          ),
+        ]);
+        if (!runs) {
+          out[q.id] = 'pending';
+          continue;
+        }
+        const passed = runs.filter(
+          (r, i) =>
+            r.status === 'OK' &&
+            normalizeOutput(r.stdout) === normalizeOutput(cfg.testCases[i]!.output),
+        ).length;
+        out[q.id] = { passed, total: cfg.testCases.length };
+      } catch (e) {
+        if (!(e instanceof RunnerUnavailableError)) this.logger.error((e as Error).message);
+        out[q.id] = 'pending';
+      }
+    }
+    return out;
+  }
 
   /** Active learners this exam is assigned to (userId → membership info). */
   async assignedCandidates(exam: ExamRow) {
@@ -112,11 +180,15 @@ export class ExamEngine {
       include: { quiz: true },
     });
     if (!attempt || attempt.status !== 'IN_PROGRESS') return false;
-    const questions = (await this.gradableQuestions(attempt.quizId)).map(toGradable);
-    const g = gradeAttempt(questions, (attempt.answers ?? {}) as Record<string, unknown>, {
-      negativeMarking: attempt.quiz.negativeMarking,
-      passPct: attempt.quiz.passPct,
-    });
+    const rows = await this.gradableQuestions(attempt.quizId);
+    const answers = (attempt.answers ?? {}) as Record<string, unknown>;
+    const code = await this.evaluateCoding(rows, answers);
+    const g = gradeAttempt(
+      rows.map(toGradable),
+      answers,
+      { negativeMarking: attempt.quiz.negativeMarking, passPct: attempt.quiz.passPct },
+      code,
+    );
     const end = attempt.deadlineAt && attempt.deadlineAt < now ? attempt.deadlineAt : now;
     const updated = await this.prisma.quizAttempt.updateMany({
       where: { id: attemptId, status: 'IN_PROGRESS' },
@@ -130,6 +202,7 @@ export class ExamEngine {
         correctCount: g.correctCount,
         wrongCount: g.wrongCount,
         unansweredCount: g.unansweredCount,
+        codingPending: g.codingPending,
         submittedAt: end,
         submitReason: reason,
         timeTakenSec: Math.max(0, Math.round((end.getTime() - attempt.startedAt.getTime()) / 1000)),
@@ -137,6 +210,42 @@ export class ExamEngine {
       },
     });
     return updated.count === 1;
+  }
+
+  /**
+   * Re-grades a submitted attempt (used when coding answers were waiting for the code runner).
+   * Returns true if the grade changed state (e.g. no longer pending).
+   */
+  async regrade(attemptId: string): Promise<boolean> {
+    const attempt = await this.prisma.quizAttempt.findUnique({
+      where: { id: attemptId },
+      include: { quiz: true },
+    });
+    if (!attempt || attempt.status !== 'GRADED') return false;
+    const rows = await this.gradableQuestions(attempt.quizId);
+    const answers = (attempt.answers ?? {}) as Record<string, unknown>;
+    const code = await this.evaluateCoding(rows, answers);
+    const g = gradeAttempt(
+      rows.map(toGradable),
+      answers,
+      { negativeMarking: attempt.quiz.negativeMarking, passPct: attempt.quiz.passPct },
+      code,
+    );
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: {
+        results: g.results as unknown as Prisma.InputJsonValue,
+        score: g.score,
+        maxScore: g.maxScore,
+        percentage: g.percentage,
+        passed: g.passed,
+        correctCount: g.correctCount,
+        wrongCount: g.wrongCount,
+        unansweredCount: g.unansweredCount,
+        codingPending: g.codingPending,
+      },
+    });
+    return !g.codingPending;
   }
 
   /** Closes every in-progress attempt whose deadline has passed (lazy, called on read paths). */

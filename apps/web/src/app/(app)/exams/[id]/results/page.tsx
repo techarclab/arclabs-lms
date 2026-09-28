@@ -73,7 +73,13 @@ const EVENT_LABEL: Record<string, string> = {
 
 function Results({ id, orgId }: { id: string; orgId: string }) {
   const { getToken } = useAuth();
-  const { data, isLoading } = useApi<ExamAnalytics>(`/exams/${id}/analytics`, {
+  const mutate = useApiMutation();
+  const [evaluating, setEvaluating] = useState(false);
+  const {
+    data,
+    isLoading,
+    mutate: reload,
+  } = useApi<ExamAnalytics>(`/exams/${id}/analytics`, {
     orgId,
     refreshInterval: (d) => (d?.exam.state === 'LIVE' ? 10_000 : 0),
   });
@@ -163,6 +169,50 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
           <Download /> Export CSV
         </Button>
       </div>
+
+      {stats.codingPending > 0 && (
+        <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-amber-900">
+            <b>{stats.codingPending}</b> submission{stats.codingPending === 1 ? ' has' : 's have'}{' '}
+            coding answers waiting for the code runner. Their scores update after evaluation.
+          </p>
+          <Button
+            size="sm"
+            loading={evaluating}
+            onClick={async () => {
+              setEvaluating(true);
+              try {
+                const r = await mutate<{ evaluated: number; remaining: number }>(
+                  `/exams/${id}/evaluate-coding`,
+                  'POST',
+                  {},
+                  orgId,
+                );
+                if (r.evaluated === 0 && r.remaining > 0)
+                  toast.error('The code runner isn’t available yet', {
+                    description: 'Connect a runner (see the deployment guide), then try again.',
+                  });
+                else
+                  toast.success(
+                    `Evaluated ${r.evaluated} submission${r.evaluated === 1 ? '' : 's'}`,
+                    {
+                      description: r.remaining
+                        ? `${r.remaining} still waiting — run again.`
+                        : undefined,
+                    },
+                  );
+                void reload();
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setEvaluating(false);
+              }
+            }}
+          >
+            Evaluate coding answers
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard

@@ -22,6 +22,11 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().default('ARC LABS <no-reply@arclabs.local>'),
+  /** Code runner for coding questions: judge0 (self-hosted or RapidAPI) or local (development only). */
+  CODE_RUNNER: z.enum(['judge0', 'local']).optional(),
+  JUDGE0_URL: z.string().optional(),
+  JUDGE0_AUTH_TOKEN: z.string().optional(),
+  JUDGE0_RAPIDAPI_KEY: z.string().optional(),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_AUTH_EMULATOR_HOST: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),

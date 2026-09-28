@@ -3,6 +3,7 @@
 import { use } from 'react';
 import Link from 'next/link';
 import {
+  Loader2,
   AlertTriangle,
   ArrowLeft,
   Award,
@@ -181,6 +182,13 @@ export default function ResultPage({ params }: { params: Promise<{ attemptId: st
             )}
           >
             <AlertTriangle className="size-4 shrink-0" /> {note.text}
+          </div>
+        )}
+
+        {r.codingPending && (
+          <div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50 px-8 py-3 text-sm text-amber-900">
+            <Loader2 className="size-4 shrink-0 animate-spin" /> Your coding answers are waiting to
+            be run against the test cases. Your score will update once they’re evaluated.
           </div>
         )}
 

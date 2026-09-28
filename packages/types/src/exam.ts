@@ -10,6 +10,56 @@ export interface QuestionOption {
   text: string;
 }
 
+export type CodeLanguageName = 'c' | 'python';
+
+export interface CodingTestCase {
+  id: string;
+  input: string;
+  output: string;
+  sample: boolean;
+}
+
+/** Coding question setup (staff view — includes hidden tests and the reference solution). */
+export interface CodingConfig {
+  languages: CodeLanguageName[];
+  starter: Partial<Record<CodeLanguageName, string>>;
+  testCases: CodingTestCase[];
+  timeLimitMs: number;
+  solution?: { language: CodeLanguageName; code: string } | null;
+}
+
+/** What a student sees of a coding question: sample tests only. */
+export interface DeliveredCoding {
+  languages: CodeLanguageName[];
+  starter: Partial<Record<CodeLanguageName, string>>;
+  samples: { input: string; output: string }[];
+  hiddenCount: number;
+  timeLimitMs: number;
+}
+
+export type RunStatus =
+  'OK' | 'COMPILE_ERROR' | 'RUNTIME_ERROR' | 'TIME_LIMIT' | 'MEMORY_LIMIT' | 'INTERNAL_ERROR';
+
+export interface TestRunResult {
+  input: string;
+  expected: string | null; // null for custom input
+  output: string;
+  passed: boolean | null; // null for custom input
+  status: RunStatus;
+  error: string | null; // compiler / runtime message
+  timeMs: number | null;
+}
+
+export interface RunCodeResponse {
+  results: TestRunResult[];
+}
+
+export interface CodeRunnerStatus {
+  configured: boolean;
+  provider: 'judge0' | 'local' | null;
+  languages: CodeLanguageName[];
+}
+
 /** Staff view of a question (includes the answer key). */
 export interface QuestionItem {
   id: string;
@@ -23,6 +73,7 @@ export interface QuestionItem {
   difficulty: DifficultyName;
   topic: string | null;
   tags: string[];
+  coding: CodingConfig | null;
   archived: boolean;
   usedInExams: number;
   locked: boolean; // used by a published exam → read-only
@@ -119,6 +170,7 @@ export interface DeliveredQuestion {
   options: QuestionOption[];
   points: number;
   negativeMarks: number;
+  coding?: DeliveredCoding;
 }
 
 export interface AttemptSession {
@@ -164,6 +216,10 @@ export interface ReviewItem {
   answered: boolean;
   marks: number;
   points: number;
+  /** Coding questions: hidden + sample test cases passed (details of hidden tests are never shown). */
+  testsPassed?: number;
+  testsTotal?: number;
+  pending?: boolean; // waiting for the code runner
 }
 
 export interface AttemptResult {
@@ -192,6 +248,7 @@ export interface AttemptResult {
   byDifficulty: BreakdownRow[];
   review: ReviewItem[] | null;
   reviewAvailableAt: string | null;
+  codingPending: boolean; // some coding answers are still waiting to be evaluated
 }
 
 // ───────── Staff analytics ─────────
@@ -245,6 +302,7 @@ export interface ExamAnalytics {
     avgTimeSec: number | null;
     autoSubmitted: number;
     withViolations: number;
+    codingPending: number; // submitted attempts whose coding answers await the code runner
   };
   distribution: { from: number; to: number; count: number }[];
   questions: QuestionStat[];

@@ -202,6 +202,7 @@ export class ExamAnalyticsService {
         avgTimeSec: avg(times),
         autoSubmitted: graded.filter((a) => a.submitReason && a.submitReason !== 'MANUAL').length,
         withViolations: [...byUser.values()].filter((a) => a.violationCount > 0).length,
+        codingPending: graded.filter((a) => a.codingPending).length,
       },
       distribution: distribution(pcts),
       questions: questionStats,
@@ -264,7 +265,14 @@ export class ExamAnalyticsService {
       },
       review: order.map(({ questionId }) => {
         const q = byId.get(questionId)!;
-        const r = results[questionId] ?? {
+        const r: {
+          answered: boolean;
+          correct: boolean;
+          marks: number;
+          testsPassed?: number;
+          testsTotal?: number;
+          pending?: boolean;
+        } = results[questionId] ?? {
           answered: answers[questionId] !== undefined,
           correct: false,
           marks: 0,
@@ -281,6 +289,9 @@ export class ExamAnalyticsService {
           answered: r.answered,
           marks: r.marks,
           points: q.points,
+          ...(q.type === 'CODING'
+            ? { testsPassed: r.testsPassed ?? 0, testsTotal: r.testsTotal ?? 0, pending: r.pending }
+            : {}),
         };
       }),
       events: a.events.map((e) => ({
@@ -309,6 +320,31 @@ export class ExamAnalyticsService {
       entityId: attemptId,
     });
     return this.attemptDetail(orgId, examId, attemptId);
+  }
+
+  /** Re-runs coding answers that were waiting for the code runner (e.g. after it's connected). */
+  async evaluateCoding(actor: User, orgId: string, examId: string) {
+    const exam = await this.prisma.quiz.findFirst({ where: { id: examId, organizationId: orgId } });
+    if (!exam) throw new NotFoundException();
+    const pending = await this.prisma.quizAttempt.findMany({
+      where: { quizId: examId, status: 'GRADED', codingPending: true },
+      select: { id: true },
+      take: 50, // one request stays within serverless time limits; call again for more
+    });
+    let evaluated = 0;
+    for (const a of pending) if (await this.engine.regrade(a.id)) evaluated++;
+    const remaining = await this.prisma.quizAttempt.count({
+      where: { quizId: examId, status: 'GRADED', codingPending: true },
+    });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.coding_evaluated',
+      entityType: 'quiz',
+      entityId: examId,
+      meta: { evaluated, remaining },
+    });
+    return { evaluated, remaining };
   }
 
   async csv(orgId: string, examId: string) {

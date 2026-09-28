@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -15,8 +17,16 @@ import type {
   ProctorEventResult,
   QuestionOption,
   ReviewItem,
+  RunCodeResponse,
+  CodingConfig,
 } from '@arc/types';
-import type { ProctorEventInput, SaveAnswerInput } from '@arc/validation';
+import {
+  normalizeOutput,
+  type ProctorEventInput,
+  type RunCodeInput,
+  type SaveAnswerInput,
+} from '@arc/validation';
+import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -53,7 +63,11 @@ export class AttemptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly engine: ExamEngine,
+    private readonly runner: CodeRunner,
   ) {}
+
+  /** Last "Run" per attempt — a light brake on hammering the code runner. */
+  private readonly lastRun = new Map<string, number>();
 
   // ───────── Listing & lobby ─────────
 
@@ -274,6 +288,23 @@ export class AttemptsService {
         options: optionOrder.map((id) => opts.get(id)!).filter(Boolean),
         points: q.points,
         negativeMarks: exam.negativeMarking ? Number(q.negativeMarks) : 0,
+        ...(q.type === 'CODING' && q.coding
+          ? {
+              coding: (() => {
+                // Only sample tests reach the browser; hidden tests and the solution never do.
+                const c = q.coding as unknown as CodingConfig;
+                return {
+                  languages: c.languages,
+                  starter: c.starter ?? {},
+                  samples: c.testCases
+                    .filter((t) => t.sample)
+                    .map((t) => ({ input: t.input, output: t.output })),
+                  hiddenCount: c.testCases.filter((t) => !t.sample).length,
+                  timeLimitMs: c.timeLimitMs ?? 2000,
+                };
+              })(),
+            }
+          : {}),
       };
     });
     return {
@@ -313,9 +344,10 @@ export class AttemptsService {
       });
     const q = await this.prisma.question.findUniqueOrThrow({
       where: { id: input.questionId },
-      select: { type: true },
+      select: { type: true, coding: true },
     });
-    const answer = normalizeAnswer(q.type, input.answer, entry.optionOrder);
+    const langs = (q.coding as { languages?: string[] } | null)?.languages ?? [];
+    const answer = normalizeAnswer(q.type, input.answer, entry.optionOrder, langs);
 
     const now = new Date();
     const count =
@@ -336,6 +368,87 @@ export class AttemptsService {
       serverNow: now.toISOString(),
       deadlineAt: attempt.deadlineAt!.toISOString(),
     };
+  }
+
+  /** Student "Run": sample tests (or custom input) only — hidden tests run at submission. */
+  async runCode(
+    user: User,
+    attemptId: string,
+    sessionId: string | undefined,
+    input: RunCodeInput,
+  ): Promise<RunCodeResponse> {
+    const attempt = await this.liveAttempt(user, attemptId, sessionId);
+    const order = attempt.questionOrder as unknown as QuestionOrder;
+    if (!order.some((o) => o.questionId === input.questionId))
+      throw new UnprocessableEntityException({
+        code: 'INVALID_QUESTION',
+        message: 'Question is not part of this exam',
+      });
+    const q = await this.prisma.question.findUniqueOrThrow({ where: { id: input.questionId } });
+    const c = q.coding as unknown as CodingConfig | null;
+    if (q.type !== 'CODING' || !c)
+      throw new UnprocessableEntityException({
+        code: 'NOT_CODING',
+        message: 'This is not a coding question',
+      });
+    if (!c.languages.includes(input.language))
+      throw new UnprocessableEntityException({
+        code: 'LANGUAGE_NOT_ALLOWED',
+        message: 'That language isn’t allowed for this question',
+      });
+    const now = Date.now();
+    if (now - (this.lastRun.get(attemptId) ?? 0) < 2000)
+      throw new HttpException(
+        { code: 'RUN_TOO_FAST', message: 'Please wait a moment before running again' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    this.lastRun.set(attemptId, now);
+    const limit = c.timeLimitMs ?? 2000;
+    try {
+      if (input.stdin !== undefined) {
+        const r = await this.runner.run(input.language, input.code, input.stdin, limit);
+        return {
+          results: [
+            {
+              input: input.stdin,
+              expected: null,
+              output: r.stdout,
+              passed: null,
+              status: r.status,
+              error: r.error,
+              timeMs: r.timeMs,
+            },
+          ],
+        };
+      }
+      const samples = c.testCases.filter((t) => t.sample);
+      const runs = await this.runner.runMany(
+        input.language,
+        input.code,
+        samples.map((t) => t.input),
+        limit,
+      );
+      return {
+        results: runs.map((r, i) => ({
+          input: samples[i]!.input,
+          expected: samples[i]!.output,
+          output: r.stdout,
+          passed:
+            r.status === 'OK' && normalizeOutput(r.stdout) === normalizeOutput(samples[i]!.output),
+          status: r.status,
+          error: r.error,
+          timeMs: r.timeMs,
+        })),
+      };
+    } catch (e) {
+      if (e instanceof RunnerUnavailableError)
+        throw new ConflictException({
+          code: 'RUNNER_UNAVAILABLE',
+          message:
+            'Running code isn’t available right now. Your code is saved and will be graded after you submit.',
+        });
+      throw e;
+    }
   }
 
   async heartbeat(user: User, attemptId: string, sessionId: string | undefined) {
@@ -461,12 +574,19 @@ export class AttemptsService {
             prompt: q.prompt,
             options: q.options as unknown as QuestionOption[],
             yourAnswer: answers[questionId] ?? null,
-            correctAnswer: q.correctAnswer,
+            correctAnswer: q.type === 'CODING' ? null : q.correctAnswer,
             explanation: q.explanation,
             correct: r.correct,
             answered: r.answered,
             marks: r.marks,
             points: q.points,
+            ...(q.type === 'CODING'
+              ? {
+                  testsPassed: r.testsPassed ?? 0,
+                  testsTotal: r.testsTotal ?? 0,
+                  pending: r.pending,
+                }
+              : {}),
           };
         })
       : null;
@@ -511,6 +631,7 @@ export class AttemptsService {
         !reviewVisible && exam.resultVisibility === 'SCORE_NOW_ANSWERS_AFTER_CLOSE'
           ? (exam.endsAt?.toISOString() ?? null)
           : null,
+      codingPending: attempt.codingPending,
     };
   }
 
@@ -592,7 +713,12 @@ function toRow(r: { key: string; correct: number; total: number; pct: number }) 
 }
 
 /** Validates an answer against the question type and the options actually shown. null = clear. */
-function normalizeAnswer(type: string, answer: unknown, optionIds: string[]): unknown {
+function normalizeAnswer(
+  type: string,
+  answer: unknown,
+  optionIds: string[],
+  languages: string[] = [],
+): unknown {
   if (answer === null || answer === '' || (Array.isArray(answer) && answer.length === 0))
     return null;
   const bad = () =>
@@ -616,6 +742,17 @@ function normalizeAnswer(type: string, answer: unknown, optionIds: string[]): un
       const n = typeof answer === 'number' ? answer : Number(answer);
       if (!Number.isFinite(n)) throw bad();
       return n;
+    }
+    case 'CODING': {
+      const a = answer as { language?: unknown; code?: unknown };
+      if (
+        typeof a !== 'object' ||
+        typeof a.code !== 'string' ||
+        typeof a.language !== 'string' ||
+        !languages.includes(a.language)
+      )
+        throw bad();
+      return a.code.trim() ? { language: a.language, code: a.code } : null;
     }
     default:
       throw bad();
