@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CameraOff, EyeOff } from 'lucide-react';
+import { CameraOff } from 'lucide-react';
 import { cn } from '@arc/ui';
 
 /**
@@ -104,7 +104,7 @@ export function CameraView({
           playsInline
           autoPlay
           className="size-full -scale-x-100 object-cover"
-          aria-label="Your camera (not recorded)"
+          aria-label="Your camera"
         />
       ) : (
         <div className="flex size-full flex-col items-center justify-center gap-2 text-ink-400">
@@ -118,9 +118,6 @@ export function CameraView({
         <>
           <span className="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase backdrop-blur">
             <span className="size-1.5 animate-pulse rounded-full bg-rose-500" /> Live
-          </span>
-          <span className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1.5 rounded-lg bg-black/55 px-2 py-1 text-[10px] font-medium text-white/90 backdrop-blur">
-            <EyeOff className="size-3" /> Only on your screen · not recorded
           </span>
         </>
       )}

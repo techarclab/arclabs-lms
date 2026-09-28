@@ -15,7 +15,6 @@ import {
   FileQuestion,
   Maximize,
   ShieldAlert,
-  ShieldCheck,
   Timer,
   Trophy,
 } from 'lucide-react';
@@ -161,8 +160,8 @@ export function ExamLobby({
                   )}
                   {lobby.requireCamera && (
                     <li className="flex gap-2">
-                      <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera stays on during
-                      the exam. It is not recorded.
+                      <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
+                      the whole exam.
                     </li>
                   )}
                 </ul>
@@ -196,10 +195,8 @@ export function ExamLobby({
                         : 'No camera found. Connect a webcam, or ask your instructor for help.'}
                     </p>
                   )}
-                  <p className="mt-3 flex gap-2 text-[12px] leading-relaxed text-ink-500">
-                    <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                    Your video stays on your own screen only. Nothing is recorded, saved or sent to
-                    anyone.
+                  <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
+                    Keep your face clearly visible. The camera must stay on until you submit.
                   </p>
                 </div>
               )}

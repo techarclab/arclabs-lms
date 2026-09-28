@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { ArrowLeft, Award, Cpu, Eye, EyeOff, Lock, Mail, Radio, UserRound } from 'lucide-react';
 import { Button, cn, Field, Input } from '@arc/ui';
-import { Logo } from '@/components/brand/Logo';
+import { BrandLockup, Logo } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { api } from '@/lib/api';
 import { firebaseAuth } from '@/lib/firebase';
@@ -145,8 +145,8 @@ function LoginInner() {
         <div className="absolute -top-40 -left-40 size-[520px] rounded-full bg-brand-600/30 blur-[120px]" />
         <div className="absolute -right-32 -bottom-40 size-[420px] rounded-full bg-cyan-500/20 blur-[120px]" />
         <div className="relative flex flex-1 flex-col justify-between p-12">
-          <Link href="/">
-            <Logo inverted />
+          <Link href="/" aria-label="ARC LABS home">
+            <BrandLockup inverted className="w-44" />
           </Link>
 
           <div className="max-w-lg">

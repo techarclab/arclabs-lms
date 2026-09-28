@@ -654,8 +654,8 @@ export function ExamRunner({
             </div>
             <h2 className="mt-5 text-2xl font-semibold">Your camera is off</h2>
             <p className="mt-2 text-ink-300">
-              Turn your camera back on to continue. Your timer is still running. The camera is only
-              shown on your screen — nothing is recorded.
+              Turn your camera back on to continue. Your timer is still running, and this has been
+              noted for your instructor.
             </p>
             <Button size="lg" className="mt-6" onClick={() => void camera.start()}>
               <Camera /> Turn camera on
