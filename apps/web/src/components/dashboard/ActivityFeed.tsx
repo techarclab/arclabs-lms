@@ -1,4 +1,13 @@
-import { Building2, PauseCircle, PencilLine, PlayCircle, Sparkles } from 'lucide-react';
+import {
+  Building2,
+  MailPlus,
+  PauseCircle,
+  PencilLine,
+  PlayCircle,
+  Sparkles,
+  UserCog,
+  UserMinus,
+} from 'lucide-react';
 import type { ActivityItem } from '@arc/types';
 import { EmptyState } from '@arc/ui';
 import { timeAgo } from '@/lib/format';
@@ -43,6 +52,40 @@ function describe(a: ActivityItem) {
         text: (
           <>
             reactivated <b className="font-medium text-ink-900">{a.organizationName}</b>
+          </>
+        ),
+      };
+    case 'member.invited':
+      return {
+        icon: MailPlus,
+        tone: 'bg-amber-50 text-amber-600',
+        text: (
+          <>
+            invited{' '}
+            <b className="font-medium text-ink-900">
+              {(a.meta.name as string) ?? (a.meta.email as string)}
+            </b>
+            {a.organizationName ? <> to {a.organizationName}</> : null}
+          </>
+        ),
+      };
+    case 'member.updated':
+      return {
+        icon: UserCog,
+        tone: 'bg-sky-50 text-sky-600',
+        text: (
+          <>
+            updated <b className="font-medium text-ink-900">{a.meta.name as string}</b>
+          </>
+        ),
+      };
+    case 'member.deactivated':
+      return {
+        icon: UserMinus,
+        tone: 'bg-rose-50 text-rose-600',
+        text: (
+          <>
+            deactivated <b className="font-medium text-ink-900">{a.meta.name as string}</b>
           </>
         ),
       };

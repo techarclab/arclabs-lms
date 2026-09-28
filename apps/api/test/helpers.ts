@@ -24,12 +24,26 @@ export function applyTestEnv() {
   delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
 }
 
-/** Bearer token format understood by the fake: "<uid>". */
+/** In-memory stand-in for firebase-admin Auth. Bearer tokens are simply the uid ("uid-…"). */
+export const fakeFirebaseUsers = new Map<string, { uid: string; email: string }>();
 const fakeFirebaseAuth = {
   verifyIdToken: async (token: string) => {
     if (!token.startsWith('uid-')) throw new Error('invalid token');
-    return { uid: token, email: `${token}@test.local`, email_verified: true };
+    const known = [...fakeFirebaseUsers.values()].find((u) => u.uid === token);
+    return { uid: token, email: known?.email ?? `${token}@test.local`, email_verified: true };
   },
+  getUserByEmail: async (email: string) => {
+    const u = fakeFirebaseUsers.get(email);
+    if (!u) throw Object.assign(new Error('not found'), { code: 'auth/user-not-found' });
+    return u;
+  },
+  createUser: async ({ email }: { email: string }) => {
+    const u = { uid: `uid-fb-${fakeFirebaseUsers.size + 1}-${Date.now()}`, email };
+    fakeFirebaseUsers.set(email, u);
+    return u;
+  },
+  generatePasswordResetLink: async (email: string) =>
+    `http://test.local/reset?email=${encodeURIComponent(email)}`,
 };
 
 export async function createTestApp() {
@@ -79,5 +93,17 @@ export function api(app: INestApplication, token?: string) {
     get: (url: string) => withAuth(agent.get(`/api/v1${url}`)),
     post: (url: string, body?: object) => withAuth(agent.post(`/api/v1${url}`)).send(body ?? {}),
     patch: (url: string, body?: object) => withAuth(agent.patch(`/api/v1${url}`)).send(body ?? {}),
+    delete: (url: string) => withAuth(agent.delete(`/api/v1${url}`)),
+  };
+}
+
+/** Same as api() but sends X-Org-Id on every request. */
+export function orgApi(app: INestApplication, token: string, orgId: string) {
+  const a = api(app, token);
+  return {
+    get: (url: string) => a.get(url).set('X-Org-Id', orgId),
+    post: (url: string, body?: object) => a.post(url, body).set('X-Org-Id', orgId),
+    patch: (url: string, body?: object) => a.patch(url, body).set('X-Org-Id', orgId),
+    delete: (url: string) => a.delete(url).set('X-Org-Id', orgId),
   };
 }

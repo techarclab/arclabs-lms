@@ -20,18 +20,6 @@ const SECTIONS: Record<
   string,
   { title: string; icon: LucideIcon; phase: string; blurb: string; features: string[] }
 > = {
-  users: {
-    title: 'Users',
-    icon: Users,
-    phase: 'Phase 1',
-    blurb: 'Invite and manage learners, instructors and admins for each organization.',
-    features: [
-      'Email invitations & bulk CSV import',
-      'Role assignment per organization',
-      'Departments & roll numbers',
-      'Deactivate / reactivate accounts',
-    ],
-  },
   courses: {
     title: 'Courses',
     icon: BookOpen,

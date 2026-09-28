@@ -69,7 +69,7 @@ function LoginInner() {
     params.get('mode') === 'signup' ? 'signup' : 'signin',
   );
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);

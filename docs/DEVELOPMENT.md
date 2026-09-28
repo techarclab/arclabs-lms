@@ -57,7 +57,17 @@ pnpm dev
 | `pnpm db:migrate --name <change>`             | after editing `apps/api/prisma/schema.prisma` |
 | `pnpm infra:down`                             | stop Docker services (data is kept)           |
 
+## Testing invitations locally
+1. Keep `pnpm dev` and `pnpm emulators` running (the worker sends email to **Mailpit**).
+2. People → **Invite people**. After sending, the dialog shows the invite link (development only).
+3. Open http://localhost:8025 to see the actual email, or open the link directly — the Firebase
+   emulator shows a page to set the new password.
+4. Sign in at http://localhost:3000/login as the invited person.
+
+CSV import template: People → **Import CSV** → *Download template*.
+
 ## Tests
+
 `pnpm test` runs unit tests plus API integration tests against a **separate** database
 (`arc_lms_test`, created and migrated automatically — Docker must be running). Firebase is faked
 in tests, so the emulator is not needed. Your development data is never touched.

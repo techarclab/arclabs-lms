@@ -97,7 +97,7 @@ export const NAV: NavSection[] = [
   {
     title: 'People & insights',
     items: [
-      { label: 'Users', href: '/users', icon: Users, permission: 'user.manage', soon: true },
+      { label: 'People', href: '/users', icon: Users, permission: 'user.manage' },
       {
         label: 'Analytics',
         href: '/analytics',

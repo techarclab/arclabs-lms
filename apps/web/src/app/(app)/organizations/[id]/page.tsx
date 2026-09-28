@@ -40,6 +40,7 @@ import {
   TabsTrigger,
 } from '@arc/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { MembersPanel } from '@/components/members/MembersPanel';
 import { BRAND_SWATCHES } from '@/components/organizations/CreateOrganizationDialog';
 import { StatusBadge, TypeBadge } from '@/components/organizations/OrgBadges';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -209,9 +210,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           <TabsTrigger value="overview">
             <LayoutGrid /> Overview
           </TabsTrigger>
-          <TabsTrigger value="members" disabled className="disabled:opacity-50">
-            <Users /> Members <span className="text-[10px] text-ink-400 uppercase">Soon</span>
-          </TabsTrigger>
+          {org.canManage && (
+            <TabsTrigger value="members">
+              <Users /> Members
+              <span className="tabular rounded-full bg-ink-100 px-1.5 text-[11px] text-ink-600">
+                {org.counts.members}
+              </span>
+            </TabsTrigger>
+          )}
           {org.canManage && (
             <TabsTrigger value="settings">
               <Settings2 /> Settings
@@ -254,7 +260,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                   <EmptyState
                     icon={<Users />}
                     title="No members yet"
-                    description="User invitations are the next feature in Phase 1."
+                    description="Open the Members tab to invite people or import a CSV."
                     className="py-8"
                   />
                 ) : (
@@ -318,6 +324,17 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             </Card>
           </div>
         </TabsContent>
+
+        {org.canManage && (
+          <TabsContent value="members">
+            <MembersPanel
+              orgId={org.id}
+              orgName={org.name}
+              canGrantAdmin
+              onChanged={() => reload()}
+            />
+          </TabsContent>
+        )}
 
         {org.canManage && (
           <TabsContent value="settings">

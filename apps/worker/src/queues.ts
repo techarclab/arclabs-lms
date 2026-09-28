@@ -1,11 +1,2 @@
-/** Queue names shared with the API (API adds jobs, worker processes them). */
-export const QUEUES = {
-  email: 'email',
-} as const;
-
-export interface EmailJob {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-}
+/** Queue names and job payloads are shared with the API via @arc/types. */
+export { QUEUES, type EmailJob } from '@arc/types';
