@@ -1,0 +1,813 @@
+// ARC LABS LMS — V1 database schema (PostgreSQL, Prisma)
+// Tenancy rule: every organization-owned table carries organizationId and every
+// query from a non-super-admin is scoped by it (see docs/architecture/tenancy-and-rbac.md).
+// Identity lives in Firebase Auth; users.firebaseUid links the two.
+
+// Prisma 7: the connection URL lives in apps/api/prisma.config.ts (DATABASE_URL).
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Enums ─────────────
+
+enum OrgType {
+  PLATFORM // ARC LABS itself
+  SCHOOL
+  COLLEGE
+  COMPANY
+  OTHER
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum OrgRole {
+  ORG_ADMIN
+  INSTRUCTOR
+  LEARNER
+  EVALUATOR
+  CONTENT_MANAGER
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  PDF
+  LINK
+  QUIZ
+  ASSIGNMENT
+  LAB // future
+}
+
+enum ResourceKind {
+  FILE
+  VIDEO
+  LINK
+}
+
+enum DeliveryMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum BatchStatus {
+  PLANNED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+  SUSPENDED
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  GRADED
+  RETURNED // sent back for resubmission
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum CertificateStatus {
+  VALID
+  REVOKED
+  EXPIRED
+}
+
+// ───────────── Organizations & users ─────────────
+
+model Organization {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String       @unique
+  type         OrgType      @default(OTHER)
+  status       RecordStatus @default(ACTIVE)
+  logoPath     String?
+  primaryColor String?
+  contactEmail String?
+  settings     Json         @default("{}")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  departments          Department[]
+  members              OrganizationMember[]
+  courses              Course[]
+  programs             Program[]
+  batches              Batch[]
+  enrollments          Enrollment[]
+  lessonProgress       LessonProgress[]
+  quizzes              Quiz[]
+  questions            Question[]
+  quizAttempts         QuizAttempt[]
+  assignments          Assignment[]
+  submissions          Submission[]
+  attendance           Attendance[]
+  rubrics              Rubric[]
+  projects             Project[]
+  projectSubmissions   ProjectSubmission[]
+  certificateTemplates CertificateTemplate[]
+  certificates         Certificate[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@map("organizations")
+}
+
+model Department {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      OrganizationMember[]
+
+  @@unique([organizationId, name])
+  @@map("departments")
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  firebaseUid  String       @unique
+  email        String       @unique
+  fullName     String
+  phone        String?
+  avatarPath   String?
+  isSuperAdmin Boolean      @default(false)
+  status       RecordStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  memberships        OrganizationMember[]
+  coursesCreated     Course[]             @relation("CourseCreator")
+  batchInstructing   BatchInstructor[]
+  enrollments        Enrollment[]
+  lessonProgress     LessonProgress[]
+  quizAttempts       QuizAttempt[]
+  submissions        Submission[]         @relation("SubmissionLearner")
+  submissionsGraded  Submission[]         @relation("SubmissionGrader")
+  attendance         Attendance[]         @relation("AttendanceLearner")
+  attendanceMarked   Attendance[]         @relation("AttendanceMarker")
+  projectSubmissions ProjectSubmission[]
+  projectEvaluations ProjectEvaluation[]
+  certificates       Certificate[]        @relation("CertificateRecipient")
+  certificatesIssued Certificate[]        @relation("CertificateIssuer")
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+/// A user's membership and roles inside one organization.
+model OrganizationMember {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  userId         String       @db.Uuid
+  departmentId   String?      @db.Uuid
+  roles          OrgRole[]
+  status         RecordStatus @default(ACTIVE)
+  externalId     String? // roll number / employee id
+  joinedAt       DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_users")
+}
+
+// ───────────── Content ─────────────
+
+model Course {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  title          String
+  slug           String
+  summary        String?
+  description    String?
+  thumbnailPath  String?
+  level          CourseLevel   @default(BEGINNER)
+  status         ContentStatus @default(DRAFT)
+  isPublic       Boolean       @default(false) // listed in public catalog
+  version        Int           @default(1)
+  estimatedHours Int?
+  completionRule Json          @default("{\"minLessonPct\":100,\"requirePassAllQuizzes\":true}")
+  createdById    String?       @db.Uuid
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User?                @relation("CourseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  modules        CourseModule[]
+  prerequisites  CoursePrerequisite[] @relation("CourseHasPrereq")
+  requiredBy     CoursePrerequisite[] @relation("CourseIsPrereq")
+  programCourses ProgramCourse[]
+  batches        Batch[]
+  enrollments    Enrollment[]
+  quizzes        Quiz[]
+  assignments    Assignment[]
+  projects       Project[]
+  certificates   Certificate[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+  @@map("courses")
+}
+
+model CoursePrerequisite {
+  courseId       String @db.Uuid
+  prerequisiteId String @db.Uuid
+
+  course       Course @relation("CourseHasPrereq", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisite Course @relation("CourseIsPrereq", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, prerequisiteId])
+  @@map("course_prerequisites")
+}
+
+model CourseModule {
+  id          String   @id @default(uuid()) @db.Uuid
+  courseId    String   @db.Uuid
+  title       String
+  description String?
+  position    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId, position])
+  @@map("course_modules")
+}
+
+model Lesson {
+  id              String     @id @default(uuid()) @db.Uuid
+  moduleId        String     @db.Uuid
+  title           String
+  type            LessonType
+  position        Int
+  body            Json? // rich text / video meta, shape depends on type
+  durationMinutes Int?
+  isPreview       Boolean    @default(false)
+  completionRule  Json       @default("{\"type\":\"manual\"}") // e.g. {"type":"video","minWatchPct":80}
+  quizId          String?    @unique @db.Uuid
+  assignmentId    String?    @unique @db.Uuid
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  module     CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  quiz       Quiz?            @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  assignment Assignment?      @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  resources  LessonResource[]
+  progress   LessonProgress[]
+  sessions   Session[]
+
+  @@index([moduleId, position])
+  @@map("lessons")
+}
+
+model LessonResource {
+  id          String       @id @default(uuid()) @db.Uuid
+  lessonId    String       @db.Uuid
+  kind        ResourceKind
+  title       String
+  storagePath String? // Firebase Storage path
+  url         String? // external link
+  mimeType    String?
+  sizeBytes   BigInt?
+  position    Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lesson_resources")
+}
+
+// ───────────── Programs, batches, sessions ─────────────
+
+model Program {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  title          String
+  description    String?
+  durationWeeks  Int?
+  status         ContentStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  courses      ProgramCourse[]
+  batches      Batch[]
+  enrollments  Enrollment[]
+  certificates Certificate[]
+
+  @@index([organizationId])
+  @@map("programs")
+}
+
+model ProgramCourse {
+  programId  String  @db.Uuid
+  courseId   String  @db.Uuid
+  position   Int
+  isRequired Boolean @default(true)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@id([programId, courseId])
+  @@map("program_courses")
+}
+
+/// A real delivery instance of a program or a single course.
+model Batch {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  programId      String?      @db.Uuid
+  courseId       String?      @db.Uuid
+  name           String
+  code           String
+  mode           DeliveryMode @default(OFFLINE)
+  location       String?
+  capacity       Int?
+  startDate      DateTime     @db.Date
+  endDate        DateTime?    @db.Date
+  status         BatchStatus  @default(PLANNED)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  program      Program?          @relation(fields: [programId], references: [id], onDelete: SetNull)
+  course       Course?           @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  instructors  BatchInstructor[]
+  sessions     Session[]
+  enrollments  Enrollment[]
+  assignments  Assignment[]
+  projects     Project[]
+  quizAttempts QuizAttempt[]
+  certificates Certificate[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("batches")
+}
+
+model BatchInstructor {
+  batchId String  @db.Uuid
+  userId  String  @db.Uuid
+  isLead  Boolean @default(false)
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([batchId, userId])
+  @@index([userId])
+  @@map("batch_instructors")
+}
+
+model Session {
+  id         String       @id @default(uuid()) @db.Uuid
+  batchId    String       @db.Uuid
+  lessonId   String?      @db.Uuid
+  title      String
+  startsAt   DateTime
+  endsAt     DateTime
+  mode       DeliveryMode @default(OFFLINE)
+  location   String?
+  meetingUrl String?
+  createdAt  DateTime     @default(now())
+
+  batch      Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  lesson     Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  attendance Attendance[]
+
+  @@index([batchId, startsAt])
+  @@map("sessions")
+}
+
+// ───────────── Enrollment & progress ─────────────
+
+/// Exactly one of courseId / programId is set (enforced by a CHECK constraint in migration).
+model Enrollment {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  batchId        String?          @db.Uuid
+  courseId       String?          @db.Uuid
+  programId      String?          @db.Uuid
+  status         EnrollmentStatus @default(ACTIVE)
+  progressPct    Decimal          @default(0) @db.Decimal(5, 2)
+  enrolledAt     DateTime         @default(now())
+  completedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch        Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  program      Program?     @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, courseId, batchId])
+  @@unique([userId, programId, batchId])
+  @@index([organizationId, status])
+  @@index([batchId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @db.Uuid
+  userId          String         @db.Uuid
+  lessonId        String         @db.Uuid
+  status          ProgressStatus @default(NOT_STARTED)
+  watchPct        Decimal?       @db.Decimal(5, 2)
+  lastPositionSec Int?
+  completedAt     DateTime?
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson       Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("progress")
+}
+
+// ───────────── Assessments ─────────────
+
+model Quiz {
+  id               String        @id @default(uuid()) @db.Uuid
+  organizationId   String        @db.Uuid
+  courseId         String?       @db.Uuid
+  title            String
+  instructions     String?
+  passPct          Int           @default(60)
+  timeLimitMinutes Int?
+  maxAttempts      Int?          @default(3)
+  shuffleQuestions Boolean       @default(true)
+  showAnswersAfter Boolean       @default(true)
+  status           ContentStatus @default(DRAFT)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course       Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  questions    QuizQuestion[]
+  attempts     QuizAttempt[]
+  lesson       Lesson?
+
+  @@index([organizationId])
+  @@map("quizzes")
+}
+
+/// Question bank item; reusable across quizzes.
+model Question {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  type           QuestionType
+  prompt         String
+  options        Json         @default("[]") // [{id,text}]
+  correctAnswer  Json // option ids or accepted text answers — never sent to learners
+  explanation    String?
+  points         Int          @default(1)
+  tags           String[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quizzes      QuizQuestion[]
+
+  @@index([organizationId])
+  @@map("questions")
+}
+
+model QuizQuestion {
+  quizId     String @db.Uuid
+  questionId String @db.Uuid
+  position   Int
+
+  quiz     Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@id([quizId, questionId])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  quizId         String        @db.Uuid
+  userId         String        @db.Uuid
+  batchId        String?       @db.Uuid
+  attemptNo      Int
+  status         AttemptStatus @default(IN_PROGRESS)
+  answers        Json          @default("{}") // {questionId: answer}
+  score          Decimal?      @db.Decimal(7, 2)
+  maxScore       Decimal?      @db.Decimal(7, 2)
+  passed         Boolean?
+  startedAt      DateTime      @default(now())
+  submittedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quiz         Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch        Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@unique([quizId, userId, attemptNo])
+  @@index([organizationId])
+  @@map("quiz_attempts")
+}
+
+// ───────────── Assignments ─────────────
+
+model Assignment {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  courseId       String?       @db.Uuid
+  batchId        String?       @db.Uuid
+  title          String
+  instructions   String
+  dueAt          DateTime?
+  maxScore       Int           @default(100)
+  allowLate      Boolean       @default(true)
+  status         ContentStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  batch        Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  submissions  Submission[]
+  lesson       Lesson?
+
+  @@index([organizationId])
+  @@index([batchId])
+  @@map("assignments")
+}
+
+model Submission {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  assignmentId   String           @db.Uuid
+  userId         String           @db.Uuid
+  text           String?
+  files          Json             @default("[]") // [{storagePath,name,mimeType,sizeBytes}]
+  status         SubmissionStatus @default(DRAFT)
+  isLate         Boolean          @default(false)
+  submittedAt    DateTime?
+  score          Decimal?         @db.Decimal(7, 2)
+  feedback       String?
+  gradedById     String?          @db.Uuid
+  gradedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user         User         @relation("SubmissionLearner", fields: [userId], references: [id], onDelete: Cascade)
+  gradedBy     User?        @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@unique([assignmentId, userId])
+  @@index([organizationId, status])
+  @@map("submissions")
+}
+
+// ───────────── Attendance ─────────────
+
+model Attendance {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  sessionId      String           @db.Uuid
+  userId         String           @db.Uuid
+  status         AttendanceStatus
+  note           String?
+  markedById     String?          @db.Uuid
+  markedAt       DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  session      Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user         User         @relation("AttendanceLearner", fields: [userId], references: [id], onDelete: Cascade)
+  markedBy     User?        @relation("AttendanceMarker", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, userId])
+  @@index([organizationId])
+  @@map("attendance")
+}
+
+// ───────────── Projects ─────────────
+
+model Rubric {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  title          String
+  criteria       Json // [{id,name,description,maxPoints}]
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects     Project[]
+
+  @@map("rubrics")
+}
+
+model Project {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  courseId       String?       @db.Uuid
+  batchId        String?       @db.Uuid
+  rubricId       String?       @db.Uuid
+  title          String
+  brief          String
+  dueAt          DateTime?
+  status         ContentStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  course       Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  batch        Batch?              @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  rubric       Rubric?             @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+  submissions  ProjectSubmission[]
+
+  @@index([organizationId])
+  @@map("projects")
+}
+
+model ProjectSubmission {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  projectId      String           @db.Uuid
+  userId         String           @db.Uuid
+  title          String?
+  description    String?
+  repoUrl        String?
+  demoUrl        String?
+  files          Json             @default("[]")
+  status         SubmissionStatus @default(DRAFT)
+  submittedAt    DateTime?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluations  ProjectEvaluation[]
+
+  @@unique([projectId, userId])
+  @@map("project_submissions")
+}
+
+model ProjectEvaluation {
+  id           String   @id @default(uuid()) @db.Uuid
+  submissionId String   @db.Uuid
+  evaluatorId  String   @db.Uuid
+  scores       Json // {criterionId: points}
+  totalScore   Decimal  @db.Decimal(7, 2)
+  feedback     String?
+  isFinal      Boolean  @default(false)
+  evaluatedAt  DateTime @default(now())
+
+  submission ProjectSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  evaluator  User              @relation(fields: [evaluatorId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, evaluatorId])
+  @@map("project_evaluations")
+}
+
+// ───────────── Certificates ─────────────
+
+model CertificateTemplate {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  layout         Json // field positions, fonts, signatures
+  backgroundPath String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  certificates Certificate[]
+
+  @@map("certificate_templates")
+}
+
+model Certificate {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @db.Uuid
+  certificateNo  String            @unique // e.g. ARC-2026-7F3K9Q — used in public verify URL/QR
+  userId         String            @db.Uuid
+  templateId     String?           @db.Uuid
+  courseId       String?           @db.Uuid
+  programId      String?           @db.Uuid
+  batchId        String?           @db.Uuid
+  recipientName  String // snapshot at issue time
+  title          String // snapshot of course/program title
+  status         CertificateStatus @default(VALID)
+  issuedAt       DateTime          @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  revokedReason  String?
+  pdfPath        String?
+  issuedById     String?           @db.Uuid
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User                 @relation("CertificateRecipient", fields: [userId], references: [id], onDelete: Restrict)
+  issuedBy     User?                @relation("CertificateIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  template     CertificateTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  course       Course?              @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  program      Program?             @relation(fields: [programId], references: [id], onDelete: SetNull)
+  batch        Batch?               @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("certificates")
+}
+
+// ───────────── Notifications & audit ─────────────
+
+model Notification {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @db.Uuid
+  userId         String    @db.Uuid
+  type           String // e.g. ASSIGNMENT_GRADED, CERTIFICATE_ISSUED
+  title          String
+  body           String?
+  link           String?
+  readAt         DateTime?
+  emailedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @db.Uuid
+  actorId        String?  @db.Uuid
+  action         String // e.g. user.role_changed, certificate.revoked
+  entityType     String
+  entityId       String?
+  meta           Json     @default("{}")
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor        User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
