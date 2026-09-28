@@ -39,6 +39,8 @@ Students joining through a college join link never need email.
    - **Pooled** (host contains `-pooler`) → this is `DATABASE_URL`
    - **Direct** (toggle "Connection pooling" off) → this is `DIRECT_URL`
 
+   In both, remove `&channel_binding=require` from the end (keep `?sslmode=require`).
+
 ## 3. Prepare Firebase
 
 In the Firebase console for your project:
@@ -59,7 +61,6 @@ In the Firebase console for your project:
 
    | Name                                                                         | Value                                                 |
    | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
-   | `NODE_ENV`                                                                   | `production`                                          |
    | `DATABASE_URL`                                                               | Neon **pooled** string                                |
    | `DIRECT_URL`                                                                 | Neon **direct** string                                |
    | `FIREBASE_PROJECT_ID`                                                        | your Firebase project id                              |
@@ -68,6 +69,9 @@ In the Firebase console for your project:
    | `WEB_ORIGIN`                                                                 | `https://arclabs-web.vercel.app` (fix in step 6)      |
    | `EMAIL_DELIVERY` _(optional)_                                                | `direct`                                              |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` _(optional)_ | your SMTP account                                     |
+
+   Do **not** add `NODE_ENV` — Vercel already runs the API in production mode, and setting it
+   would skip build tools during install.
 
 4. **Deploy**. The build runs `prisma migrate deploy`, so the database tables are created
    automatically on every deploy.

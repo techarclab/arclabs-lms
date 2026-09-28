@@ -6,7 +6,10 @@ const boolish = z
   .transform((v) => v === 'true' || v === '1');
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
+  // Vercel sets VERCEL=1; don't set NODE_ENV there yourself (it would skip devDependencies at install).
+  NODE_ENV: z
+    .enum(['development', 'test', 'staging', 'production'])
+    .default(process.env.VERCEL ? 'production' : 'development'),
   PORT: z.coerce.number().int().default(4001),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
   DATABASE_URL: z.string().min(1),

@@ -222,7 +222,7 @@ export class MembersService {
       member: toMember(member, actor.id),
       created,
       emailQueued,
-      ...(this.env.NODE_ENV !== 'production' ? { inviteLink: link } : {}),
+      ...(this.revealLink(emailQueued) ? { inviteLink: link } : {}),
     };
   }
 
@@ -328,7 +328,7 @@ export class MembersService {
       entityId: m.id,
       meta: { email: m.user.email },
     });
-    return { emailQueued, ...(this.env.NODE_ENV !== 'production' ? { inviteLink: link } : {}) };
+    return { emailQueued, ...(this.revealLink(emailQueued) ? { inviteLink: link } : {}) };
   }
 
   // ───────── Updates ─────────
@@ -470,6 +470,11 @@ export class MembersService {
       if ((e as { code?: string }).code !== 'auth/user-not-found') throw e;
     }
     return (await this.auth.createUser({ email, displayName, emailVerified: false })).uid;
+  }
+
+  /** The admin sees the link to share by hand when no email went out (or always outside production). */
+  private revealLink(emailSent: boolean) {
+    return !emailSent || this.env.NODE_ENV !== 'production';
   }
 
   /** New accounts get a "set your password" link; existing accounts a sign-in link. */
