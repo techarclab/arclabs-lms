@@ -3,6 +3,8 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  ClipboardList,
+  FileQuestion,
   CalendarRange,
   ClipboardCheck,
   GraduationCap,
@@ -42,6 +44,34 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    title: 'Examinations',
+    items: [
+      { label: 'Exams', href: '/exams', icon: ClipboardList, permission: 'quiz.author' },
+      { label: 'Question bank', href: '/questions', icon: FileQuestion, permission: 'quiz.author' },
+      { label: 'My exams', href: '/my-exams', icon: ClipboardCheck, learnerOnly: true },
+    ],
+  },
+  {
+    title: 'People & insights',
+    items: [
+      { label: 'People', href: '/users', icon: Users, permission: 'user.manage' },
+      {
+        label: 'Analytics',
+        href: '/analytics',
+        icon: BarChart3,
+        permission: 'analytics.view',
+        soon: true,
+      },
+      {
+        label: 'Audit log',
+        href: '/audit',
+        icon: ScrollText,
+        permission: 'audit.view',
+        soon: true,
+      },
+    ],
+  },
+  {
     title: 'Training',
     items: [
       {
@@ -66,50 +96,18 @@ export const NAV: NavSection[] = [
         soon: true,
       },
       {
-        label: 'Assessments',
-        href: '/assessments',
-        icon: ClipboardCheck,
-        permission: 'quiz.author',
-        soon: true,
-      },
-      {
         label: 'Certificates',
         href: '/certificates',
         icon: Award,
         permission: 'certificate.issue',
         soon: true,
       },
-    ],
-  },
-  {
-    title: 'My learning',
-    items: [
       { label: 'My courses', href: '/learn', icon: GraduationCap, learnerOnly: true, soon: true },
       {
         label: 'My certificates',
         href: '/my-certificates',
         icon: Award,
         learnerOnly: true,
-        soon: true,
-      },
-    ],
-  },
-  {
-    title: 'People & insights',
-    items: [
-      { label: 'People', href: '/users', icon: Users, permission: 'user.manage' },
-      {
-        label: 'Analytics',
-        href: '/analytics',
-        icon: BarChart3,
-        permission: 'analytics.view',
-        soon: true,
-      },
-      {
-        label: 'Audit log',
-        href: '/audit',
-        icon: ScrollText,
-        permission: 'audit.view',
         soon: true,
       },
     ],

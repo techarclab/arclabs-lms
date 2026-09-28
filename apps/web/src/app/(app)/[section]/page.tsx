@@ -56,18 +56,6 @@ const SECTIONS: Record<
       'Session attendance',
     ],
   },
-  assessments: {
-    title: 'Assessments',
-    icon: ClipboardCheck,
-    phase: 'Phase 3',
-    blurb: 'Quizzes, question banks, assignments and project evaluation.',
-    features: [
-      'Question bank with tags',
-      'Timed quizzes & attempts',
-      'Assignment grading & feedback',
-      'Rubric-based project evaluation',
-    ],
-  },
   certificates: {
     title: 'Certificates',
     icon: Award,

@@ -29,3 +29,26 @@ export async function api<T>(
   if (!res.ok) throw new ApiError(res.status, data as ApiErrorBody | undefined);
   return data as T;
 }
+
+/** Downloads an authenticated file (e.g. CSV export). */
+export async function downloadFile(
+  path: string,
+  opts: { token?: string; orgId?: string; fallbackName: string },
+) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: {
+      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+      ...(opts.orgId ? { 'X-Org-Id': opts.orgId } : {}),
+    },
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => undefined));
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ??
+    opts.fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}

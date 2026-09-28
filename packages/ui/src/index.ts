@@ -8,3 +8,4 @@ export * from './dropdown';
 export * from './avatar';
 export * from './feedback';
 export * from './tabs';
+export * from './switch';

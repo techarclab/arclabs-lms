@@ -58,13 +58,25 @@ pnpm dev
 | `pnpm infra:down`                             | stop Docker services (data is kept)           |
 
 ## Testing invitations locally
+
 1. Keep `pnpm dev` and `pnpm emulators` running (the worker sends email to **Mailpit**).
 2. People → **Invite people**. After sending, the dialog shows the invite link (development only).
 3. Open http://localhost:8025 to see the actual email, or open the link directly — the Firebase
    emulator shows a page to set the new password.
 4. Sign in at http://localhost:3000/login as the invited person.
 
-CSV import template: People → **Import CSV** → *Download template*.
+CSV import template: People → **Import CSV** → _Download template_.
+
+## Trying an exam end to end
+
+1. `pnpm db:seed` adds 24 sample IoT/embedded questions to the ARC LABS question bank.
+2. As Super Admin, switch to an organization → **Exams → New exam**. Add questions from the bank,
+   set the window (open now, close later), choose the audience, **Publish**.
+3. Invite a test learner in **People** (role _Learner_, matching department), open the invite link,
+   set a password and sign in as them in a private window → **My exams → Start exam**.
+4. Watch it live in **Exams → Live monitor**; results and analytics update every 10 seconds.
+
+Use a desktop browser — the exam requires full-screen mode.
 
 ## Tests
 

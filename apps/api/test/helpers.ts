@@ -93,6 +93,7 @@ export function api(app: INestApplication, token?: string) {
     get: (url: string) => withAuth(agent.get(`/api/v1${url}`)),
     post: (url: string, body?: object) => withAuth(agent.post(`/api/v1${url}`)).send(body ?? {}),
     patch: (url: string, body?: object) => withAuth(agent.patch(`/api/v1${url}`)).send(body ?? {}),
+    put: (url: string, body?: object) => withAuth(agent.put(`/api/v1${url}`)).send(body ?? {}),
     delete: (url: string) => withAuth(agent.delete(`/api/v1${url}`)),
   };
 }
@@ -104,6 +105,7 @@ export function orgApi(app: INestApplication, token: string, orgId: string) {
     get: (url: string) => a.get(url).set('X-Org-Id', orgId),
     post: (url: string, body?: object) => a.post(url, body).set('X-Org-Id', orgId),
     patch: (url: string, body?: object) => a.patch(url, body).set('X-Org-Id', orgId),
+    put: (url: string, body?: object) => a.put(url, body).set('X-Org-Id', orgId),
     delete: (url: string) => a.delete(url).set('X-Org-Id', orgId),
   };
 }

@@ -1,0 +1,347 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
+import {
+  createExamSchema,
+  listExamsQuery,
+  listQuestionsQuery,
+  proctorEventSchema,
+  questionInputSchema,
+  saveAnswerSchema,
+  setExamAudienceSchema,
+  setExamQuestionsSchema,
+  updateExamSchema,
+  type CreateExamParsed,
+  type ListExamsQuery,
+  type ListQuestionsQuery,
+  type ProctorEventInput,
+  type QuestionInputParsed,
+  type SaveAnswerInput,
+  type SetExamAudienceInput,
+  type UpdateExamInput,
+} from '@arc/validation';
+import type { OrgContextInfo } from '../auth/auth.types';
+import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
+import { UuidPipe } from '../common/uuid.pipe';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import type { User } from '../generated/prisma/client';
+import { AttemptsService } from './attempts.service';
+import { ExamAnalyticsService } from './exam-analytics.service';
+import { ExamsService } from './exams.service';
+import { QuestionsService } from './questions.service';
+
+// ───────────── Staff: question bank ─────────────
+
+@ApiTags('question bank')
+@ApiBearerAuth()
+@ApiHeader({ name: 'X-Org-Id', required: true })
+@Controller('questions')
+@RequirePermission('quiz.author')
+export class QuestionsController {
+  constructor(private readonly questions: QuestionsService) {}
+
+  @Get()
+  list(
+    @OrgContext() org: OrgContextInfo,
+    @Query(new ZodValidationPipe(listQuestionsQuery)) q: ListQuestionsQuery,
+  ) {
+    return this.questions.list(org.organizationId, q);
+  }
+
+  @Get('topics')
+  topics(@OrgContext() org: OrgContextInfo) {
+    return this.questions.topics(org.organizationId);
+  }
+
+  @Post()
+  create(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(questionInputSchema)) body: QuestionInputParsed,
+  ) {
+    return this.questions.create(u, org.organizationId, body);
+  }
+
+  @Put(':id')
+  update(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body(new ZodValidationPipe(questionInputSchema)) body: QuestionInputParsed,
+  ) {
+    return this.questions.update(u, org.organizationId, id, body);
+  }
+
+  @Post(':id/duplicate')
+  duplicate(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.questions.duplicate(u, org.organizationId, id);
+  }
+
+  @Post(':id/archive')
+  @HttpCode(200)
+  archive(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.questions.setArchived(u, org.organizationId, id, true);
+  }
+
+  @Post(':id/restore')
+  @HttpCode(200)
+  restore(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.questions.setArchived(u, org.organizationId, id, false);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.questions.remove(u, org.organizationId, id);
+  }
+}
+
+// ───────────── Staff: exams ─────────────
+
+@ApiTags('exams')
+@ApiBearerAuth()
+@ApiHeader({ name: 'X-Org-Id', required: true })
+@Controller('exams')
+@RequirePermission('quiz.author')
+export class ExamsController {
+  constructor(
+    private readonly exams: ExamsService,
+    private readonly analytics: ExamAnalyticsService,
+  ) {}
+
+  @Get()
+  list(
+    @OrgContext() org: OrgContextInfo,
+    @Query(new ZodValidationPipe(listExamsQuery)) q: ListExamsQuery,
+  ) {
+    return this.exams.list(org.organizationId, q);
+  }
+
+  @Post()
+  create(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(createExamSchema)) body: CreateExamParsed,
+  ) {
+    return this.exams.create(u, org.organizationId, body);
+  }
+
+  @Get(':id')
+  get(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
+    return this.exams.get(org.organizationId, id);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body(new ZodValidationPipe(updateExamSchema)) body: UpdateExamInput,
+  ) {
+    return this.exams.update(u, org.organizationId, id, body);
+  }
+
+  @Put(':id/questions')
+  setQuestions(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body(new ZodValidationPipe(setExamQuestionsSchema)) body: { questionIds: string[] },
+  ) {
+    return this.exams.setQuestions(u, org.organizationId, id, body.questionIds);
+  }
+
+  @Put(':id/audience')
+  setAudience(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body(new ZodValidationPipe(setExamAudienceSchema)) body: SetExamAudienceInput,
+  ) {
+    return this.exams.setAudience(u, org.organizationId, id, body);
+  }
+
+  @Post(':id/publish')
+  @HttpCode(200)
+  publish(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.exams.publish(u, org.organizationId, id);
+  }
+
+  @Post(':id/unpublish')
+  @HttpCode(200)
+  unpublish(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.exams.unpublish(u, org.organizationId, id);
+  }
+
+  @Post(':id/release-results')
+  @HttpCode(200)
+  release(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.exams.releaseResults(u, org.organizationId, id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.exams.remove(u, org.organizationId, id);
+  }
+
+  @Get(':id/analytics')
+  examAnalytics(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
+    return this.analytics.analytics(org.organizationId, id);
+  }
+
+  @Get(':id/results.csv')
+  async csv(
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Res() res: Response,
+  ) {
+    const { filename, body } = await this.analytics.csv(org.organizationId, id);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(body);
+  }
+
+  @Get(':id/attempts/:attemptId')
+  attempt(
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+  ) {
+    return this.analytics.attemptDetail(org.organizationId, id, attemptId);
+  }
+
+  @Post(':id/attempts/:attemptId/force-submit')
+  @HttpCode(200)
+  forceSubmit(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+  ) {
+    return this.analytics.forceSubmit(u, org.organizationId, id, attemptId);
+  }
+}
+
+// ───────────── Students: taking exams ─────────────
+
+/** Student endpoints are authorised per exam (assignment), so no X-Org-Id is needed. */
+@ApiTags('my exams')
+@ApiBearerAuth()
+@Controller('my')
+export class MyExamsController {
+  constructor(private readonly attempts: AttemptsService) {}
+
+  @Get('exams')
+  list(@CurrentUser() u: User) {
+    return this.attempts.listMine(u);
+  }
+
+  @Get('exams/:id')
+  lobby(@CurrentUser() u: User, @Param('id', UuidPipe) id: string) {
+    return this.attempts.lobby(u, id);
+  }
+
+  @Post('exams/:id/start')
+  @HttpCode(200)
+  start(@CurrentUser() u: User, @Param('id', UuidPipe) id: string, @Req() req: Request) {
+    return this.attempts.start(u, id, {
+      ip: req.ip,
+      userAgent: req.header('user-agent')?.slice(0, 300),
+    });
+  }
+
+  @ApiHeader({ name: 'X-Attempt-Session', required: true })
+  @Post('attempts/:id/answers')
+  @HttpCode(200)
+  save(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+    @Body(new ZodValidationPipe(saveAnswerSchema)) body: SaveAnswerInput,
+  ) {
+    return this.attempts.saveAnswer(u, id, session, body);
+  }
+
+  @Post('attempts/:id/heartbeat')
+  @HttpCode(200)
+  heartbeat(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+  ) {
+    return this.attempts.heartbeat(u, id, session);
+  }
+
+  @Post('attempts/:id/events')
+  @HttpCode(200)
+  event(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+    @Body(new ZodValidationPipe(proctorEventSchema)) body: ProctorEventInput,
+  ) {
+    return this.attempts.recordEvent(u, id, session, body);
+  }
+
+  @Post('attempts/:id/submit')
+  @HttpCode(200)
+  submit(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+  ) {
+    return this.attempts.submit(u, id, session);
+  }
+
+  @Get('attempts/:id/result')
+  result(@CurrentUser() u: User, @Param('id', UuidPipe) id: string) {
+    return this.attempts.result(u, id);
+  }
+}

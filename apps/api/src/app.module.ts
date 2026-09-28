@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { RedisModule } from './common/redis.module';
 import { ConfigModule } from './config/config.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { ExamsModule } from './exams/exams.module';
 import { HealthModule } from './health/health.module';
 import { QueueModule } from './mail/queue.module';
 import { MembersModule } from './members/members.module';
@@ -26,6 +27,7 @@ import { StorageModule } from './storage/storage.module';
     AnalyticsModule,
     MembersModule,
     DepartmentsModule,
+    ExamsModule,
   ],
 })
 export class AppModule {}

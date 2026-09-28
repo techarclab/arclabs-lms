@@ -21,7 +21,7 @@ export function useApiMutation() {
   const { getToken } = useAuth();
   return async <T>(
     path: string,
-    method: 'POST' | 'PATCH' | 'DELETE',
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     body?: unknown,
     orgId?: string,
   ) => api<T>(path, { method, body, token: await getToken(), orgId });

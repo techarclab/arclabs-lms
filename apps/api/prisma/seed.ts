@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
+import { SAMPLE_QUESTIONS } from './sample-questions';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -46,6 +47,57 @@ async function main() {
       },
     },
   });
+
+  // Starter question bank (only if the organization has none yet)
+  if ((await prisma.question.count({ where: { organizationId: arc.id } })) === 0) {
+    let n = 0;
+    for (const q of SAMPLE_QUESTIONS) {
+      const id = () => Math.random().toString(16).slice(2, 10);
+      const common = {
+        organizationId: arc.id,
+        prompt: q.prompt,
+        topic: q.topic,
+        difficulty: q.difficulty,
+        points: q.points ?? 1,
+        explanation: q.explanation ?? null,
+        negativeMarks: 0.25 * (q.points ?? 1),
+      };
+      if (q.type === 'TRUE_FALSE') {
+        await prisma.question.create({
+          data: {
+            ...common,
+            type: 'TRUE_FALSE',
+            options: [
+              { id: 'true', text: 'True' },
+              { id: 'false', text: 'False' },
+            ],
+            correctAnswer: [q.answer ? 'true' : 'false'],
+          },
+        });
+      } else if (q.type === 'NUMERIC') {
+        await prisma.question.create({
+          data: {
+            ...common,
+            type: 'NUMERIC',
+            options: [],
+            correctAnswer: { value: q.value, tolerance: q.tolerance },
+          },
+        });
+      } else {
+        const opts = q.options.map((text) => ({ id: id(), text }));
+        await prisma.question.create({
+          data: {
+            ...common,
+            type: q.type,
+            options: opts,
+            correctAnswer: q.correct.map((i) => opts[i]!.id),
+          },
+        });
+      }
+      n++;
+    }
+    console.log(`Added ${n} sample questions to the ARC LABS question bank.`);
+  }
 
   console.log(`Seeded organization "${arc.name}" (${arc.id}) and a sample course.`);
 }

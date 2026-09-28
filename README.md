@@ -38,5 +38,7 @@ docs/      prd/  api/  architecture/  decisions/
 - Step 1 – Setup decisions ✅
 - Step 2 – Phase 0 specs: ERD ✅, RBAC matrix ✅, API contract (code-first via Swagger), wireframes
 - Step 3 – Monorepo scaffold ✅
-- Step 4 – Phase 1: Auth ✅, RBAC ✅, design system ✅, app shell ✅, organizations ✅, users & invitations ✅, courses
+- Step 4 – Phase 1: Auth ✅, RBAC ✅, design system ✅, app shell ✅, organizations ✅, users & invitations ✅
+- **Examinations (priority, ADR 0004):** question bank ✅, exam builder ✅, strict lockdown exams ✅, instant results ✅, analytics ✅ · next: coding questions
+- Courses, programs, batches, certificates — coming soon
 - Step 5 – Phases 2–4
