@@ -14,7 +14,7 @@ cd C:\dev\arclabs-lms          # or your project folder
 pnpm install                    # installs everything + generates the Prisma client
 pnpm infra:up                   # Postgres, Redis, SeaweedFS (S3), Mailpit in Docker
 pnpm db:migrate --name init     # creates the database tables (first time only)
-pnpm db:seed                    # ARC LABS organization + a sample course
+pnpm db:seed                    # ARC LABS organization, sample course + 24 sample questions
 ```
 
 `.env` files for local development are already in place
