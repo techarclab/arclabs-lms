@@ -109,6 +109,7 @@ export const examSettingsSchema = z.object({
   requireFullscreen: z.boolean(),
   blockCopyPaste: z.boolean(),
   maxViolations: z.coerce.number().int().min(0).max(50),
+  requireCamera: z.boolean(),
 });
 
 export const createExamSchema = examSettingsSchema.partial().extend({
@@ -162,6 +163,8 @@ export const proctorEventSchema = z.object({
     'PASTE',
     'CONTEXT_MENU',
     'DEVTOOLS',
+    'CAMERA_OFF',
+    'SHORTCUT',
   ]),
   meta: z.record(z.string(), z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
 });

@@ -37,7 +37,9 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     setStarting(true);
     setStartError(null);
     // Must be called directly from the click so the browser allows full screen.
-    if (lobby?.requireFullscreen && !(await enterFullscreen())) {
+    // A strict exam that was left is only being closed out — no need for full screen.
+    const closingOut = lobby?.maxViolations === 1 && Boolean(lobby?.inProgressAttemptId);
+    if (lobby?.requireFullscreen && !closingOut && !(await enterFullscreen())) {
       setStartError(
         'Your browser blocked full-screen mode. Allow it and try again (a desktop browser is required).',
       );

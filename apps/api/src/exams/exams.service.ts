@@ -121,6 +121,7 @@ export class ExamsService {
       requireFullscreen: exam.requireFullscreen,
       blockCopyPaste: exam.blockCopyPaste,
       maxViolations: exam.maxViolations,
+      requireCamera: exam.requireCamera,
       state: examState(exam),
       questionCount: exam.questions.length,
       totalMarks: exam.questions.reduce((s, q) => s + q.question.points, 0),
@@ -175,7 +176,9 @@ export class ExamsService {
         resultVisibility: input.resultVisibility ?? 'SCORE_NOW_ANSWERS_AFTER_CLOSE',
         requireFullscreen: input.requireFullscreen ?? true,
         blockCopyPaste: input.blockCopyPaste ?? true,
-        maxViolations: input.maxViolations ?? 3,
+        // Strict by default: leaving the exam (full screen, tab, window) submits it.
+        maxViolations: input.maxViolations ?? 1,
+        requireCamera: input.requireCamera ?? true,
       },
     });
     await this.audit.log({
@@ -410,7 +413,7 @@ export class ExamsService {
 export const DEFAULT_INSTRUCTIONS = [
   'Read every question carefully before answering.',
   'The timer starts when you begin and cannot be paused. The exam submits automatically when time runs out.',
-  'Stay in full-screen mode. Leaving full screen, switching tabs or windows is recorded as a violation.',
-  'Copying, pasting and right-clicking are disabled.',
+  'Stay in full-screen mode. Do not switch tabs, windows or apps.',
+  'Keyboard shortcuts, copying, pasting and right-clicking are disabled.',
   'Your answers are saved automatically after every change.',
 ].join('\n');

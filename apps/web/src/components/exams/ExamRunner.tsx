@@ -6,12 +6,15 @@ import {
   AlertTriangle,
   Bookmark,
   BookmarkCheck,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
   CloudOff,
+  DoorOpen,
   Eraser,
   Loader2,
+  Lock,
   Maximize,
   Send,
   ShieldAlert,
@@ -23,6 +26,7 @@ import { LogoMark } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
 import { PromptText } from './AnswerView';
+import { CameraView, stopCamera, useCamera } from './camera';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
 
 type SaveState = 'saved' | 'saving' | 'offline';
@@ -77,10 +81,12 @@ export function ExamRunner({
   const pending = useRef(new Map<string, unknown>());
   const flushing = useRef<Promise<void> | null>(null);
   const done = useRef(false);
+  /** Strict exams: leaving full screen / the window submits immediately (maxViolations = 1). */
+  const strict = initial.maxViolations === 1;
 
   const headers = useCallback(async () => ({ token: await getToken() }), [getToken]);
   const call = useCallback(
-    async <T,>(path: string, body?: unknown) => {
+    async <T,>(path: string, body?: unknown, keepalive = false) => {
       const { token } = await headers();
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001/api/v1'}${path}`,
@@ -92,6 +98,7 @@ export function ExamRunner({
             'X-Attempt-Session': session.sessionId,
           },
           body: JSON.stringify(body ?? {}),
+          keepalive,
         },
       );
       const data = await res.json().catch(() => undefined);
@@ -113,6 +120,7 @@ export function ExamRunner({
       } catch {
         /* already closed server-side — the result page will show why */
       }
+      stopCamera();
       try {
         localStorage.removeItem(`arc.marked.${session.attemptId}`);
       } catch {
@@ -214,15 +222,18 @@ export function ExamRunner({
     async (type: LockdownEvent) => {
       if (done.current) return;
       try {
-        const r = await call<ProctorEventResult>(`/my/attempts/${session.attemptId}/events`, {
-          type,
-        });
+        // keepalive: the report still reaches the server if the student is closing the page.
+        const r = await call<ProctorEventResult>(
+          `/my/attempts/${session.attemptId}/events`,
+          { type },
+          true,
+        );
         if (r.autoSubmitted) {
           void finish('violations');
           return;
         }
         setViolations((prev) => {
-          if (r.violationCount > prev && type !== 'FULLSCREEN_EXIT')
+          if (r.violationCount > prev && type !== 'FULLSCREEN_EXIT' && !strict)
             setWarning({ type, remaining: r.remaining });
           return r.violationCount;
         });
@@ -230,8 +241,16 @@ export function ExamRunner({
         handleError(e);
       }
     },
-    [call, finish, handleError, session.attemptId],
+    [call, finish, handleError, session.attemptId, strict],
   );
+
+  // ───────── Camera (presence only — never recorded) ─────────
+  const camera = useCamera({ autoStart: session.requireCamera });
+  const cameraBlocked =
+    session.requireCamera && !['on', 'requesting', 'idle'].includes(camera.state);
+  useEffect(() => {
+    if (session.requireCamera && camera.state === 'off') void onEvent('CAMERA_OFF');
+  }, [camera.state, onEvent, session.requireCamera]);
 
   useLockdown({
     active: !finishing,
@@ -275,41 +294,62 @@ export function ExamRunner({
   const critical = remainingMs < 60_000;
 
   if (finishing) {
+    const left = finishing === 'violations';
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ink-50">
-        <Loader2 className="size-6 animate-spin text-brand-600" />
-        <p className="text-lg font-semibold">
-          {finishing === 'time'
-            ? 'Time is up — submitting your exam…'
-            : finishing === 'violations'
-              ? 'Submitting your exam (violation limit reached)…'
-              : 'Submitting your exam…'}
-        </p>
-        <p className="text-sm text-ink-500">Please don’t close this window.</p>
+      <div className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
+        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center text-white backdrop-blur">
+          <div
+            className={cn(
+              'mx-auto flex size-14 items-center justify-center rounded-2xl',
+              left ? 'bg-rose-500/15 text-rose-300' : 'bg-brand-500/15 text-brand-200',
+            )}
+          >
+            {left ? <DoorOpen className="size-6" /> : <Loader2 className="size-6 animate-spin" />}
+          </div>
+          <h1 className="mt-5 text-xl font-semibold">
+            {finishing === 'time'
+              ? 'Time is up'
+              : left
+                ? strict
+                  ? 'You left the exam'
+                  : 'Violation limit reached'
+                : 'Submitting your exam'}
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-300">
+            {left && strict
+              ? 'Leaving full screen or the exam window ends the exam. Your answers so far have been submitted.'
+              : 'Your answers are being submitted. Your result will appear in a moment.'}
+          </p>
+          <p className="mt-6 flex items-center justify-center gap-2 text-xs text-ink-400">
+            <Loader2 className="size-3.5 animate-spin" /> Please don’t close this window
+          </p>
+        </div>
       </div>
     );
   }
 
   const answer = answers[q.id];
   const multi = q.type === 'MULTIPLE_CHOICE';
+  const pct = qs.length ? Math.round((answeredCount / qs.length) * 100) : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-ink-50 select-none">
+    <div className="flex min-h-screen flex-col bg-[#f4f6fb] select-none">
       {/* Top bar */}
-      <header className="sticky top-0 z-20 border-b border-ink-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-4 px-4 sm:px-6">
+      <header className="sticky top-0 z-20 bg-ink-950 text-white shadow-lg shadow-ink-950/10">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
           <LogoMark className="size-8 shrink-0" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink-900">{session.title}</p>
-            <p className="text-xs text-ink-500">
-              {answeredCount} of {qs.length} answered
+            <p className="truncate text-[15px] font-semibold">{session.title}</p>
+            <p className="flex items-center gap-1.5 text-xs text-ink-400">
+              <Lock className="size-3" /> Secure exam mode
+              {strict && <span className="text-rose-300">· leaving submits</span>}
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <span
               className={cn(
-                'hidden items-center gap-1.5 text-xs sm:flex',
-                saveState === 'offline' ? 'text-rose-600' : 'text-ink-500',
+                'hidden items-center gap-1.5 text-xs md:flex',
+                saveState === 'offline' ? 'text-rose-300' : 'text-ink-300',
               )}
             >
               {saveState === 'saving' ? (
@@ -317,23 +357,23 @@ export function ExamRunner({
               ) : saveState === 'offline' ? (
                 <CloudOff className="size-3.5" />
               ) : (
-                <Check className="size-3.5 text-emerald-600" />
+                <Check className="size-3.5 text-emerald-400" />
               )}
               {saveState === 'saving'
                 ? 'Saving…'
                 : saveState === 'offline'
                   ? 'Connection lost — retrying'
-                  : 'All answers saved'}
+                  : 'Saved'}
             </span>
-            {session.maxViolations > 0 && (
+            {!strict && session.maxViolations > 0 && (
               <span
                 className={cn(
                   'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold',
                   violations === 0
-                    ? 'bg-ink-100 text-ink-600'
+                    ? 'bg-white/10 text-ink-200'
                     : violations >= session.maxViolations - 1
-                      ? 'bg-rose-100 text-rose-700'
-                      : 'bg-amber-100 text-amber-800',
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-amber-400 text-amber-950',
                 )}
                 title="Violations recorded"
               >
@@ -342,43 +382,49 @@ export function ExamRunner({
             )}
             <span
               className={cn(
-                'tabular flex items-center gap-2 rounded-xl px-3.5 py-2 font-mono text-lg font-semibold',
+                'tabular flex items-center gap-2 rounded-xl px-3.5 py-2 font-mono text-lg font-semibold ring-1',
                 critical
-                  ? 'animate-pulse bg-rose-600 text-white'
+                  ? 'animate-pulse bg-rose-600 ring-rose-400'
                   : urgent
-                    ? 'bg-amber-100 text-amber-900'
-                    : 'bg-ink-900 text-white',
+                    ? 'bg-amber-400 text-amber-950 ring-amber-300'
+                    : 'bg-white/10 ring-white/10',
               )}
             >
               <Timer className="size-4" /> {fmtClock(remainingMs)}
             </span>
-            <Button onClick={() => setConfirmOpen(true)} className="hidden sm:inline-flex">
-              <Send /> Submit
-            </Button>
           </div>
+        </div>
+        <div className="h-1 bg-white/10">
+          <div
+            className="h-full bg-gradient-to-r from-brand-500 to-cyan-400 transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* Question */}
-        <section className="flex flex-col rounded-2xl border border-ink-200 bg-white shadow-xs">
-          <div className="flex items-center gap-3 border-b border-ink-100 px-6 py-4">
-            <span className="text-sm font-semibold text-ink-900">
-              Question {index + 1} <span className="font-normal text-ink-400">of {qs.length}</span>
+        <section className="flex flex-col overflow-hidden rounded-3xl border border-ink-200/80 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-6 py-4 sm:px-8">
+            <span className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-ink-950 px-2.5 text-sm font-semibold text-white">
+              Q{index + 1}
             </span>
-            <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-              +{q.points}
+            <span className="text-sm text-ink-500">of {qs.length}</span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+              +{q.points} {q.points === 1 ? 'mark' : 'marks'}
             </span>
             {q.negativeMarks > 0 && (
-              <span className="rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                −{q.negativeMarks}
+              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-100">
+                −{q.negativeMarks} if wrong
               </span>
             )}
             <button
               onClick={toggleMark}
               className={cn(
-                'ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition',
-                marked.has(q.id) ? 'bg-amber-100 text-amber-800' : 'text-ink-500 hover:bg-ink-100',
+                'ml-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition',
+                marked.has(q.id)
+                  ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-200'
+                  : 'text-ink-500 ring-1 ring-ink-200 hover:bg-ink-50',
               )}
             >
               {marked.has(q.id) ? (
@@ -390,25 +436,25 @@ export function ExamRunner({
             </button>
           </div>
 
-          <div className="flex-1 px-6 py-6">
-            <PromptText text={q.prompt} className="text-[16px]" />
-            {multi && (
-              <p className="mt-3 text-xs font-medium tracking-wide text-brand-700 uppercase">
-                Select all that apply
-              </p>
-            )}
+          <div className="flex-1 px-6 py-8 sm:px-8">
+            <PromptText text={q.prompt} className="text-[17px] leading-relaxed text-ink-900" />
+            <p className="mt-4 text-xs font-semibold tracking-wide text-ink-400 uppercase">
+              {multi
+                ? 'Select all that apply'
+                : q.type === 'NUMERIC'
+                  ? 'Type a number'
+                  : 'Choose one answer'}
+            </p>
 
             {q.type === 'NUMERIC' ? (
-              <div className="mt-6 max-w-sm">
-                <label className="text-sm font-medium text-ink-700" htmlFor="num-answer">
-                  Your answer
-                </label>
+              <div className="mt-4 max-w-sm">
                 <input
                   id="num-answer"
-                  data-allow-clipboard
+                  data-allow-typing
                   inputMode="decimal"
                   autoComplete="off"
-                  className="mt-1.5 h-12 w-full rounded-xl border border-ink-300 px-4 font-mono text-lg outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
+                  spellCheck={false}
+                  className="h-14 w-full rounded-2xl border-2 border-ink-200 px-5 font-mono text-xl outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                   value={answer === undefined || answer === null ? '' : String(answer)}
                   onChange={(e) => {
                     const v = e.target.value.replace(/[^0-9.\-eE]/g, '');
@@ -416,11 +462,12 @@ export function ExamRunner({
                     const n = v === '' ? null : Number(v);
                     if (v === '' || Number.isFinite(n)) setAnswer(q.id, n, 600);
                   }}
-                  placeholder="Enter a number"
+                  placeholder="Your answer"
+                  aria-label="Your answer"
                 />
               </div>
             ) : (
-              <ul className="mt-6 space-y-3">
+              <ul className="mt-4 space-y-3">
                 {q.options.map((o, i) => {
                   const selected = multi
                     ? Array.isArray(answer) && (answer as string[]).includes(o.id)
@@ -438,17 +485,19 @@ export function ExamRunner({
                           } else setAnswer(q.id, o.id);
                         }}
                         className={cn(
-                          'flex w-full items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left text-[15px] transition',
+                          'group flex w-full items-center gap-4 rounded-2xl border-2 px-4 py-4 text-left text-[15px] transition',
                           selected
-                            ? 'border-brand-500 bg-brand-50/70 text-ink-900'
-                            : 'border-ink-200 text-ink-800 hover:border-ink-300 hover:bg-ink-50',
+                            ? 'border-brand-500 bg-brand-50/70 text-ink-900 shadow-sm shadow-brand-500/10'
+                            : 'border-ink-200 text-ink-800 hover:border-brand-200 hover:bg-ink-50/60',
                         )}
                       >
                         <span
                           className={cn(
-                            'flex size-8 shrink-0 items-center justify-center text-sm font-semibold transition',
+                            'flex size-9 shrink-0 items-center justify-center text-sm font-semibold transition',
                             multi ? 'rounded-lg' : 'rounded-full',
-                            selected ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600',
+                            selected
+                              ? 'bg-brand-600 text-white'
+                              : 'bg-ink-100 text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700',
                           )}
                         >
                           {selected && multi ? (
@@ -458,6 +507,9 @@ export function ExamRunner({
                           )}
                         </span>
                         <span className="flex-1 whitespace-pre-wrap">{o.text}</span>
+                        {selected && !multi && (
+                          <Check className="size-5 text-brand-600" strokeWidth={2.5} />
+                        )}
                       </button>
                     </li>
                   );
@@ -466,7 +518,7 @@ export function ExamRunner({
             )}
           </div>
 
-          <div className="flex items-center gap-2 border-t border-ink-100 px-6 py-4">
+          <div className="flex items-center gap-2 border-t border-ink-100 bg-ink-50/50 px-6 py-4 sm:px-8">
             <Button variant="secondary" disabled={index === 0} onClick={() => go(index - 1)}>
               <ChevronLeft /> Previous
             </Button>
@@ -480,7 +532,7 @@ export function ExamRunner({
             <div className="ml-auto flex gap-2">
               {index < qs.length - 1 ? (
                 <Button onClick={() => go(index + 1)}>
-                  Next <ChevronRight />
+                  Save & next <ChevronRight />
                 </Button>
               ) : (
                 <Button onClick={() => setConfirmOpen(true)}>
@@ -491,10 +543,21 @@ export function ExamRunner({
           </div>
         </section>
 
-        {/* Palette */}
+        {/* Side panel */}
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <div className="rounded-2xl border border-ink-200 bg-white p-5 shadow-xs">
-            <p className="text-sm font-semibold text-ink-900">Question palette</p>
+          {session.requireCamera && (
+            <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
+              <CameraView stream={camera.stream} state={camera.state} compact />
+            </div>
+          )}
+
+          <div className="rounded-3xl border border-ink-200/80 bg-white p-5 shadow-sm">
+            <div className="flex items-baseline justify-between">
+              <p className="text-sm font-semibold text-ink-900">Questions</p>
+              <p className="tabular text-xs text-ink-500">
+                <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
+              </p>
+            </div>
             <div className="mt-4 grid grid-cols-6 gap-2 lg:grid-cols-5">
               {qs.map((x, i) => {
                 const ans = isAnswered(x.id);
@@ -504,7 +567,7 @@ export function ExamRunner({
                     key={x.id}
                     onClick={() => go(i)}
                     className={cn(
-                      'tabular relative flex h-10 items-center justify-center rounded-lg text-sm font-semibold transition',
+                      'tabular relative flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition',
                       i === index && 'ring-2 ring-brand-500 ring-offset-2',
                       mk
                         ? 'bg-amber-400 text-amber-950'
@@ -512,7 +575,7 @@ export function ExamRunner({
                           ? 'bg-emerald-500 text-white'
                           : visited.has(x.id)
                             ? 'bg-white text-rose-600 ring-1 ring-rose-300 ring-inset'
-                            : 'bg-ink-100 text-ink-600',
+                            : 'bg-ink-100 text-ink-600 hover:bg-ink-200',
                     )}
                   >
                     {i + 1}
@@ -525,7 +588,7 @@ export function ExamRunner({
             </div>
             <ul className="mt-5 grid grid-cols-2 gap-2 text-xs text-ink-600">
               <li className="flex items-center gap-2">
-                <span className="size-3 rounded bg-emerald-500" /> Answered ({answeredCount})
+                <span className="size-3 rounded bg-emerald-500" /> Answered
               </li>
               <li className="flex items-center gap-2">
                 <span className="size-3 rounded bg-amber-400" /> For review ({marked.size})
@@ -537,19 +600,33 @@ export function ExamRunner({
                 <span className="size-3 rounded bg-ink-100" /> Not visited
               </li>
             </ul>
-            <Button className="mt-5 w-full" onClick={() => setConfirmOpen(true)}>
+            <Button className="mt-5 w-full" size="lg" onClick={() => setConfirmOpen(true)}>
               <Send /> Submit exam
             </Button>
           </div>
-          <p className="px-1 text-xs leading-relaxed text-ink-500">
-            Answers save automatically. The exam submits itself when the timer reaches zero
-            {session.maxViolations > 0 ? ` or after ${session.maxViolations} violations` : ''}.
-          </p>
+
+          <div
+            className={cn(
+              'flex gap-2.5 rounded-2xl px-4 py-3 text-xs leading-relaxed',
+              strict ? 'bg-rose-50 text-rose-800 ring-1 ring-rose-100' : 'text-ink-500',
+            )}
+          >
+            {strict ? (
+              <DoorOpen className="mt-0.5 size-4 shrink-0" />
+            ) : (
+              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+            )}
+            <span>
+              {strict
+                ? 'Stay in this window. Leaving full screen, switching tab/window or closing the page submits your exam.'
+                : `Answers save automatically. The exam submits itself when time runs out${session.maxViolations > 0 ? ` or after ${session.maxViolations} violations` : ''}.`}
+            </span>
+          </div>
         </aside>
       </div>
 
-      {/* Full-screen gate */}
-      {session.requireFullscreen && !inFullscreen && (
+      {/* Full-screen gate (non-strict exams only; strict exams submit instead) */}
+      {session.requireFullscreen && !inFullscreen && !strict && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 p-6 backdrop-blur-xl">
           <div className="max-w-md text-center text-white">
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-300">
@@ -568,7 +645,26 @@ export function ExamRunner({
         </div>
       )}
 
-      {/* Violation warning */}
+      {/* Camera gate */}
+      {cameraBlocked && (inFullscreen || !session.requireFullscreen) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 p-6 backdrop-blur-xl">
+          <div className="max-w-md text-center text-white">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-amber-500/20 text-amber-300">
+              <Camera className="size-6" />
+            </div>
+            <h2 className="mt-5 text-2xl font-semibold">Your camera is off</h2>
+            <p className="mt-2 text-ink-300">
+              Turn your camera back on to continue. Your timer is still running. The camera is only
+              shown on your screen — nothing is recorded.
+            </p>
+            <Button size="lg" className="mt-6" onClick={() => void camera.start()}>
+              <Camera /> Turn camera on
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Violation warning (non-strict exams) */}
       <Dialog open={Boolean(warning)} onOpenChange={(o) => !o && setWarning(null)}>
         <DialogContent title="Warning: exam rule broken" icon={<AlertTriangle />}>
           <div className="px-6 pt-2 pb-6">

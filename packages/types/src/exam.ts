@@ -44,6 +44,7 @@ export interface ExamSettings {
   requireFullscreen: boolean;
   blockCopyPaste: boolean;
   maxViolations: number;
+  requireCamera: boolean;
 }
 
 export interface ExamSummary extends ExamSettings {
@@ -105,6 +106,7 @@ export interface ExamLobby extends MyExamItem {
   requireFullscreen: boolean;
   blockCopyPaste: boolean;
   maxViolations: number;
+  requireCamera: boolean;
   resultVisibility: ResultVisibilityName;
   serverNow: string;
 }
@@ -132,6 +134,7 @@ export interface AttemptSession {
   maxViolations: number;
   requireFullscreen: boolean;
   blockCopyPaste: boolean;
+  requireCamera: boolean;
   negativeMarking: boolean;
   resumed: boolean;
 }

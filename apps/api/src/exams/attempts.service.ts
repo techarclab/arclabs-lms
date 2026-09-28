@@ -35,14 +35,12 @@ import {
   type QuestionResult,
 } from './grading';
 
-/** Events that count towards the violation limit. The rest are logged only (they're blocked client-side). */
-const COUNTED = new Set([
-  'FULLSCREEN_EXIT',
-  'TAB_HIDDEN',
-  'WINDOW_BLUR',
-  'DEVTOOLS',
-  'SESSION_TAKEOVER',
-]);
+/**
+ * Events that count towards the violation limit: actually leaving the exam. Blocked attempts
+ * (devtools/shortcut keys, copy, paste, right-click) and camera drops are logged only — the key
+ * never took effect, and a stray F12 on a laptop shouldn't end a strict exam.
+ */
+const COUNTED = new Set(['FULLSCREEN_EXIT', 'TAB_HIDDEN', 'WINDOW_BLUR', 'SESSION_TAKEOVER']);
 /** A blur and a tab-hide usually fire together; count at most one violation per this many ms. */
 const VIOLATION_DEBOUNCE_MS = 2500;
 /** A session seen this recently is considered "still open" when another device starts. */
@@ -92,6 +90,7 @@ export class AttemptsService {
       requireFullscreen: exam.requireFullscreen,
       blockCopyPaste: exam.blockCopyPaste,
       maxViolations: exam.maxViolations,
+      requireCamera: exam.requireCamera,
       resultVisibility: exam.resultVisibility,
       serverNow: new Date().toISOString(),
     };
@@ -173,6 +172,9 @@ export class AttemptsService {
     if (existing) {
       const takeover =
         existing.lastSeenAt && now.getTime() - existing.lastSeenAt.getTime() < LIVE_SESSION_MS;
+      // Strict exams (leaving submits): coming back after leaving — closed tab, reload, crash —
+      // counts as leaving, even if the "left" event never reached us.
+      const counts = Boolean(takeover) || exam.maxViolations === 1;
       await this.prisma.quizAttempt.update({
         where: { id: existing.id },
         data: {
@@ -180,21 +182,24 @@ export class AttemptsService {
           lastSeenAt: now,
           ipAddress: meta.ip,
           userAgent: meta.userAgent,
-          ...(takeover ? { violationCount: { increment: 1 } } : {}),
+          ...(counts ? { violationCount: { increment: 1 } } : {}),
           events: {
             create: {
               type: takeover ? 'SESSION_TAKEOVER' : 'RESUMED',
-              counted: Boolean(takeover),
+              counted: counts,
               meta: { ip: meta.ip ?? '' },
             },
           },
         },
       });
-      if (takeover && exam.maxViolations > 0 && existing.violationCount + 1 >= exam.maxViolations) {
+      if (counts && exam.maxViolations > 0 && existing.violationCount + 1 >= exam.maxViolations) {
         await this.engine.finalize(existing.id, 'VIOLATIONS');
         throw new ConflictException({
           code: 'AUTO_SUBMITTED',
-          message: 'Your exam was submitted automatically after repeated violations',
+          message:
+            exam.maxViolations === 1
+              ? 'You left the exam, so it has been submitted'
+              : 'Your exam was submitted automatically after repeated violations',
           details: { attemptId: existing.id },
         });
       }
@@ -284,6 +289,7 @@ export class AttemptsService {
       maxViolations: exam.maxViolations,
       requireFullscreen: exam.requireFullscreen,
       blockCopyPaste: exam.blockCopyPaste,
+      requireCamera: exam.requireCamera,
       negativeMarking: exam.negativeMarking,
       resumed,
     };

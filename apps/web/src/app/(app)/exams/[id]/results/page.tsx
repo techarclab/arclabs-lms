@@ -67,6 +67,8 @@ const EVENT_LABEL: Record<string, string> = {
   DEVTOOLS: 'Opened developer tools',
   SESSION_TAKEOVER: 'Opened on another device',
   RESUMED: 'Resumed',
+  CAMERA_OFF: 'Camera turned off',
+  SHORTCUT: 'Tried a blocked shortcut',
 };
 
 function Results({ id, orgId }: { id: string; orgId: string }) {

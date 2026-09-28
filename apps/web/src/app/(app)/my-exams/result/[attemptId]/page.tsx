@@ -38,7 +38,7 @@ const REASON_NOTE: Record<string, { tone: string; text: string }> = {
   },
   VIOLATIONS: {
     tone: 'rose',
-    text: 'Your exam was submitted automatically because the violation limit was reached.',
+    text: 'Your exam was submitted automatically because you left the exam screen (full screen, tab or window).',
   },
   INSTRUCTOR: { tone: 'amber', text: 'Your exam was ended by the instructor.' },
 };

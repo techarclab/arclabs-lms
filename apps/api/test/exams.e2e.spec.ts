@@ -385,4 +385,59 @@ describe('Examinations', () => {
       );
     });
   });
+  describe('strict exams (leaving submits) with camera', () => {
+    let strictId: string;
+
+    it('defaults new exams to strict mode with the camera on', async () => {
+      const created = await staff().post('/exams', { title: 'Strict quiz', durationMinutes: 20 });
+      strictId = created.body.id;
+      expect(created.body).toMatchObject({ maxViolations: 1, requireCamera: true });
+      await staff().put(`/exams/${strictId}/questions`, { questionIds: [qIds.sc, qIds.tf] });
+      await staff().put(`/exams/${strictId}/audience`, {
+        assignToAll: false,
+        departmentIds: [ece],
+        userIds: [l4Id],
+      });
+      const now = Date.now();
+      await staff().patch(`/exams/${strictId}`, {
+        startsAt: new Date(now - 60_000).toISOString(),
+        endsAt: new Date(now + 3_600_000).toISOString(),
+      });
+      expect((await staff().post(`/exams/${strictId}/publish`)).status).toBe(200);
+      const lobby = await me(l1).get(`/my/exams/${strictId}`);
+      expect(lobby.body).toMatchObject({ maxViolations: 1, requireCamera: true });
+    });
+
+    it('submits on the first time the student leaves', async () => {
+      const s = await me(l1).post(`/my/exams/${strictId}/start`);
+      expect(s.body).toMatchObject({ maxViolations: 1, requireCamera: true });
+      const ev = (type: string) =>
+        withSession(
+          me(l1).post(`/my/attempts/${s.body.attemptId}/events`, { type }),
+          s.body.sessionId,
+        );
+      const shortcut = await ev('SHORTCUT');
+      expect(shortcut.body).toMatchObject({ violationCount: 0, autoSubmitted: false });
+      const cam = await ev('CAMERA_OFF');
+      expect(cam.body).toMatchObject({ violationCount: 0, autoSubmitted: false });
+      const left = await ev('FULLSCREEN_EXIT');
+      expect(left.body).toMatchObject({ violationCount: 1, autoSubmitted: true });
+      const r = await me(l1).get(`/my/attempts/${s.body.attemptId}/result`);
+      expect(r.body.submitReason).toBe('VIOLATIONS');
+    });
+
+    it('submits when the student comes back after closing the page', async () => {
+      const s = await me(l4).post(`/my/exams/${strictId}/start`);
+      // Page closed without the "left" event arriving; the attempt looks idle.
+      await prisma.quizAttempt.update({
+        where: { id: s.body.attemptId },
+        data: { lastSeenAt: new Date(Date.now() - 60_000) },
+      });
+      const again = await me(l4).post(`/my/exams/${strictId}/start`);
+      expect(again.body.error.code).toBe('AUTO_SUBMITTED');
+      expect(again.body.error.details.attemptId).toBe(s.body.attemptId);
+      const r = await me(l4).get(`/my/attempts/${s.body.attemptId}/result`);
+      expect(r.body.submitReason).toBe('VIOLATIONS');
+    });
+  });
 });

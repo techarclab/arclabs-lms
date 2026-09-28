@@ -6,12 +6,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
+  Camera,
+  DoorOpen,
+  Keyboard,
   CheckCircle2,
   ClipboardCheck,
   Copy,
   FileQuestion,
   Maximize,
   ShieldAlert,
+  ShieldCheck,
   Timer,
   Trophy,
 } from 'lucide-react';
@@ -19,6 +23,7 @@ import type { ExamLobby as Lobby } from '@arc/types';
 import { Button, cn } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { formatDateTime, timeUntil } from '@/lib/format';
+import { CameraView, useCamera } from './camera';
 
 export function ExamLobby({
   lobby,
@@ -32,6 +37,10 @@ export function ExamLobby({
   error: string | null;
 }) {
   const [agree, setAgree] = useState(false);
+  const canTake = lobby.state === 'LIVE' && lobby.canStart;
+  const camera = useCamera();
+  const cameraReady = !lobby.requireCamera || camera.state === 'on';
+  const strict = lobby.maxViolations === 1;
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 1000);
@@ -42,6 +51,7 @@ export function ExamLobby({
     .map((r) => r.trim())
     .filter(Boolean);
   const resuming = Boolean(lobby.inProgressAttemptId);
+  const leftStrict = canTake && strict && resuming;
   const attemptsLeft = lobby.maxAttempts - lobby.attemptsUsed;
 
   return (
@@ -123,29 +133,92 @@ export function ExamLobby({
                   {lobby.requireFullscreen && (
                     <li className="flex gap-2">
                       <Maximize className="mt-0.5 size-3.5 shrink-0" /> The exam runs in full
-                      screen. Leaving it is recorded.
+                      screen.
                     </li>
                   )}
                   <li className="flex gap-2">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs, windows
-                    or apps is recorded.
+                    <Keyboard className="mt-0.5 size-3.5 shrink-0" /> Keyboard shortcuts, copy,
+                    paste and right-click are disabled.
                   </li>
-                  {lobby.blockCopyPaste && (
-                    <li className="flex gap-2">
-                      <Copy className="mt-0.5 size-3.5 shrink-0" /> Copy, paste and right-click are
-                      disabled.
+                  {strict ? (
+                    <li className="flex gap-2 font-semibold text-rose-800">
+                      <DoorOpen className="mt-0.5 size-3.5 shrink-0" /> Leaving full screen,
+                      switching tab/window or closing the page submits your exam immediately.
                     </li>
+                  ) : (
+                    <>
+                      <li className="flex gap-2">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs,
+                        windows or apps is recorded.
+                      </li>
+                      {lobby.maxViolations > 0 && (
+                        <li className="flex gap-2 font-semibold">
+                          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
+                          {lobby.maxViolations} violations your exam is submitted automatically.
+                        </li>
+                      )}
+                    </>
                   )}
-                  {lobby.maxViolations > 0 && (
-                    <li className="flex gap-2 font-semibold">
-                      <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
-                      {lobby.maxViolations} violations your exam is submitted automatically.
+                  {lobby.requireCamera && (
+                    <li className="flex gap-2">
+                      <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera stays on during
+                      the exam. It is not recorded.
                     </li>
                   )}
                 </ul>
               </div>
 
-              {lobby.state === 'LIVE' && lobby.canStart ? (
+              {canTake && !leftStrict && lobby.requireCamera && (
+                <div className="rounded-2xl border border-ink-200 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                    <Camera className="size-4 text-brand-600" /> Camera check
+                  </p>
+                  <CameraView
+                    stream={camera.stream}
+                    state={camera.state}
+                    compact
+                    className="mt-3"
+                  />
+                  {camera.state !== 'on' && (
+                    <Button
+                      variant="secondary"
+                      className="mt-3 w-full"
+                      loading={camera.state === 'requesting'}
+                      onClick={() => void camera.start()}
+                    >
+                      <Camera /> Turn on camera
+                    </Button>
+                  )}
+                  {(camera.state === 'denied' || camera.state === 'unavailable') && (
+                    <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+                      {camera.state === 'denied'
+                        ? 'Camera permission was blocked. Click the camera icon in the address bar, choose Allow, then try again.'
+                        : 'No camera found. Connect a webcam, or ask your instructor for help.'}
+                    </p>
+                  )}
+                  <p className="mt-3 flex gap-2 text-[12px] leading-relaxed text-ink-500">
+                    <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                    Your video stays on your own screen only. Nothing is recorded, saved or sent to
+                    anyone.
+                  </p>
+                </div>
+              )}
+
+              {leftStrict ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                    <DoorOpen className="size-4" /> You left this exam
+                  </p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-rose-900/80">
+                    The exam window was closed or left while it was running. Under this exam’s rules
+                    it is submitted with the answers you had saved.
+                  </p>
+                  {error && <p className="mt-2 text-[13px] text-rose-700">{error}</p>}
+                  <Button className="mt-4 w-full" loading={starting} onClick={onStart}>
+                    See my result
+                  </Button>
+                </div>
+              ) : canTake ? (
                 <>
                   <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-700">
                     <input
@@ -164,16 +237,18 @@ export function ExamLobby({
                   <Button
                     size="lg"
                     className="w-full"
-                    disabled={!agree}
+                    disabled={!agree || !cameraReady}
                     loading={starting}
                     onClick={onStart}
                   >
                     {resuming ? 'Resume exam' : 'Start exam'}
                   </Button>
                   <p className="text-center text-xs text-ink-500">
-                    {resuming
-                      ? 'Your timer kept running while you were away.'
-                      : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
+                    {!cameraReady
+                      ? 'Turn on your camera to start.'
+                      : resuming
+                        ? 'Your timer kept running while you were away.'
+                        : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
                   </p>
                 </>
               ) : (

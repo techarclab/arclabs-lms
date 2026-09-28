@@ -132,6 +132,8 @@ enum ProctorEventType {
   DEVTOOLS
   SESSION_TAKEOVER
   RESUMED
+  CAMERA_OFF
+  SHORTCUT
 }
 
 enum AttemptStatus {
@@ -553,7 +555,8 @@ model Quiz {
   // Lockdown
   requireFullscreen Boolean @default(true)
   blockCopyPaste    Boolean @default(true)
-  maxViolations     Int     @default(3) // auto-submit when reached; 0 = never
+  maxViolations     Int     @default(3) // auto-submit when reached; 0 = never; 1 = leaving submits
+  requireCamera     Boolean @default(true) // live camera preview on the student's screen; never recorded
   assignToAll       Boolean @default(false) // every active learner in the organization
   status           ContentStatus    @default(DRAFT)
   publishedAt      DateTime?

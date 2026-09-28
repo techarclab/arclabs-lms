@@ -1,7 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Copy, Eye, EyeOff, Lock, Maximize, ShieldAlert, Shuffle, TimerReset } from 'lucide-react';
+import {
+  Camera,
+  Copy,
+  DoorOpen,
+  Eye,
+  EyeOff,
+  Lock,
+  Maximize,
+  ShieldAlert,
+  Shuffle,
+  TimerReset,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { ExamDetail, ResultVisibilityName } from '@arc/types';
 import {
@@ -85,7 +96,8 @@ export function ExamSettingsForm({
           resultVisibility: s.resultVisibility,
           requireFullscreen: s.requireFullscreen,
           blockCopyPaste: s.blockCopyPaste,
-          maxViolations: Number(s.maxViolations),
+          maxViolations: s.strict ? 1 : Number(s.maxViolations),
+          requireCamera: s.requireCamera,
         };
     setBusy(true);
     try {
@@ -245,36 +257,54 @@ export function ExamSettingsForm({
           <SwitchRow
             icon={<Maximize />}
             label="Require full screen"
-            description="Leaving full screen, switching tabs or windows counts as a violation."
+            description="The exam runs in full screen with keyboard shortcuts disabled."
             checked={s.requireFullscreen}
             onCheckedChange={(v) => set('requireFullscreen', v)}
             disabled={locked}
           />
           <SwitchRow
+            icon={<DoorOpen />}
+            label="Leaving submits the exam"
+            description="Exiting full screen, switching tab/window or closing the page submits the exam immediately."
+            checked={s.strict}
+            onCheckedChange={(v) => set('strict', v)}
+            disabled={locked}
+          />
+          {!s.strict && (
+            <div className="flex items-center gap-3 py-3">
+              <ShieldAlert className="size-[18px] text-ink-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-ink-900">Auto-submit after violations</p>
+                <p className="text-[13px] text-ink-500">
+                  Students get warnings first; the exam is submitted at this many violations. 0 =
+                  never.
+                </p>
+              </div>
+              <Input
+                className="w-20 text-center"
+                inputMode="numeric"
+                disabled={locked}
+                value={s.maxViolations}
+                onChange={(e) => set('maxViolations', e.target.value)}
+              />
+            </div>
+          )}
+          <SwitchRow
             icon={<Copy />}
             label="Block copy, paste & right-click"
-            description="Also blocks printing and common shortcuts."
+            description="Also blocks printing, saving and text selection."
             checked={s.blockCopyPaste}
             onCheckedChange={(v) => set('blockCopyPaste', v)}
             disabled={locked}
           />
-          <div className="flex items-center gap-3 py-3">
-            <ShieldAlert className="size-[18px] text-ink-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-ink-900">Auto-submit after violations</p>
-              <p className="text-[13px] text-ink-500">
-                The exam is submitted automatically when this many violations are recorded. 0 =
-                never.
-              </p>
-            </div>
-            <Input
-              className="w-20 text-center"
-              inputMode="numeric"
-              disabled={locked}
-              value={s.maxViolations}
-              onChange={(e) => set('maxViolations', e.target.value)}
-            />
-          </div>
+          <SwitchRow
+            icon={<Camera />}
+            label="Camera on during the exam"
+            description="Students see their own camera while writing. Nothing is recorded, stored or sent anywhere."
+            checked={s.requireCamera}
+            onCheckedChange={(v) => set('requireCamera', v)}
+            disabled={locked}
+          />
         </CardContent>
       </Card>
 
@@ -337,6 +367,8 @@ function fromExam(e: ExamDetail) {
     resultVisibility: e.resultVisibility,
     requireFullscreen: e.requireFullscreen,
     blockCopyPaste: e.blockCopyPaste,
-    maxViolations: String(e.maxViolations),
+    strict: e.maxViolations === 1,
+    maxViolations: String(e.maxViolations === 1 ? 3 : e.maxViolations),
+    requireCamera: e.requireCamera,
   };
 }

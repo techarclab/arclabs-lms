@@ -439,9 +439,15 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
               </p>
               <p className="flex items-center gap-2">
                 <ShieldCheck className="size-4 text-brand-600" />{' '}
-                {exam.maxViolations
-                  ? `Auto-submit after ${exam.maxViolations} violations`
-                  : 'Violations logged only'}
+                {exam.maxViolations === 1
+                  ? 'Leaving the exam submits it'
+                  : exam.maxViolations
+                    ? `Auto-submit after ${exam.maxViolations} violations`
+                    : 'Violations logged only'}
+              </p>
+              <p className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-brand-600" />{' '}
+                {exam.requireCamera ? 'Camera on (not recorded)' : 'No camera'}
               </p>
               <p className="flex items-center gap-2">
                 <ShieldCheck className="size-4 text-brand-600" />{' '}
