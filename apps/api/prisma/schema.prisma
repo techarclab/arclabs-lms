@@ -173,6 +173,9 @@ model Organization {
   primaryColor String?
   contactEmail String?
   settings     Json         @default("{}")
+  /// Self-registration: students join with /join/{joinCode} while joinEnabled is true.
+  joinCode     String?      @unique
+  joinEnabled  Boolean      @default(false)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

@@ -7,6 +7,7 @@ import { ConfigModule } from './config/config.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { ExamsModule } from './exams/exams.module';
 import { HealthModule } from './health/health.module';
+import { JoinModule } from './join/join.module';
 import { QueueModule } from './mail/queue.module';
 import { MembersModule } from './members/members.module';
 import { OrganizationsModule } from './organizations/organizations.module';
@@ -28,6 +29,7 @@ import { StorageModule } from './storage/storage.module';
     MembersModule,
     DepartmentsModule,
     ExamsModule,
+    JoinModule,
   ],
 })
 export class AppModule {}

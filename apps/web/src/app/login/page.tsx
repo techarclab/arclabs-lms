@@ -342,6 +342,23 @@ function LoginInner() {
             </Button>
           </form>
 
+          {mode !== 'reset' && (
+            <Link
+              href="/join"
+              className="mt-6 flex items-center justify-between rounded-xl border border-ink-200 px-4 py-3 text-sm transition hover:border-brand-300 hover:bg-brand-50/50"
+            >
+              <span>
+                <span className="block font-medium text-ink-900">
+                  Registering for your college?
+                </span>
+                <span className="block text-[13px] text-ink-500">
+                  Enter the join code your college shared
+                </span>
+              </span>
+              <span className="text-brand-600">→</span>
+            </Link>
+          )}
+
           <p className="mt-8 text-center text-xs leading-relaxed text-ink-400">
             By continuing you agree to the ARC LABS terms of service and privacy policy.
           </p>

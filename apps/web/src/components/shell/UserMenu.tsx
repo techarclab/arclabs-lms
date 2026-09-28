@@ -39,12 +39,22 @@ export function UserMenu() {
         <DropdownMenuItem icon={<UserRound />} disabled>
           Profile <span className="ml-auto text-[10px] text-ink-400 uppercase">Soon</span>
         </DropdownMenuItem>
-        <DropdownMenuItem
-          icon={<BookOpen />}
-          onSelect={() => window.open('http://localhost:4001/api/docs', '_blank')}
-        >
-          API docs
-        </DropdownMenuItem>
+        {process.env.NODE_ENV !== 'production' && (
+          <DropdownMenuItem
+            icon={<BookOpen />}
+            onSelect={() =>
+              window.open(
+                (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001/api/v1').replace(
+                  /\/v1\/?$/,
+                  '/docs',
+                ),
+                '_blank',
+              )
+            }
+          >
+            API docs
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           danger

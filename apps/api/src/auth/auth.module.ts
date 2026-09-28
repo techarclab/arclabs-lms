@@ -15,6 +15,6 @@ import { TenantGuard } from './tenant.guard';
     { provide: APP_GUARD, useClass: FirebaseAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
   ],
-  exports: [firebaseAuthProvider],
+  exports: [firebaseAuthProvider, AuthService],
 })
 export class AuthModule {}

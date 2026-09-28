@@ -11,18 +11,18 @@ Monorepo for the ARC LABS learning platform (V1 = LMS).
 | Web                        | Next.js 16 (App Router) + React 19 + Tailwind CSS 4 + TypeScript                                                    |
 | API                        | NestJS 12 + TypeScript, REST `/api/v1`, OpenAPI/Swagger                                                             |
 | ORM / migrations           | Prisma 7 (driver adapter `@prisma/adapter-pg`)                                                                      |
-| Database                   | PostgreSQL 16 — Docker locally; managed provider (Cloud SQL, Neon, Supabase…) chosen before staging                 |
-| Cache / queues             | Redis 7 + BullMQ                                                                                                    |
+| Database                   | PostgreSQL 16 — Docker locally; Neon in production                                                                  |
+| Cache / queues             | Redis 7 + BullMQ locally (optional; production sends email directly from the API)                                   |
 | Object storage             | S3-compatible: Cloudflare R2 in production, SeaweedFS locally (ADR 0003)                                            |
 | Auth                       | Firebase Authentication (email/password, Google); NestJS verifies Firebase ID tokens; roles/orgs stored in Postgres |
 | Validation                 | Zod (shared in `packages/validation`)                                                                               |
 | Tests                      | Vitest (unit + API integration via Supertest), Playwright (E2E later)                                               |
 | CI                         | GitHub Actions                                                                                                      |
 | Notifications              | Email via queue worker + Firebase Cloud Messaging (push)                                                            |
-| Hosting                    | To be decided before staging (Firebase App Hosting + Cloud Run need Blaze; free-tier alternatives will be compared) |
+| Hosting                    | Vercel — website and API as two projects ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))                                 |
 | Local infra                | Docker Compose (Postgres, Redis, SeaweedFS, Mailpit) + Firebase Auth emulator                                       |
 
-**Getting started:** see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+**Getting started:** see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). **Going live:** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Layout
 
@@ -39,6 +39,6 @@ docs/      prd/  api/  architecture/  decisions/
 - Step 2 – Phase 0 specs: ERD ✅, RBAC matrix ✅, API contract (code-first via Swagger), wireframes
 - Step 3 – Monorepo scaffold ✅
 - Step 4 – Phase 1: Auth ✅, RBAC ✅, design system ✅, app shell ✅, organizations ✅, users & invitations ✅
-- **Examinations (priority, ADR 0004):** question bank ✅, exam builder ✅, strict lockdown exams ✅, instant results ✅, analytics ✅ · next: coding questions
+- **Examinations (priority, ADR 0004):** question bank ✅, exam builder ✅, strict lockdown exams ✅, instant results ✅, analytics ✅, college join links ✅, Vercel deployment ✅ · next: coding questions
 - Courses, programs, batches, certificates — coming soon
 - Step 5 – Phases 2–4

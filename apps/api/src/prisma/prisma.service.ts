@@ -7,7 +7,13 @@ import type { Env } from '../config/env';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {
   constructor(@Inject(ENV) env: Env) {
-    super({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }) });
+    super({
+      adapter: new PrismaPg({
+        connectionString: env.DATABASE_URL,
+        // Serverless instances each hold a pool; keep it small so Neon's limits aren't hit.
+        max: process.env.VERCEL ? 5 : 10,
+      }),
+    });
   }
 
   async onModuleDestroy() {

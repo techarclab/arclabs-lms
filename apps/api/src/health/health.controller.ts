@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(REDIS) private readonly redis: Redis,
+    @Inject(REDIS) private readonly redis: Redis | null,
   ) {}
 
   @Get()
@@ -26,13 +26,14 @@ export class HealthController {
     ]);
     const checks = { database: db, redis: cache };
     return {
-      status: Object.values(checks).every((c) => c === 'up') ? 'ok' : 'degraded',
+      status: Object.values(checks).every((c) => c !== 'down') ? 'ok' : 'degraded',
       version: process.env.npm_package_version ?? '0.1.0',
       checks,
     };
   }
 
-  private async ping(): Promise<'up' | 'down'> {
+  private async ping(): Promise<'up' | 'down' | 'skipped'> {
+    if (!this.redis) return 'skipped';
     try {
       if (this.redis.status === 'wait') await this.redis.connect();
       return (await this.redis.ping()) === 'PONG' ? 'up' : 'down';

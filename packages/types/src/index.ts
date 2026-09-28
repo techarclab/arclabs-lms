@@ -4,3 +4,4 @@ export * from './api';
 export * from './organization';
 export * from './member';
 export * from './exam';
+export * from './join';

@@ -5,6 +5,7 @@ import type { Env } from '../config/env';
 
 export const REDIS = Symbol('REDIS');
 
+/** Optional Redis client: null when REDIS_URL is not configured (e.g. on Vercel). */
 @Global()
 @Module({
   providers: [
@@ -12,14 +13,16 @@ export const REDIS = Symbol('REDIS');
       provide: REDIS,
       inject: [ENV],
       useFactory: (env: Env) =>
-        new Redis(env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 }),
+        env.REDIS_URL
+          ? new Redis(env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 })
+          : null,
     },
   ],
   exports: [REDIS],
 })
 export class RedisModule implements OnModuleDestroy {
-  constructor(@Inject(REDIS) private readonly redis: Redis) {}
-  async onModuleDestroy() {
-    this.redis.disconnect();
+  constructor(@Inject(REDIS) private readonly redis: Redis | null) {}
+  onModuleDestroy() {
+    this.redis?.disconnect();
   }
 }

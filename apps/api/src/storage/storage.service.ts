@@ -27,13 +27,16 @@ export class StorageService implements OnModuleInit {
       region: env.S3_REGION,
       endpoint: env.S3_ENDPOINT,
       forcePathStyle: env.S3_FORCE_PATH_STYLE,
-      credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
+      credentials:
+        env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
+          ? { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY }
+          : undefined,
     });
   }
 
   /** In development, create the bucket if it does not exist yet. Never blocks startup. */
   async onModuleInit() {
-    if (this.env.NODE_ENV !== 'development') return;
+    if (this.env.NODE_ENV !== 'development' || !this.env.S3_ACCESS_KEY_ID) return;
     try {
       await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
     } catch {

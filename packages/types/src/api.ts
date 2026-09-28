@@ -17,7 +17,7 @@ export interface Paginated<T> {
 export interface HealthStatus {
   status: 'ok' | 'degraded';
   version: string;
-  checks: Record<string, 'up' | 'down'>;
+  checks: Record<string, 'up' | 'down' | 'skipped'>;
 }
 
 export interface MeResponse {

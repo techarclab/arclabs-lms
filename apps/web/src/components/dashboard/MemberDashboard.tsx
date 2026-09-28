@@ -37,6 +37,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { useOrg } from '@/components/providers/OrgProvider';
 import { formatDateTime, greeting, ROLE_LABEL, timeUntil } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
+import { JoinCodeForm } from '@/components/join/JoinCodeForm';
 import { StatCard } from './StatCard';
 
 export function MemberDashboard() {
@@ -50,7 +51,8 @@ export function MemberDashboard() {
         <EmptyState
           icon={<Compass />}
           title="You’re not part of an organization yet"
-          description="Ask your institution’s admin or ARC LABS to add you. Once added, your exams will show up here."
+          description="Have a join code from your college? Enter it below to register. Otherwise ask your institution’s admin to add you."
+          action={<JoinCodeForm className="w-full max-w-sm" />}
         />
       </Card>
     );

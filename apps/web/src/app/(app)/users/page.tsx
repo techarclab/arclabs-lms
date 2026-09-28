@@ -25,6 +25,7 @@ import {
   EmptyState,
 } from '@arc/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { JoinLinkCard } from '@/components/join/JoinLinkCard';
 import { DepartmentsCard } from '@/components/members/DepartmentsCard';
 import { MembersPanel } from '@/components/members/MembersPanel';
 import { ROLE_OPTIONS } from '@/components/members/shared';
@@ -165,6 +166,7 @@ export default function UsersPage() {
           importSignal={importSignal}
         />
         <div className="grid items-start gap-6 md:grid-cols-2 2xl:grid-cols-1">
+          <JoinLinkCard orgId={current.id} orgName={current.name} />
           <Card>
             <CardHeader>
               <div>
