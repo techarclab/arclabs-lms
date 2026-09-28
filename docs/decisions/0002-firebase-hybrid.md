@@ -1,6 +1,6 @@
 # ADR 0002 – Firebase hybrid architecture
 
-Status: Accepted (Sept 2026) — amends ADR 0001 (auth, storage, hosting)
+Status: Accepted (Sept 2026) — amends ADR 0001. Storage section superseded by ADR 0003 (Cloudflare R2 / MinIO).
 
 ## Context
 ARC LABS already has a Firebase subscription. The LMS data is highly relational
