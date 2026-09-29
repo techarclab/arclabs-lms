@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccessModule } from './access/access.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -22,6 +23,7 @@ import { StorageModule } from './storage/storage.module';
     StorageModule,
     AuditModule,
     QueueModule,
+    AccessModule,
     AuthModule,
     HealthModule,
     OrganizationsModule,

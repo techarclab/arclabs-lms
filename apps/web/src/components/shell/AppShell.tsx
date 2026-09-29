@@ -13,14 +13,14 @@ import { Topbar } from './Topbar';
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { loading, firebaseUser, me, error, signOut } = useAuth();
+  const { loading, signedIn, me, error, signOut } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !firebaseUser) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [loading, firebaseUser, router, pathname]);
+    if (!loading && !signedIn) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+  }, [loading, signedIn, router, pathname]);
 
-  if (loading || !firebaseUser || (!me && !error)) {
+  if (loading || !signedIn || (!me && !error)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <LogoMark className="size-10 animate-pulse" />

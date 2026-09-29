@@ -179,6 +179,10 @@ model Organization {
   /// Self-registration: students join with /join/{joinCode} while joinEnabled is true.
   joinCode     String?      @unique
   joinEnabled  Boolean      @default(false)
+  /// Read-only faculty access: SHA-256 of the access code (the code itself is never stored).
+  accessCodeHash      String?   @unique
+  accessCodeHint      String?
+  accessCodeCreatedAt DateTime?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -202,8 +206,26 @@ model Organization {
   certificates         Certificate[]
   notifications        Notification[]
   auditLogs            AuditLog[]
+  accessSessions       OrgAccessSession[]
 
   @@map("organizations")
+}
+
+/// A browser signed in with an organization's access code (read-only, no user account).
+model OrgAccessSession {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  tokenHash      String   @unique
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  lastSeenAt     DateTime @default(now())
+  ipAddress      String?
+  userAgent      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("org_access_sessions")
 }
 
 model Department {

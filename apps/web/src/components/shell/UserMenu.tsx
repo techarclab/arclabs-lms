@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, LogOut, ShieldCheck, UserRound } from 'lucide-react';
+import { BookOpen, Eye, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Avatar,
@@ -27,12 +27,19 @@ export function UserMenu() {
           <Avatar name={me.fullName} size="md" round />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-ink-900">{me.fullName}</p>
-            <p className="truncate text-xs text-ink-500">{me.email}</p>
+            <p className="truncate text-xs text-ink-500">
+              {me.accessCode ? 'Signed in with access code' : me.email}
+            </p>
           </div>
         </div>
         {me.isSuperAdmin && (
           <div className="mx-2.5 mb-2 flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700">
             <ShieldCheck className="size-3.5" /> Super Admin
+          </div>
+        )}
+        {me.accessCode && (
+          <div className="mx-2.5 mb-2 flex items-center gap-1.5 rounded-lg bg-ink-100 px-2.5 py-1.5 text-xs font-medium text-ink-700">
+            <Eye className="size-3.5" /> View only — nothing can be changed
           </div>
         )}
         <DropdownMenuSeparator />

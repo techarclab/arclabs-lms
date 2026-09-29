@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { hasPermission, type OrgRole, type Permission } from '@arc/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { REQUIRED_PERMISSION, SUPER_ADMIN_ONLY } from './decorators';
+import { ACCESS_CODE_ONLY, REQUIRED_PERMISSION, SUPER_ADMIN_ONLY } from './decorators';
 import type { AuthedRequest } from './auth.types';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,6 +26,9 @@ export class TenantGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const accessReq = ctx.switchToHttp().getRequest<AuthedRequest>();
+    if (accessReq.accessSession) return this.checkAccessSession(ctx, accessReq);
+
     if (
       this.reflector.getAllAndOverride<boolean>(SUPER_ADMIN_ONLY, [
         ctx.getHandler(),
@@ -77,6 +80,33 @@ export class TenantGuard implements CanActivate {
     if (!hasPermission(roles, permission)) {
       throw new ForbiddenException({ message: `Missing permission: ${permission}` });
     }
+    req.org = { organizationId: orgId, roles };
+    return true;
+  }
+
+  /**
+   * College access-code sessions are read-only and tied to one organization: they may reach only
+   * routes marked @AccessCodeOnly or routes whose permission the ORG_VIEWER role holds, and only
+   * for their own organization. Everything else (including routes with no permission, like /my/*)
+   * is refused.
+   */
+  private checkAccessSession(ctx: ExecutionContext, req: AuthedRequest): boolean {
+    const targets = [ctx.getHandler(), ctx.getClass()];
+    if (this.reflector.getAllAndOverride<boolean>(ACCESS_CODE_ONLY, targets)) return true;
+    const permission = this.reflector.getAllAndOverride<Permission | undefined>(
+      REQUIRED_PERMISSION,
+      targets,
+    );
+    const superOnly = this.reflector.getAllAndOverride<boolean>(SUPER_ADMIN_ONLY, targets);
+    const roles: OrgRole[] = ['ORG_VIEWER'];
+    if (superOnly || !permission || !hasPermission(roles, permission))
+      throw new ForbiddenException({
+        code: 'READ_ONLY_ACCESS',
+        message: 'Faculty access is view-only',
+      });
+    const orgId = req.header('x-org-id');
+    if (orgId !== req.accessSession!.organizationId)
+      throw new ForbiddenException({ message: 'Not allowed for this organization' });
     req.org = { organizationId: orgId, roles };
     return true;
   }

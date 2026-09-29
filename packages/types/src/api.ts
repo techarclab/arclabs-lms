@@ -26,4 +26,6 @@ export interface MeResponse {
   fullName: string;
   isSuperAdmin: boolean;
   memberships: { organizationId: string; organizationName: string; roles: string[] }[];
+  /** True when signed in with a college access code (read-only, no personal account). */
+  accessCode?: boolean;
 }

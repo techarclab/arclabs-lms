@@ -40,6 +40,7 @@ import {
   TabsTrigger,
 } from '@arc/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
+import { AccessCodeCard } from '@/components/join/AccessCodeCard';
 import { JoinLinkCard } from '@/components/join/JoinLinkCard';
 import { MembersPanel } from '@/components/members/MembersPanel';
 import { BRAND_SWATCHES } from '@/components/organizations/CreateOrganizationDialog';
@@ -328,7 +329,10 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
         {org.canManage && (
           <TabsContent value="members" className="space-y-6">
-            <JoinLinkCard orgId={org.id} orgName={org.name} />
+            <div className="grid items-start gap-6 lg:grid-cols-2">
+              <JoinLinkCard orgId={org.id} orgName={org.name} />
+              <AccessCodeCard orgId={org.id} orgName={org.name} />
+            </div>
             <MembersPanel
               orgId={org.id}
               orgName={org.name}

@@ -2,6 +2,9 @@ import type { ApiErrorBody } from '@arc/types';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001/api/v1';
 
+/** Fired when a faculty access-code session is no longer valid (expired, code changed). */
+export const ACCESS_EXPIRED_EVENT = 'arc:access-expired';
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -26,7 +29,17 @@ export async function api<T>(
     cache: 'no-store',
   });
   const data = res.status === 204 ? undefined : await res.json().catch(() => undefined);
-  if (!res.ok) throw new ApiError(res.status, data as ApiErrorBody | undefined);
+  if (!res.ok) {
+    const err = new ApiError(res.status, data as ApiErrorBody | undefined);
+    if (
+      res.status === 401 &&
+      opts.token?.startsWith('acc_') &&
+      typeof window !== 'undefined' &&
+      path !== '/access/me'
+    )
+      window.dispatchEvent(new Event(ACCESS_EXPIRED_EVENT));
+    throw err;
+  }
   return data as T;
 }
 

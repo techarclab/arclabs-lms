@@ -19,6 +19,13 @@ export const SUPER_ADMIN_ONLY = 'superAdminOnly';
 /** Platform-level routes (create organizations, platform analytics). */
 export const SuperAdminOnly = () => SetMetadata(SUPER_ADMIN_ONLY, true);
 
+export const ACCESS_CODE_ONLY = 'accessCodeOnly';
+/**
+ * Route is for college access-code sessions only (e.g. /access/me). Access-code sessions can
+ * otherwise reach only routes whose permission the read-only ORG_VIEWER role has.
+ */
+export const AccessCodeOnly = () => SetMetadata(ACCESS_CODE_ONLY, true);
+
 export const CurrentUser = createParamDecorator(
   (_: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest<AuthedRequest>().user,
 );

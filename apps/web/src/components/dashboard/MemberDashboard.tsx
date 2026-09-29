@@ -44,8 +44,9 @@ export function MemberDashboard() {
   const { me } = useAuth();
   const { current, isSuperAdmin } = useOrg();
   // Skip honorifics so "Dr. Suresh Rao" is greeted as Suresh.
-  const firstName =
-    me?.fullName.split(' ').find((w) => !/^(dr|prof|mr|mrs|ms|sri|smt)\.?$/i.test(w)) ?? '';
+  const firstName = me?.accessCode
+    ? ''
+    : (me?.fullName.split(' ').find((w) => !/^(dr|prof|mr|mrs|ms|sri|smt)\.?$/i.test(w)) ?? '');
 
   if (!current) {
     return (
@@ -79,11 +80,13 @@ export function MemberDashboard() {
             ))}
           </div>
         }
-        title={`${greeting()}, ${firstName}`}
+        title={firstName ? `${greeting()}, ${firstName}` : greeting()}
         description={
-          isStaff
-            ? 'Here’s what’s happening with your exams.'
-            : 'Your exams and results in one place.'
+          me?.accessCode
+            ? 'Faculty view — exam results and student lists for your college. View only.'
+            : isStaff
+              ? 'Here’s what’s happening with your exams.'
+              : 'Your exams and results in one place.'
         }
         actions={
           isStaff && (

@@ -123,6 +123,16 @@ This creates the ARC LABS organization and the sample question bank.
 4. Build the exam (Exams → New), audience **All learners**, schedule, **Publish**.
 5. After the exam, turn the registration link off (or press **New code**) before the next college.
 
+   Students must fill every field — name, roll number, department, email and password — so add the
+   college's departments first (People → Departments); the registration link can't be switched on
+   until at least one exists.
+
+6. **Faculty access (view-only)**: on the same Members tab, **Faculty access code → Create access
+   code**. Copy it (it is shown only once — only a hash is stored) and send it to the college's
+   coordinator. Faculty open the website → **College faculty?** → type the code (hidden while
+   typing). They see that college's exams, results and students, and can't change anything.
+   **New code** replaces it and signs everyone out; **Turn off** disables it. Sessions last 7 days.
+
 ## 9. Coding questions — connect a code runner (when you're ready)
 
 Coding questions (C and Python) work without a runner: students write and save code, and their

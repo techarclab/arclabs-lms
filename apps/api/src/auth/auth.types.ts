@@ -19,4 +19,6 @@ export interface AuthedRequest extends Request {
   firebase?: FirebaseIdentityInfo;
   user?: User;
   org?: OrgContextInfo;
+  /** Set when the caller signed in with a college access code instead of a Firebase account. */
+  accessSession?: { sessionId: string; organizationId: string; organizationName: string };
 }

@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -42,6 +43,12 @@ export class JoinService {
       where: { id: orgId },
       select: { joinCode: true, slug: true },
     });
+    // Students must pick their department, so there has to be at least one to pick from.
+    if (enabled && !(await this.prisma.department.count({ where: { organizationId: orgId } })))
+      throw new ConflictException({
+        code: 'NO_DEPARTMENTS',
+        message: 'Add the college’s departments first — students choose one when they register.',
+      });
     const joinCode = org.joinCode ?? (await this.newCode(org.slug));
     await this.prisma.organization.update({
       where: { id: orgId },
@@ -123,16 +130,14 @@ export class JoinService {
     input: JoinOrganizationParsed,
   ): Promise<JoinResult> {
     const org = await this.openOrg(rawCode);
-    if (input.departmentId) {
-      const dept = await this.prisma.department.findFirst({
-        where: { id: input.departmentId, organizationId: org.id },
+    const dept = await this.prisma.department.findFirst({
+      where: { id: input.departmentId, organizationId: org.id },
+    });
+    if (!dept)
+      throw new BadRequestException({
+        code: 'INVALID_DEPARTMENT',
+        message: 'Choose your department from the list',
       });
-      if (!dept)
-        throw new BadRequestException({
-          code: 'INVALID_DEPARTMENT',
-          message: 'Choose a department from the list',
-        });
-    }
     const user = existing ?? (await this.auth.sync(identity, { fullName: input.fullName }));
     if (user.status !== 'ACTIVE')
       throw new ForbiddenException({
@@ -159,8 +164,8 @@ export class JoinService {
           organizationId: org.id,
           userId: user.id,
           roles: ['LEARNER'],
-          departmentId: input.departmentId ?? null,
-          externalId: input.externalId ?? null,
+          departmentId: input.departmentId,
+          externalId: input.externalId,
         },
       }),
       // Keep the name the student typed if their account had only an email-derived name.

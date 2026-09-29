@@ -80,7 +80,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const r = await api<JoinResult>(`/join/${encodeURIComponent(code)}`, {
       method: 'POST',
       token,
-      body: { fullName: name, externalId: rollNo || undefined, departmentId: departmentId || null },
+      body: { fullName: name, externalId: rollNo, departmentId },
     });
     try {
       localStorage.setItem('arc.currentOrgId', r.organizationId);
@@ -98,14 +98,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const details = joinOrganizationSchema.safeParse({
       fullName,
       externalId: rollNo,
-      departmentId: departmentId || null,
+      departmentId,
     });
     if (!details.success) {
       setError(details.error.issues[0]?.message ?? 'Check your details');
       return;
     }
-    if (info && info.departments.length > 0 && !departmentId) {
-      setError('Choose your department');
+    if (!firebaseUser && (!email.trim() || !password)) {
+      setError('Enter your email and password');
       return;
     }
     setBusy(true);
@@ -270,9 +270,10 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                 )}
               </div>
 
-              <Field label="Full name (as in college records)" htmlFor="j-name">
+              <Field label="Full name (as in college records)" htmlFor="j-name" required>
                 <Input
                   id="j-name"
+                  required
                   leading={<UserRound />}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -281,9 +282,10 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Roll / hall ticket no." htmlFor="j-roll">
+                <Field label="Roll / hall ticket no." htmlFor="j-roll" required>
                   <Input
                     id="j-roll"
+                    required
                     leading={<Hash />}
                     value={rollNo}
                     onChange={(e) => setRollNo(e.target.value.toUpperCase())}
@@ -291,29 +293,29 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                     className="font-mono uppercase"
                   />
                 </Field>
-                {info.departments.length > 0 && (
-                  <Field label="Department" htmlFor="j-dept">
-                    <Select
-                      id="j-dept"
-                      value={departmentId}
-                      onChange={(e) => setDepartmentId(e.target.value)}
-                    >
-                      <option value="">Choose…</option>
-                      {info.departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
+                <Field label="Department" htmlFor="j-dept" required>
+                  <Select
+                    id="j-dept"
+                    required
+                    value={departmentId}
+                    onChange={(e) => setDepartmentId(e.target.value)}
+                  >
+                    <option value="">Choose your department…</option>
+                    {info.departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
               </div>
 
               {!firebaseUser && (
                 <>
-                  <Field label="Email" htmlFor="j-email">
+                  <Field label="Email" htmlFor="j-email" required>
                     <Input
                       id="j-email"
+                      required
                       type="email"
                       leading={<Mail />}
                       value={email}
@@ -322,9 +324,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                       autoComplete="email"
                     />
                   </Field>
-                  <Field label={mode === 'new' ? 'Create a password' : 'Password'} htmlFor="j-pw">
+                  <Field
+                    label={mode === 'new' ? 'Create a password' : 'Password'}
+                    htmlFor="j-pw"
+                    required
+                  >
                     <Input
                       id="j-pw"
+                      required
                       type="password"
                       leading={<Lock />}
                       value={password}

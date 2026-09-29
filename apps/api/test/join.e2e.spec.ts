@@ -29,6 +29,18 @@ describe('College join links', () => {
     await app.close();
   });
 
+  it('cannot be switched on before the college has departments', async () => {
+    const empty = (
+      await prisma.organization.create({ data: { name: 'Empty College', slug: 'empty' } })
+    ).id;
+    const emptyAdmin = (
+      await makeUser(prisma, { memberOf: [{ orgId: empty, roles: ['ORG_ADMIN'] }] })
+    ).token;
+    const r = await orgApi(app, emptyAdmin, empty).put('/join-settings', { enabled: true });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe('NO_DEPARTMENTS');
+  });
+
   it('is closed until an admin enables it; only admins can manage it', async () => {
     const s = await orgApi(app, admin, orgId).get('/join-settings');
     expect(s.body).toMatchObject({ enabled: false, code: null });
@@ -54,6 +66,17 @@ describe('College join links', () => {
     const uid = 'uid-newstudent';
     fakeFirebaseUsers.set('ravi@anurag.edu.in', { uid, email: 'ravi@anurag.edu.in' });
     expect((await api(app).post(`/join/${code}`, { fullName: 'Ravi Teja' })).status).toBe(401);
+    // Every field is required: roll number and department too.
+    const missing = await api(app, uid).post(`/join/${code}`, { fullName: 'Ravi Teja' });
+    expect(missing.status).toBe(422);
+    expect(
+      (
+        await api(app, uid).post(`/join/${code}`, {
+          fullName: 'Ravi Teja',
+          externalId: '22eg105a01',
+        })
+      ).status,
+    ).toBe(422);
     const res = await api(app, uid).post(`/join/${code}`, {
       fullName: 'Ravi Teja',
       externalId: '22eg105a01',
@@ -71,7 +94,11 @@ describe('College join links', () => {
     });
     expect(m).toMatchObject({ externalId: '22EG105A01', departmentId: ece });
 
-    const again = await api(app, uid).post(`/join/${code}`, { fullName: 'Ravi Teja' });
+    const again = await api(app, uid).post(`/join/${code}`, {
+      fullName: 'Ravi Teja',
+      externalId: '22EG105A01',
+      departmentId: ece,
+    });
     expect(again.body.alreadyMember).toBe(true);
   });
 
@@ -90,11 +117,16 @@ describe('College join links', () => {
       (
         await api(app, learnerOther).post(`/join/${code}`, {
           fullName: 'Someone',
+          externalId: 'X1',
           departmentId: otherDept,
         })
       ).status,
     ).toBe(400);
-    const ok = await api(app, learnerOther).post(`/join/${code}`, { fullName: 'Someone' });
+    const ok = await api(app, learnerOther).post(`/join/${code}`, {
+      fullName: 'Someone',
+      externalId: '22EG105A02',
+      departmentId: ece,
+    });
     expect(ok.body.alreadyMember).toBe(false);
   });
 
@@ -139,6 +171,8 @@ describe('College join links', () => {
     });
     const refused = await api(app, 'uid-newstudent').post(`/join/${code}`, {
       fullName: 'Ravi Teja',
+      externalId: '22EG105A01',
+      departmentId: ece,
     });
     expect(refused.body.error.code).toBe('MEMBERSHIP_DISABLED');
 

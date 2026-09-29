@@ -8,8 +8,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Auth } from 'firebase-admin/auth';
+import { ACCESS_TOKEN_PREFIX, ACCESS_USER_ID, AccessService } from '../access/access.service';
+import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ALLOW_UNREGISTERED, IS_PUBLIC } from './decorators';
+import { ACCESS_CODE_ONLY, ALLOW_UNREGISTERED, IS_PUBLIC } from './decorators';
 import { FIREBASE_AUTH } from './firebase-admin.provider';
 import type { AuthedRequest } from './auth.types';
 
@@ -19,6 +21,7 @@ export class FirebaseAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly access: AccessService,
     @Inject(FIREBASE_AUTH) private readonly auth: Auth,
   ) {}
 
@@ -30,6 +33,28 @@ export class FirebaseAuthGuard implements CanActivate {
     const header = req.header('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : undefined;
     if (!token) throw new UnauthorizedException({ message: 'Missing bearer token' });
+
+    // College access code: read-only, organization-scoped; TenantGuard enforces the scope.
+    if (token.startsWith(ACCESS_TOKEN_PREFIX)) {
+      const session = await this.access.resolve(token);
+      if (!session)
+        throw new UnauthorizedException({
+          code: 'ACCESS_SESSION_EXPIRED',
+          message: 'Your access has expired. Enter the access code again.',
+        });
+      req.accessSession = session;
+      req.user = {
+        id: ACCESS_USER_ID,
+        firebaseUid: '',
+        email: '',
+        fullName: `${session.organizationName} (faculty)`,
+        isSuperAdmin: false,
+        status: 'ACTIVE',
+      } as unknown as User;
+      return true;
+    }
+    if (this.reflector.getAllAndOverride<boolean>(ACCESS_CODE_ONLY, targets))
+      throw new UnauthorizedException({ message: 'Access-code session required' });
 
     let decoded;
     try {

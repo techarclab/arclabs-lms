@@ -11,11 +11,22 @@ import {
   signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
-import { ArrowLeft, Award, Cpu, Eye, EyeOff, Lock, Mail, Radio, UserRound } from 'lucide-react';
+import {
+  ArrowLeft,
+  Award,
+  Cpu,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Mail,
+  Radio,
+  UserRound,
+} from 'lucide-react';
 import { Button, cn, Field, Input } from '@arc/ui';
 import { BrandLockup, Logo } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { firebaseAuth } from '@/lib/firebase';
 
 const FRIENDLY_ERRORS: Record<string, string> = {
@@ -64,10 +75,19 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/dashboard';
-  const { me, refresh, error: authError, firebaseUser, loading: authLoading } = useAuth();
-  const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(
-    params.get('mode') === 'signup' ? 'signup' : 'signin',
+  const {
+    me,
+    refresh,
+    error: authError,
+    firebaseUser,
+    loading: authLoading,
+    loginWithAccessCode,
+  } = useAuth();
+  const initialMode = params.get('mode');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'reset' | 'faculty'>(
+    initialMode === 'signup' || initialMode === 'faculty' ? initialMode : 'signin',
   );
+  const [accessCode, setAccessCode] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [password, setPassword] = useState('');
@@ -105,6 +125,23 @@ function LoginInner() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (mode === 'faculty') {
+      setBusy(true);
+      setError(null);
+      loginWithAccessCode(accessCode)
+        .catch((err: unknown) => {
+          setAccessCode('');
+          setError(
+            err instanceof ApiError && err.status === 422
+              ? 'Enter the full access code.'
+              : err instanceof ApiError
+                ? err.message
+                : 'Could not reach the ARC LABS server. Please try again.',
+          );
+        })
+        .finally(() => setBusy(false));
+      return;
+    }
     const auth = firebaseAuth();
     if (mode === 'reset') {
       void run(async () => {
@@ -135,6 +172,10 @@ function LoginInner() {
     signin: ['Welcome back', 'Sign in to continue to your workspace.'],
     signup: ['Create your account', 'Join ARC LABS to start learning and building.'],
     reset: ['Reset your password', 'We’ll email you a secure link to set a new password.'],
+    faculty: [
+      'College faculty sign-in',
+      'Enter the access code ARC LABS shared with your college. You’ll get a view-only look at exam results and students.',
+    ],
   } as const;
 
   return (
@@ -209,7 +250,7 @@ function LoginInner() {
             <Logo />
           </div>
 
-          {mode !== 'reset' && (
+          {mode !== 'reset' && mode !== 'faculty' && (
             <div className="mb-8 grid grid-cols-2 rounded-xl bg-ink-100 p-1">
               {(['signin', 'signup'] as const).map((m) => (
                 <button
@@ -231,10 +272,14 @@ function LoginInner() {
             </div>
           )}
 
-          {mode === 'reset' && (
+          {(mode === 'reset' || mode === 'faculty') && (
             <button
               className="mb-8 flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900"
-              onClick={() => setMode('signin')}
+              onClick={() => {
+                setMode('signin');
+                setError(null);
+                setAccessCode('');
+              }}
             >
               <ArrowLeft className="size-4" /> Back to sign in
             </button>
@@ -243,7 +288,7 @@ function LoginInner() {
           <h2 className="text-2xl font-semibold tracking-tight">{titles[mode][0]}</h2>
           <p className="mt-1.5 text-[15px] text-ink-500">{titles[mode][1]}</p>
 
-          {mode !== 'reset' && (
+          {(mode === 'signin' || mode === 'signup') && (
             <>
               <Button
                 variant="secondary"
@@ -261,7 +306,31 @@ function LoginInner() {
             </>
           )}
 
-          <form onSubmit={onSubmit} className={cn('space-y-4', mode === 'reset' && 'mt-8')}>
+          <form
+            onSubmit={onSubmit}
+            className={cn('space-y-4', (mode === 'reset' || mode === 'faculty') && 'mt-8')}
+          >
+            {mode === 'faculty' && (
+              <Field label="Access code" htmlFor="access-code">
+                {/* Masked on purpose: the code is typed but never shown on screen. */}
+                <Input
+                  id="access-code"
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={64}
+                  leading={<KeyRound />}
+                  placeholder="••••-••••-••••-••••"
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  autoFocus
+                  className="h-11 tracking-widest"
+                />
+              </Field>
+            )}
             {mode === 'signup' && (
               <Field label="Full name" htmlFor="name">
                 <Input
@@ -275,20 +344,22 @@ function LoginInner() {
                 />
               </Field>
             )}
-            <Field label="Email" htmlFor="email">
-              <Input
-                id="email"
-                type="email"
-                required
-                leading={<Mail />}
-                placeholder="you@college.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                className="h-11"
-              />
-            </Field>
-            {mode !== 'reset' && (
+            {mode !== 'faculty' && (
+              <Field label="Email" htmlFor="email">
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  leading={<Mail />}
+                  placeholder="you@college.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className="h-11"
+                />
+              </Field>
+            )}
+            {(mode === 'signin' || mode === 'signup') && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label htmlFor="password" className="text-sm font-medium text-ink-800">
@@ -344,7 +415,7 @@ function LoginInner() {
             )}
 
             <Button type="submit" size="lg" className="w-full" loading={busy}>
-              {mode === 'signin'
+              {mode === 'signin' || mode === 'faculty'
                 ? 'Sign in'
                 : mode === 'signup'
                   ? 'Create account'
@@ -352,7 +423,7 @@ function LoginInner() {
             </Button>
           </form>
 
-          {mode !== 'reset' && (
+          {(mode === 'signin' || mode === 'signup') && (
             <Link
               href="/join"
               className="mt-6 flex items-center justify-between rounded-xl border border-ink-200 px-4 py-3 text-sm transition hover:border-brand-300 hover:bg-brand-50/50"
@@ -367,6 +438,24 @@ function LoginInner() {
               </span>
               <span className="text-brand-600">→</span>
             </Link>
+          )}
+          {(mode === 'signin' || mode === 'signup') && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('faculty');
+                setError(null);
+              }}
+              className="mt-3 flex w-full items-center justify-between rounded-xl border border-ink-200 px-4 py-3 text-left text-sm transition hover:border-brand-300 hover:bg-brand-50/50"
+            >
+              <span>
+                <span className="block font-medium text-ink-900">College faculty?</span>
+                <span className="block text-[13px] text-ink-500">
+                  Sign in with your college’s access code
+                </span>
+              </span>
+              <KeyRound className="size-4 text-brand-600" />
+            </button>
           )}
 
           <p className="mt-8 text-center text-xs leading-relaxed text-ink-400">

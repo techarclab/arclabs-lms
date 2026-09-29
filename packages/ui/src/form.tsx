@@ -76,6 +76,7 @@ export function Field({
   children,
   className,
   optional,
+  required,
 }: {
   label: string;
   htmlFor?: string;
@@ -84,11 +85,18 @@ export function Field({
   children: ReactNode;
   className?: string;
   optional?: boolean;
+  /** Shows a red asterisk after the label. */
+  required?: boolean;
 }) {
   return (
     <div className={cn('space-y-1.5', className)}>
       <Label htmlFor={htmlFor}>
         {label}
+        {required && (
+          <span className="ml-0.5 text-rose-500" aria-hidden>
+            *
+          </span>
+        )}
         {optional && <span className="ml-1.5 font-normal text-ink-400">Optional</span>}
       </Label>
       {children}
