@@ -142,7 +142,7 @@ export class ExamsService {
     if (!exam.timeLimitMinutes) issues.push('Set the exam duration');
     if (!exam.startsAt || !exam.endsAt) issues.push('Set when the exam window opens and closes');
     else {
-      if (exam.endsAt <= exam.startsAt) issues.push('The window must close after it opens');
+      if (exam.endsAt <= exam.startsAt) issues.push('The window must close after it opens (check AM / PM)');
       if (exam.endsAt <= new Date()) issues.push('The closing time is in the past');
       if (
         exam.timeLimitMinutes &&

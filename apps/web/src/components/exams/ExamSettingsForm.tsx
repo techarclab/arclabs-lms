@@ -74,6 +74,8 @@ export function ExamSettingsForm({
   useEffect(() => setS(fromExam(exam)), [exam]);
   const set = <K extends keyof typeof s>(k: K, v: (typeof s)[K]) => setS((p) => ({ ...p, [k]: v }));
 
+  const scheduleError = windowProblem(s.startsAt, s.endsAt, Number(s.durationMinutes), locked);
+
   async function save() {
     const body: Record<string, unknown> = locked
       ? {
@@ -151,6 +153,7 @@ export function ExamSettingsForm({
               label="Window closes"
               htmlFor="s-end"
               hint={locked ? 'Can only be extended' : undefined}
+              error={scheduleError ?? undefined}
             >
               <Input
                 id="s-end"
@@ -371,4 +374,28 @@ function fromExam(e: ExamDetail) {
     maxViolations: String(e.maxViolations === 1 ? 3 : e.maxViolations),
     requireCamera: e.requireCamera,
   };
+}
+
+const fmtTime = (d: Date) =>
+  d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+/** Explains what's wrong with the exam window in plain words, while the admin is typing. */
+function windowProblem(start: string, end: string, durationMin: number, locked: boolean) {
+  if (!end) return null;
+  const e = new Date(end);
+  if (Number.isNaN(e.getTime())) return null;
+  const st = start ? new Date(start) : null;
+  if (st && e <= st) {
+    // Common slip: 12:xx AM (just after midnight) instead of 12:xx PM (afternoon).
+    const pm = new Date(e.getTime() + 12 * 3600_000);
+    const hint =
+      e.getHours() < 12 && pm > st && pm.toDateString() === e.toDateString()
+        ? ` Did you mean ${fmtTime(pm)}? Change AM to PM.`
+        : '';
+    return `Closes (${fmtTime(e)}) before it opens (${fmtTime(st)}).${hint}`;
+  }
+  if (!locked && e.getTime() <= Date.now()) return `This time (${fmtTime(e)}) has already passed.`;
+  if (st && durationMin > 0 && e.getTime() - st.getTime() < durationMin * 60_000)
+    return `The window is shorter than the ${durationMin}-minute exam.`;
+  return null;
 }
