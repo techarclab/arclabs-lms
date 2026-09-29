@@ -47,11 +47,7 @@ d('ArcRunner (live runner)', () => {
       ['temp=31\ntrace=D8', 'temp=20\n@1000 temp=40', 'dht=error'],
       2000,
     );
-    expect(out.map((o) => o.stdout)).toEqual([
-      '31\n[9 ms] D8 HIGH\n31\n',
-      '20\n40\n',
-      'error\nerror\n',
-    ]);
+    expect(out.map((o) => o.stdout)).toEqual(['31\nD8 HIGH\n31\n', '20\n40\n', 'error\nerror\n']);
   });
 
   it('rejects a wrong token', async () => {

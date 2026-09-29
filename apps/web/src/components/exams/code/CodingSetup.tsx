@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Cpu, Eye, EyeOff, FlaskConical, Plus, Trash2, Wand2 } from 'lucide-react';
-import type { CodeLanguageName, CodeRunnerStatus, CodingConfig, RunCodeResponse } from '@arc/types';
+import type {
+  CodeLanguageName,
+  CodeRunnerStatus,
+  CodingConfig,
+  OutputCompare,
+  RunCodeResponse,
+} from '@arc/types';
 import { Button, cn, Field, Input } from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
 import { CodeEditor, LANGUAGE_LABEL } from './CodeEditor';
@@ -14,6 +20,7 @@ export interface CodingDraft {
   tests: { id?: string; input: string; output: string; sample: boolean }[];
   timeLimitMs: string;
   solution: { language: CodeLanguageName; code: string };
+  compare: OutputCompare;
 }
 
 export const C_STARTER = '#include <stdio.h>\n\nint main(void) {\n    \n    return 0;\n}\n';
@@ -35,6 +42,7 @@ export function blankCoding(): CodingDraft {
     ],
     timeLimitMs: '2000',
     solution: { language: 'c', code: '' },
+    compare: 'flexible',
   };
 }
 
@@ -49,6 +57,7 @@ export function codingFromQuestion(c: CodingConfig): CodingDraft {
     tests: c.testCases.map((t) => ({ ...t })),
     timeLimitMs: String(c.timeLimitMs ?? 2000),
     solution: c.solution ?? { language: c.languages[0] ?? 'c', code: '' },
+    compare: c.compare ?? 'exact',
   };
 }
 
@@ -58,6 +67,7 @@ export function codingToInput(d: CodingDraft) {
     starter: Object.fromEntries(d.languages.map((l) => [l, d.starter[l] ?? ''])),
     testCases: d.tests,
     timeLimitMs: d.timeLimitMs,
+    compare: d.compare,
     solution: d.solution.code.trim() ? d.solution : null,
   };
 }
@@ -93,7 +103,11 @@ export function CodingSetup({
           '/questions/check-code',
           'POST',
           {
-            coding: { testCases: value.tests, timeLimitMs: value.timeLimitMs },
+            coding: {
+              testCases: value.tests,
+              timeLimitMs: value.timeLimitMs,
+              compare: value.compare,
+            },
             language: value.solution.language,
             code: value.solution.code,
           },
@@ -169,6 +183,17 @@ export function CodingSetup({
             })}
           </div>
         </div>
+        <Field label="Output check" htmlFor="q-cmp" className="w-72">
+          <select
+            id="q-cmp"
+            value={value.compare}
+            onChange={(e) => set({ compare: e.target.value as OutputCompare })}
+            className="h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm"
+          >
+            <option value="flexible">Flexible — ignore spaces, case, 31 = 31.00</option>
+            <option value="exact">Exact — character for character</option>
+          </select>
+        </Field>
         <Field label="Time limit per test (ms)" htmlFor="q-tl" className="w-48">
           <Input
             id="q-tl"
@@ -262,9 +287,13 @@ export function CodingSetup({
                     rows={value.languages.includes('arduino') ? 4 : 3}
                     spellCheck={false}
                     placeholder={
-                      k === 'input' && value.languages.includes('arduino')
-                        ? 'temp=31\nhumidity=70\ntime=5000'
-                        : undefined
+                      k === 'input'
+                        ? value.languages.includes('arduino')
+                          ? 'temp=31\nhumidity=70\ntime=5000'
+                          : undefined
+                        : value.solution.code.trim()
+                          ? 'Leave empty — filled from the reference solution when you save'
+                          : undefined
                     }
                     value={t[k]}
                     onChange={(e) =>
@@ -382,7 +411,11 @@ function ArduinoHelp() {
     ['serial=5\\n', 'Text typed into the Serial Monitor'],
     ['@2000 D2=LOW', 'Change something at 2000 ms (button press, new temperature…)'],
     ['time=5000', 'How long the sketch runs (ms, default 3000) — delay() is simulated'],
-    ['trace=D8', 'Also check pin D8 (LED/relay/buzzer/servo) — shown as “[1000 ms] D8 HIGH”'],
+    ['trace=D8', 'Also check pin D8 (LED/relay/buzzer/servo) — shown as “D8 HIGH” / “D8 LOW”'],
+    [
+      'trace_time=on',
+      'Add the time to pin lines (“[2004 ms] D8 HIGH”) — only for timing questions',
+    ],
     ['dht_pin=2', 'Only when students read the DHT by hand (bit-banging) on pin 2'],
   ];
   return (
@@ -404,8 +437,8 @@ function ArduinoHelp() {
         ))}
       </dl>
       <p className="mt-2 text-ink-500">
-        Tip: write the reference solution, press “Check test cases”, then “Use solution output as
-        expected”.
+        Easiest: leave “Expected output” empty and paste a reference solution — expected outputs are
+        filled in from it automatically when you save.
       </p>
     </div>
   );

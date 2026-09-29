@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
+import type { CodingConfig, Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
 import {
-  normalizeOutput,
+  outputsMatch,
   type CheckCodingInput,
   type ListQuestionsQuery,
   type QuestionInputParsed,
@@ -10,6 +10,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 
 const optionId = () => randomBytes(4).toString('hex');
@@ -108,6 +109,7 @@ export function toColumns(
             sample: t.sample,
           })),
           timeLimitMs: c.timeLimitMs,
+          compare: c.compare,
           solution: c.solution ?? null,
         },
       };
@@ -121,7 +123,15 @@ export class QuestionsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly runner: CodeRunner,
+    private readonly expected: ExpectedOutputs,
   ) {}
+
+  /** Coding questions: fill empty expected outputs from the reference solution right away. */
+  private async fillExpected<T extends { id: string; coding: unknown }>(q: T): Promise<T> {
+    const c = q.coding as CodingConfig | null;
+    if (!c || !this.expected.needsFill(c)) return q;
+    return { ...q, coding: await this.expected.ensure(q.id, c) };
+  }
 
   /** Runs a reference solution against test cases so authors can verify expected outputs. */
   async checkCoding(input: CheckCodingInput): Promise<RunCodeResponse> {
@@ -139,7 +149,9 @@ export class QuestionsService {
             input: t.input,
             expected: t.output,
             output: r.stdout,
-            passed: r.status === 'OK' && normalizeOutput(r.stdout) === normalizeOutput(t.output),
+            passed:
+              r.status === 'OK' &&
+              outputsMatch(r.stdout, t.output, input.coding.compare ?? 'exact'),
             status: r.status,
             error: r.error,
             timeMs: r.timeMs,
@@ -194,10 +206,12 @@ export class QuestionsService {
   }
 
   async create(actor: User, orgId: string, input: QuestionInputParsed): Promise<QuestionItem> {
-    const q = await this.prisma.question.create({
-      data: { organizationId: orgId, createdById: actor.id, ...toColumns(input) },
-      include: questionInclude,
-    });
+    const q = await this.prisma.question
+      .create({
+        data: { organizationId: orgId, createdById: actor.id, ...toColumns(input) },
+        include: questionInclude,
+      })
+      .then((row) => this.fillExpected(row));
     await this.audit.log({
       actorId: actor.id,
       organizationId: orgId,
@@ -222,11 +236,13 @@ export class QuestionsService {
           'This question is used in a published exam and can’t be changed. Duplicate it instead.',
       });
     }
-    const q = await this.prisma.question.update({
-      where: { id },
-      data: toColumns(input, existing.options as unknown as { id: string; text: string }[]),
-      include: questionInclude,
-    });
+    const q = await this.prisma.question
+      .update({
+        where: { id },
+        data: toColumns(input, existing.options as unknown as { id: string; text: string }[]),
+        include: questionInclude,
+      })
+      .then((row) => this.fillExpected(row));
     await this.audit.log({
       actorId: actor.id,
       organizationId: orgId,

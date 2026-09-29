@@ -7,7 +7,8 @@
 //   distance=25        HC-SR04 distance (cm)         pulse=1500      any pulseIn() result (µs)
 //   serial=hello\n     text typed into the Serial Monitor
 //   time=5000          how long to run (ms, default 3000)
-//   trace=pins         also print output-pin changes, PWM, tone and servo moves
+//   trace=D8           also print changes on pin 8 (D8 HIGH / D8 LOW); trace=pins for every pin
+//   trace_time=on      put the time on trace lines: [2004 ms] D8 HIGH (for timing questions)
 //   dht=error          DHT sensor not responding     dht_pin=2 / dht_type=22  (for bit-banging)
 //   @1500 D2=LOW       change something at 1500 ms   (several: @1500 temp=40, humidity=20)
 //
@@ -37,6 +38,7 @@ struct Event {
 uint64_t now_us = 0;
 uint64_t end_us = 3000000;
 bool trace_on = false;
+bool trace_time = false;  // trace_time=on adds "[1000 ms]" to trace lines
 bool finishing = false;
 int last_char = '\n';
 unsigned long baud_us_per_char = 1042;  // 9600 baud
@@ -211,6 +213,11 @@ void applySetting(const std::string &rawKey, const std::string &value, bool time
     serial_in += unescape(value);
     return;
   }
+  if (key == "trace_time") {
+    std::string v = lower(value);
+    trace_time = v == "on" || v == "yes" || v == "true" || v == "1";
+    return;
+  }
   if (key == "trace") {
     // trace=pins (everything) · trace=D7 / trace=D7+D8 (only those pins) · trace=off
     std::string v = lower(value);
@@ -337,7 +344,7 @@ bool tracePin(int pin) { return watching(pin); }
 void traceLine(const char *fmt, ...) {
   if (!trace_on || finishing) return;
   if (last_char != '\n') emit('\n');
-  printf("[%lu ms] ", (unsigned long)(now_us / 1000));
+  if (trace_time) printf("[%lu ms] ", (unsigned long)(now_us / 1000));
   va_list ap;
   va_start(ap, fmt);
   vprintf(fmt, ap);

@@ -38,6 +38,7 @@ export const codingConfigSchema = z
       .min(1, 'Add at least one test case')
       .max(30, 'Up to 30 test cases'),
     timeLimitMs: z.coerce.number().int().min(500).max(10_000).default(2000),
+    compare: z.enum(['exact', 'flexible']).default('flexible'),
     solution: z
       .object({ language: codeLanguageSchema, code: z.string().max(MAX_CODE) })
       .optional()
@@ -49,6 +50,16 @@ export const codingConfigSchema = z
         code: 'custom',
         path: ['testCases'],
         message: 'Mark at least one test case as a sample so students can check their code',
+      });
+    }
+    if (!c.solution?.code.trim()) {
+      c.testCases.forEach((t, i) => {
+        if (!t.output.trim())
+          ctx.addIssue({
+            code: 'custom',
+            path: ['testCases', i, 'output'],
+            message: `Test ${i + 1} has no expected output — fill it in, or add a reference solution and it will be filled automatically`,
+          });
       });
     }
     if (c.testCases.every((t) => t.sample)) {
@@ -76,6 +87,44 @@ export function normalizeOutput(s: string) {
     .map((l) => l.replace(/[ \t]+$/, ''))
     .join('\n')
     .replace(/\n+$/, '');
+}
+
+const NUM = /[-+]?\d+(?:\.\d+)?/g;
+
+/** One line reduced to comparable parts: lower-case text with single spaces, and its numbers. */
+function flexLine(line: string) {
+  const text = line.trim().replace(/\s+/g, ' ').toLowerCase();
+  const nums = (text.match(NUM) ?? []).map(Number);
+  return { shape: text.replace(NUM, '#'), nums };
+}
+
+/**
+ * Does the program's output match the expected output?
+ * - exact: line by line, ignoring trailing spaces and trailing blank lines
+ * - flexible: also ignores upper/lower case, extra spaces, blank lines, and how numbers are
+ *   written (31 = 31.0 = 31.00, but 31 ≠ 32)
+ */
+export function outputsMatch(
+  actual: string,
+  expected: string,
+  mode: 'exact' | 'flexible' = 'exact',
+) {
+  if (mode === 'exact') return normalizeOutput(actual) === normalizeOutput(expected);
+  const lines = (s: string) =>
+    s
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .filter((l) => l.trim() !== '')
+      .map(flexLine);
+  const a = lines(actual);
+  const e = lines(expected);
+  if (a.length !== e.length) return false;
+  return a.every(
+    (l, i) =>
+      l.shape === e[i]!.shape &&
+      l.nums.length === e[i]!.nums.length &&
+      l.nums.every((n, j) => Math.abs(n - e[i]!.nums[j]!) < 1e-6),
+  );
 }
 export const resultVisibilitySchema = z.enum([
   'SCORE_NOW_ANSWERS_AFTER_CLOSE',
@@ -262,6 +311,7 @@ export const checkCodingSchema = z.object({
   coding: z.object({
     testCases: z.array(testCaseSchema).min(1).max(30),
     timeLimitMs: z.coerce.number().int().min(500).max(10_000).default(2000),
+    compare: z.enum(['exact', 'flexible']).default('flexible'),
   }),
   language: codeLanguageSchema,
   code: z.string().min(1).max(MAX_CODE),

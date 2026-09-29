@@ -26,7 +26,11 @@ export interface CodingConfig {
   testCases: CodingTestCase[];
   timeLimitMs: number;
   solution?: { language: CodeLanguageName; code: string } | null;
+  /** exact (default for old questions) or flexible: ignore spacing / case / blank lines, 31 = 31.00. */
+  compare?: OutputCompare;
 }
+
+export type OutputCompare = 'exact' | 'flexible';
 
 /** What a student sees of a coding question: sample tests only. */
 export interface DeliveredCoding {

@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ExamState, SubmitReasonName, CodeLanguageName } from '@arc/types';
+import type { CodeLanguageName, CodingConfig, ExamState, SubmitReasonName } from '@arc/types';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeOutput } from '@arc/validation';
+import { outputsMatch } from '@arc/validation';
+import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import { gradeAttempt, type CodeOutcome, type GradableQuestion } from './grading';
 
@@ -13,6 +14,7 @@ type StoredCoding = {
   languages: string[];
   testCases: { input: string; output: string }[];
   timeLimitMs?: number;
+  compare?: 'exact' | 'flexible';
 };
 
 /** Seconds of network grace after the deadline before an answer save is refused. */
@@ -57,6 +59,7 @@ export class ExamEngine {
   constructor(
     private readonly prisma: PrismaService,
     private readonly runner: CodeRunner,
+    private readonly expected: ExpectedOutputs,
   ) {}
 
   /**
@@ -73,11 +76,21 @@ export class ExamEngine {
     const started = Date.now();
     for (const q of coding) {
       const a = answers[q.id] as { language?: string; code?: string } | undefined;
-      const cfg = q.coding as StoredCoding | null;
+      let cfg = q.coding as StoredCoding | null;
       if (!a?.code?.trim() || !cfg) continue; // unanswered: graded as 0 without running
       if (!this.runner.configured || Date.now() - started > CODE_EVAL_BUDGET_MS) {
         out[q.id] = 'pending';
         continue;
+      }
+      if (this.expected.needsFill(cfg as unknown as CodingConfig)) {
+        cfg = (await this.expected.ensure(
+          q.id,
+          cfg as unknown as CodingConfig,
+        )) as unknown as StoredCoding;
+        if (this.expected.needsFill(cfg as unknown as CodingConfig)) {
+          out[q.id] = 'pending'; // can't grade against a blank expected output yet
+          continue;
+        }
       }
       if (!cfg.languages.includes(a.language ?? '')) {
         out[q.id] = { passed: 0, total: cfg.testCases.length };
@@ -99,10 +112,10 @@ export class ExamEngine {
           out[q.id] = 'pending';
           continue;
         }
+        const tests = cfg.testCases;
         const passed = runs.filter(
           (r, i) =>
-            r.status === 'OK' &&
-            normalizeOutput(r.stdout) === normalizeOutput(cfg.testCases[i]!.output),
+            r.status === 'OK' && outputsMatch(r.stdout, tests[i]!.output, cfg.compare ?? 'exact'),
         ).length;
         out[q.id] = { passed, total: cfg.testCases.length };
       } catch (e) {

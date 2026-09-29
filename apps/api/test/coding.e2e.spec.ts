@@ -93,6 +93,29 @@ describe('Coding questions', () => {
     expect((await me(l1).get('/code-runner/status')).body.configured).toBe(true);
   });
 
+  it('needs expected outputs, or fills them from the reference solution', async () => {
+    const blank = coding.testCases.map((t) => ({ ...t, output: '' }));
+    const noKey = await staff().post('/questions', {
+      type: 'CODING',
+      prompt: 'Reverse (no key)',
+      coding: { ...coding, testCases: blank },
+    });
+    expect(noKey.status).toBe(422);
+    const filled = await staff().post('/questions', {
+      type: 'CODING',
+      prompt: 'Reverse (auto key)',
+      coding: { ...coding, testCases: blank, solution: { language: 'python', code: 'REVERSE' } },
+    });
+    expect(filled.status).toBe(201);
+    expect(filled.body.coding.testCases.map((t: { output: string }) => t.output)).toEqual([
+      'cba\n',
+      'olleh\n',
+      'ba\n',
+      'aba\n',
+    ]);
+    expect(filled.body.coding.compare).toBe('flexible');
+  });
+
   it('delivers only sample tests and runs them during the exam', async () => {
     examId = (await staff().post('/exams', { title: 'Coding round', durationMinutes: 30 })).body.id;
     await staff().put(`/exams/${examId}/questions`, { questionIds: [questionId] });

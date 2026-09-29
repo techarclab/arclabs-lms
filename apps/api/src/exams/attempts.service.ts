@@ -21,11 +21,12 @@ import type {
   CodingConfig,
 } from '@arc/types';
 import {
-  normalizeOutput,
+  outputsMatch,
   type ProctorEventInput,
   type RunCodeInput,
   type SaveAnswerInput,
 } from '@arc/validation';
+import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,6 +73,7 @@ export class AttemptsService {
     private readonly prisma: PrismaService,
     private readonly engine: ExamEngine,
     private readonly runner: CodeRunner,
+    private readonly expected: ExpectedOutputs,
   ) {}
 
   /** Last "Run" per attempt — a light brake on hammering the code runner. */
@@ -285,6 +287,12 @@ export class AttemptsService {
     const qs = await this.prisma.question.findMany({
       where: { id: { in: order.map((o) => o.questionId) } },
     });
+    // Sample outputs left blank by the author are filled from the reference solution first.
+    for (const q of qs) {
+      const c = q.coding as unknown as CodingConfig | null;
+      if (q.type === 'CODING' && c && this.expected.needsFill(c))
+        q.coding = (await this.expected.ensure(q.id, c)) as unknown as typeof q.coding;
+    }
     const byId = new Map(qs.map((q) => [q.id, q]));
     const questions: DeliveredQuestion[] = order.map(({ questionId, optionOrder }) => {
       const q = byId.get(questionId)!;
@@ -393,7 +401,8 @@ export class AttemptsService {
         message: 'Question is not part of this exam',
       });
     const q = await this.prisma.question.findUniqueOrThrow({ where: { id: input.questionId } });
-    const c = q.coding as unknown as CodingConfig | null;
+    let c = q.coding as unknown as CodingConfig | null;
+    if (c && this.expected.needsFill(c)) c = await this.expected.ensure(q.id, c);
     if (q.type !== 'CODING' || !c)
       throw new UnprocessableEntityException({
         code: 'NOT_CODING',
@@ -442,7 +451,7 @@ export class AttemptsService {
           expected: samples[i]!.output,
           output: r.stdout,
           passed:
-            r.status === 'OK' && normalizeOutput(r.stdout) === normalizeOutput(samples[i]!.output),
+            r.status === 'OK' && outputsMatch(r.stdout, samples[i]!.output, c.compare ?? 'exact'),
           status: r.status,
           error: r.error,
           timeMs: r.timeMs,

@@ -12,6 +12,7 @@ import {
   QuestionsController,
 } from './exams.controller';
 import { ExamsService } from './exams.service';
+import { ExpectedOutputs } from './expected-outputs';
 import { QuestionsService } from './questions.service';
 
 @Module({
@@ -19,6 +20,7 @@ import { QuestionsService } from './questions.service';
   providers: [
     { provide: CODE_RUNNER_IMPL, inject: [ENV], useFactory: (env: Env) => codeRunnerFactory(env) },
     CodeRunner,
+    ExpectedOutputs,
     ExamEngine,
     QuestionsService,
     ExamsService,
