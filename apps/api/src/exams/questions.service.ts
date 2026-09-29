@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { CodingConfig, Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
+import type { AiReview, CodingConfig, Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
 import {
   outputsMatch,
+  type AiCheckInput,
   type CheckCodingInput,
   type ListQuestionsQuery,
   type QuestionInputParsed,
@@ -10,6 +11,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiGrader, AiGraderUnavailableError } from './ai-grader';
 import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 
@@ -102,7 +104,7 @@ export function toColumns(
         coding: {
           languages: c.languages,
           starter,
-          testCases: c.testCases.map((t) => ({
+          testCases: (c.mode === 'ai' ? [] : c.testCases).map((t) => ({
             id: t.id || optionId(),
             input: t.input,
             output: t.output,
@@ -110,6 +112,9 @@ export function toColumns(
           })),
           timeLimitMs: c.timeLimitMs,
           compare: c.compare,
+          mode: c.mode,
+          rubric: c.mode === 'ai' ? c.rubric : [],
+          compilePenaltyPct: c.compilePenaltyPct,
           solution: c.solution ?? null,
         },
       };
@@ -124,6 +129,7 @@ export class QuestionsService {
     private readonly audit: AuditService,
     private readonly runner: CodeRunner,
     private readonly expected: ExpectedOutputs,
+    private readonly ai: AiGrader,
   ) {}
 
   /** Coding questions: fill empty expected outputs from the reference solution right away. */
@@ -131,6 +137,44 @@ export class QuestionsService {
     const c = q.coding as CodingConfig | null;
     if (!c || !this.expected.needsFill(c)) return q;
     return { ...q, coding: await this.expected.ensure(q.id, c) };
+  }
+
+  /** Compiles and AI-marks a piece of code against a rubric (authors trying out a question). */
+  async aiCheck(input: AiCheckInput): Promise<AiReview> {
+    if (!this.ai.configured)
+      throw new ConflictException({
+        code: 'AI_NOT_CONFIGURED',
+        message: 'AI marking isn’t set up yet (AI_GRADER_API_KEY on the API).',
+      });
+    let compiled = true;
+    let compileError: string | null = null;
+    if (this.runner.configured) {
+      try {
+        const c = await this.runner.compile(input.language, input.code);
+        compiled = c.ok;
+        compileError = c.error;
+      } catch (e) {
+        if (e instanceof RunnerUnavailableError)
+          throw new ConflictException({ code: 'RUNNER_UNAVAILABLE', message: e.message });
+        throw e;
+      }
+    }
+    try {
+      return await this.ai.grade({
+        question: input.prompt,
+        language: input.language,
+        rubric: input.rubric,
+        solution: input.solution ?? null,
+        code: input.code,
+        compiled,
+        compileError,
+        penaltyPct: input.compilePenaltyPct,
+      });
+    } catch (e) {
+      if (e instanceof AiGraderUnavailableError)
+        throw new ConflictException({ code: 'AI_UNAVAILABLE', message: e.message });
+      throw e;
+    }
   }
 
   /** Runs a reference solution against test cases so authors can verify expected outputs. */

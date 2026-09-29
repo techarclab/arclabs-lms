@@ -3,6 +3,7 @@ ARC LABS code runner — compiles and runs students' C and Python programs for e
 
   GET  /health  -> {"ok": true, "sandbox": "seccomp+landlock", ...}   (no auth; wakes the Space)
   POST /run     -> {"results": [{"status", "stdout", "error", "timeMs"}, ...]}
+                   ("compileOnly": true only compiles / syntax-checks: status OK or COMPILE_ERROR)
        headers: Authorization: Bearer <RUNNER_TOKEN>
        body:    {"language": "c" | "python", "code": "...", "inputs": ["...", ...], "timeLimitMs": 2000}
 
@@ -202,7 +203,7 @@ def arduino_source(code: str) -> str:
     )
 
 
-def run_batch(language, code, inputs, time_limit_ms):
+def run_batch(language, code, inputs, time_limit_ms, compile_only=False):
     limit_s = max(0.5, min(10.0, time_limit_ms / 1000))
     cpu_s = int(limit_s) + 1
     work = tempfile.mkdtemp(prefix="run-")
@@ -273,6 +274,8 @@ def run_batch(language, code, inputs, time_limit_ms):
                 res = jailed("run", cpu_s, mem, 1024, argv, d, inp, wall)
             return classify(*res, limit_s)
 
+        if compile_only:  # "does it compile?" — nothing is run
+            return [{"status": "OK", "stdout": "", "error": None, "timeMs": None}] * len(inputs)
         futures = [pool.submit(one, i, s) for i, s in enumerate(inputs)]
         return [f.result() for f in futures]
     finally:
@@ -362,7 +365,7 @@ class Handler(BaseHTTPRequestHandler):
             busy += 1
         started = time.time()
         try:
-            results = run_batch(language, code, inputs, tl)
+            results = run_batch(language, code, inputs, tl, compile_only=bool(body.get("compileOnly")))
             self.send(200, {"results": results, "ms": round((time.time() - started) * 1000)})
         except Exception as e:  # never leak internals
             self.send(500, {"error": f"runner error: {type(e).__name__}"})

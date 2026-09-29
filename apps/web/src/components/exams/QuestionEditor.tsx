@@ -319,7 +319,9 @@ export function QuestionEditor({
             </div>
           )}
 
-          {type === 'CODING' && <CodingSetup value={coding} onChange={setCoding} orgId={orgId} />}
+          {type === 'CODING' && (
+            <CodingSetup value={coding} onChange={setCoding} orgId={orgId} prompt={prompt} />
+          )}
 
           <div className="grid gap-4 sm:grid-cols-4">
             <Field label="Topic" htmlFor="q-topic" className="sm:col-span-2">

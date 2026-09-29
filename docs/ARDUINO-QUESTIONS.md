@@ -1,5 +1,12 @@
 # Arduino (embedded C) coding questions
 
+There are two ways to mark an Arduino question:
+
+- **AI marking (no test cases)** — students write the sketch any way they like; it is compiled on
+  submit and marked against your marking scheme with partial marks. Set it up in the question
+  editor ("How is it marked?") — see `docs/DEPLOYMENT.md` §10. Nothing below is needed for it.
+- **Test cases on the virtual board** — described below.
+
 Students write a normal Arduino sketch in the exam. It is compiled with our own copies of the
 Arduino libraries and runs on a **virtual board**. There's no real hardware: each test case describes
 what the sensors read, and the sketch's output is checked.

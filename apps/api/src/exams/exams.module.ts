@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
+import { AiGrader } from './ai-grader';
 import { AttemptsService } from './attempts.service';
 import { CODE_RUNNER_IMPL, CodeRunner, codeRunnerFactory } from './code-runner';
 import { ExamAnalyticsService } from './exam-analytics.service';
@@ -20,6 +21,7 @@ import { QuestionsService } from './questions.service';
   providers: [
     { provide: CODE_RUNNER_IMPL, inject: [ENV], useFactory: (env: Env) => codeRunnerFactory(env) },
     CodeRunner,
+    AiGrader,
     ExpectedOutputs,
     ExamEngine,
     QuestionsService,

@@ -317,6 +317,10 @@ export class AttemptsService {
                     .map((t) => ({ input: t.input, output: t.output })),
                   hiddenCount: c.testCases.filter((t) => !t.sample).length,
                   timeLimitMs: c.timeLimitMs ?? 2000,
+                  mode: c.mode ?? 'tests',
+                  ...(c.mode === 'ai'
+                    ? { rubric: (c.rubric ?? []).map((r) => ({ text: r.text, points: r.points })) }
+                    : {}),
                 };
               })(),
             }
@@ -422,6 +426,23 @@ export class AttemptsService {
     this.lastRun.set(attemptId, now);
     const limit = c.timeLimitMs ?? 2000;
     try {
+      // AI-marked questions have no test cases: "Run" checks that the code compiles.
+      if (c.mode === 'ai' && input.stdin === undefined) {
+        const r = await this.runner.compile(input.language, input.code);
+        return {
+          results: [
+            {
+              input: '',
+              expected: null,
+              output: '',
+              passed: r.ok,
+              status: r.ok ? 'OK' : 'COMPILE_ERROR',
+              error: r.error,
+              timeMs: null,
+            },
+          ],
+        };
+      }
       if (input.stdin !== undefined) {
         const r = await this.runner.run(input.language, input.code, input.stdin, limit);
         return {
@@ -602,6 +623,8 @@ export class AttemptsService {
                   testsPassed: r.testsPassed ?? 0,
                   testsTotal: r.testsTotal ?? 0,
                   pending: r.pending,
+                  ai: r.ai,
+                  override: r.override,
                 }
               : {}),
           };

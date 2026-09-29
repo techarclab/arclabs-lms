@@ -1,11 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CodeLanguageName, CodingConfig, ExamState, SubmitReasonName } from '@arc/types';
+import type {
+  CodeLanguageName,
+  CodingConfig,
+  ExamState,
+  RubricItem,
+  SubmitReasonName,
+} from '@arc/types';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { outputsMatch } from '@arc/validation';
+import { AiGrader, AiGraderUnavailableError } from './ai-grader';
 import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
-import { gradeAttempt, type CodeOutcome, type GradableQuestion } from './grading';
+import {
+  gradeAttempt,
+  type CodeOutcome,
+  type GradableQuestion,
+  type QuestionResult,
+} from './grading';
 
 /** Longest we spend running coding answers while submitting (serverless requests are capped). */
 const CODE_EVAL_BUDGET_MS = 20_000;
@@ -15,6 +27,10 @@ type StoredCoding = {
   testCases: { input: string; output: string }[];
   timeLimitMs?: number;
   compare?: 'exact' | 'flexible';
+  mode?: 'tests' | 'ai';
+  rubric?: RubricItem[];
+  compilePenaltyPct?: number;
+  solution?: { language: string; code: string } | null;
 };
 
 /** Seconds of network grace after the deadline before an answer save is refused. */
@@ -52,6 +68,14 @@ export function toGradable(q: {
   };
 }
 
+/** Marks a faculty member set by hand, per question (kept through re-grades). */
+export function overridesOf(results: Record<string, QuestionResult> | null | undefined) {
+  const out: Record<string, number> = {};
+  for (const [id, r] of Object.entries(results ?? {}))
+    if (typeof r?.override === 'number') out[id] = r.override;
+  return out;
+}
+
 @Injectable()
 export class ExamEngine {
   private readonly logger = new Logger(ExamEngine.name);
@@ -60,25 +84,33 @@ export class ExamEngine {
     private readonly prisma: PrismaService,
     private readonly runner: CodeRunner,
     private readonly expected: ExpectedOutputs,
+    private readonly ai: AiGrader,
   ) {}
 
   /**
-   * Runs every coding answer against all its test cases. Questions that can't be evaluated right
-   * now (no runner, runner down, out of time) come back as 'pending' and can be re-evaluated later.
+   * Evaluates every coding answer: test-case questions run against their tests; AI-marked
+   * questions are compiled and then marked against their rubric. Answers that can't be evaluated
+   * right now (runner/AI down or busy, out of time, or deferred) come back as 'pending'.
+   * `previous` results are reused for AI marks, so re-grading never asks the AI twice.
    */
   async evaluateCoding(
-    questions: { id: string; type: string; coding: unknown }[],
+    questions: { id: string; type: string; prompt?: string; coding: unknown }[],
     answers: Record<string, unknown>,
+    previous: Record<string, QuestionResult> = {},
+    deadline = Date.now() + CODE_EVAL_BUDGET_MS,
   ): Promise<Record<string, CodeOutcome>> {
     const out: Record<string, CodeOutcome> = {};
     const coding = questions.filter((q) => q.type === 'CODING');
     if (!coding.length) return out;
-    const started = Date.now();
     for (const q of coding) {
       const a = answers[q.id] as { language?: string; code?: string } | undefined;
       let cfg = q.coding as StoredCoding | null;
       if (!a?.code?.trim() || !cfg) continue; // unanswered: graded as 0 without running
-      if (!this.runner.configured || Date.now() - started > CODE_EVAL_BUDGET_MS) {
+      if (cfg.mode === 'ai') {
+        out[q.id] = await this.aiOutcome(q, cfg, a, previous[q.id], deadline);
+        continue;
+      }
+      if (!this.runner.configured || Date.now() > deadline) {
         out[q.id] = 'pending';
         continue;
       }
@@ -105,7 +137,7 @@ export class ExamEngine {
             cfg.timeLimitMs ?? 2000,
           ),
           new Promise<null>((r) =>
-            setTimeout(() => r(null), Math.max(1000, CODE_EVAL_BUDGET_MS - (Date.now() - started))),
+            setTimeout(() => r(null), Math.max(1000, deadline - Date.now())),
           ),
         ]);
         if (!runs) {
@@ -124,6 +156,54 @@ export class ExamEngine {
       }
     }
     return out;
+  }
+
+  /** Compiles, then AI-marks one answer against its rubric. */
+  private async aiOutcome(
+    q: { id: string; prompt?: string },
+    cfg: StoredCoding,
+    a: { language?: string; code?: string },
+    prev: QuestionResult | undefined,
+    deadline: number,
+  ): Promise<CodeOutcome> {
+    if (prev?.ai) return { passed: prev.ai.awarded, total: prev.ai.max, ai: prev.ai };
+    const rubric = cfg.rubric ?? [];
+    const max = rubric.reduce((s, r) => s + r.points, 0);
+    if (!max) return { passed: 0, total: 0 };
+    const language = (
+      cfg.languages.includes(a.language ?? '') ? a.language : cfg.languages[0]
+    ) as CodeLanguageName;
+    if (!this.ai.configured || Date.now() > deadline - 3000) return 'pending';
+    let compiled = true;
+    let compileError: string | null = null;
+    if (this.runner.configured) {
+      try {
+        const c = await this.runner.compile(language, a.code!);
+        compiled = c.ok;
+        compileError = c.error;
+      } catch {
+        return 'pending'; // runner asleep/down: mark later so the compile check is fair
+      }
+    }
+    try {
+      const review = await this.ai.grade(
+        {
+          question: q.prompt ?? '',
+          language,
+          rubric,
+          solution: cfg.solution?.code ?? null,
+          code: a.code!,
+          compiled,
+          compileError,
+          penaltyPct: cfg.compilePenaltyPct ?? 25,
+        },
+        deadline,
+      );
+      return { passed: review.awarded, total: review.max, ai: review };
+    } catch (e) {
+      if (!(e instanceof AiGraderUnavailableError)) this.logger.error((e as Error).message);
+      return 'pending';
+    }
   }
 
   /** Active learners this exam is assigned to (userId → membership info). */
@@ -187,7 +267,12 @@ export class ExamEngine {
    * Grades and closes an in-progress attempt. Idempotent: returns false if it was already closed
    * (guards against double submit / races via a conditional update).
    */
-  async finalize(attemptId: string, reason: SubmitReasonName, now = new Date()): Promise<boolean> {
+  async finalize(
+    attemptId: string,
+    reason: SubmitReasonName,
+    now = new Date(),
+    opts: { deferCoding?: boolean } = {},
+  ): Promise<boolean> {
     const attempt = await this.prisma.quizAttempt.findUnique({
       where: { id: attemptId },
       include: { quiz: true },
@@ -195,7 +280,8 @@ export class ExamEngine {
     if (!attempt || attempt.status !== 'IN_PROGRESS') return false;
     const rows = await this.gradableQuestions(attempt.quizId);
     const answers = (attempt.answers ?? {}) as Record<string, unknown>;
-    const code = await this.evaluateCoding(rows, answers);
+    // Deferred (bulk closes): coding answers stay "being evaluated" until Evaluate is run.
+    const code = opts.deferCoding ? {} : await this.evaluateCoding(rows, answers);
     const g = gradeAttempt(
       rows.map(toGradable),
       answers,
@@ -229,7 +315,7 @@ export class ExamEngine {
    * Re-grades a submitted attempt (used when coding answers were waiting for the code runner).
    * Returns true if the grade changed state (e.g. no longer pending).
    */
-  async regrade(attemptId: string): Promise<boolean> {
+  async regrade(attemptId: string, deadline?: number): Promise<boolean> {
     const attempt = await this.prisma.quizAttempt.findUnique({
       where: { id: attemptId },
       include: { quiz: true },
@@ -237,12 +323,14 @@ export class ExamEngine {
     if (!attempt || attempt.status !== 'GRADED') return false;
     const rows = await this.gradableQuestions(attempt.quizId);
     const answers = (attempt.answers ?? {}) as Record<string, unknown>;
-    const code = await this.evaluateCoding(rows, answers);
+    const previous = (attempt.results ?? {}) as unknown as Record<string, QuestionResult>;
+    const code = await this.evaluateCoding(rows, answers, previous, deadline);
     const g = gradeAttempt(
       rows.map(toGradable),
       answers,
       { negativeMarking: attempt.quiz.negativeMarking, passPct: attempt.quiz.passPct },
       code,
+      overridesOf(previous),
     );
     await this.prisma.quizAttempt.update({
       where: { id: attemptId },
@@ -278,7 +366,8 @@ export class ExamEngine {
           ? 'WINDOW_CLOSED'
           : 'TIME_UP';
       try {
-        await this.finalize(a.id, reason, now);
+        // Lazy closes happen on read paths, so coding is marked later (Evaluate coding answers).
+        await this.finalize(a.id, reason, now, { deferCoding: expired.length > 1 });
       } catch (e) {
         this.logger.error(`Failed to finalize attempt ${a.id}: ${(e as Error).message}`);
       }

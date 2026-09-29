@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
+  AiReview,
   AttemptDetail,
   CandidateRow,
   ExamAnalytics,
@@ -7,7 +8,7 @@ import type {
   QuestionStat,
 } from '@arc/types';
 import { AuditService } from '../audit/audit.service';
-import type { User } from '../generated/prisma/client';
+import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamEngine, examState } from './exam-engine.service';
 import { ExamsService } from './exams.service';
@@ -292,6 +293,8 @@ export class ExamAnalyticsService {
           testsPassed?: number;
           testsTotal?: number;
           pending?: boolean;
+          ai?: AiReview;
+          override?: number;
         } = results[questionId] ?? {
           answered: answers[questionId] !== undefined,
           correct: false,
@@ -310,7 +313,13 @@ export class ExamAnalyticsService {
           marks: r.marks,
           points: q.points,
           ...(q.type === 'CODING'
-            ? { testsPassed: r.testsPassed ?? 0, testsTotal: r.testsTotal ?? 0, pending: r.pending }
+            ? {
+                testsPassed: r.testsPassed ?? 0,
+                testsTotal: r.testsTotal ?? 0,
+                pending: r.pending,
+                ai: r.ai,
+                override: r.override,
+              }
             : {}),
         };
       }),
@@ -342,6 +351,84 @@ export class ExamAnalyticsService {
     return this.attemptDetail(orgId, examId, attemptId);
   }
 
+  /**
+   * Faculty sets (or clears, with null) the marks for one question of a submitted attempt —
+   * e.g. to correct an AI mark. Kept through later re-grades.
+   */
+  async setMarks(
+    actor: User,
+    orgId: string,
+    examId: string,
+    attemptId: string,
+    input: { questionId: string; marks: number | null },
+  ) {
+    const a = await this.prisma.quizAttempt.findFirst({
+      where: { id: attemptId, quizId: examId, organizationId: orgId },
+    });
+    if (!a) throw new NotFoundException();
+    if (a.status !== 'GRADED')
+      throw new ConflictException({
+        code: 'NOT_SUBMITTED',
+        message: 'Marks can be changed after the attempt is submitted',
+      });
+    const results = { ...((a.results ?? {}) as Record<string, Record<string, unknown>>) };
+    const prev = results[input.questionId];
+    if (!prev) throw new NotFoundException({ message: 'Question is not part of this attempt' });
+    const next = { ...prev };
+    if (input.marks === null) delete next.override;
+    else next.override = input.marks;
+    results[input.questionId] = next;
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: { results: results as unknown as Prisma.InputJsonValue },
+    });
+    await this.engine.regrade(attemptId, Date.now() + 15_000);
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.marks_changed',
+      entityType: 'quiz_attempt',
+      entityId: attemptId,
+      meta: { questionId: input.questionId, marks: input.marks, before: Number(prev.marks ?? 0) },
+    });
+    return this.attemptDetail(orgId, examId, attemptId);
+  }
+
+  /**
+   * Stops a live exam now: closes the window and submits everyone still writing. Coding answers
+   * of those attempts are marked afterwards with "Evaluate coding answers".
+   */
+  async endNow(actor: User, orgId: string, examId: string) {
+    const exam = await this.prisma.quiz.findFirst({ where: { id: examId, organizationId: orgId } });
+    if (!exam) throw new NotFoundException();
+    const now = new Date();
+    if (examState(exam, now) !== 'LIVE')
+      throw new ConflictException({
+        code: 'EXAM_NOT_LIVE',
+        message: 'Only a live exam can be stopped',
+      });
+    await this.prisma.quiz.update({ where: { id: examId }, data: { endsAt: now } });
+    const open = await this.prisma.quizAttempt.findMany({
+      where: { quizId: examId, status: 'IN_PROGRESS' },
+      select: { id: true },
+    });
+    let closed = 0;
+    for (const a of open)
+      if (await this.engine.finalize(a.id, 'INSTRUCTOR', now, { deferCoding: true })) closed++;
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.stopped',
+      entityType: 'quiz',
+      entityId: examId,
+      meta: { submitted: closed },
+    });
+    const codingPending = await this.prisma.quizAttempt.count({
+      where: { quizId: examId, status: 'GRADED', codingPending: true },
+    });
+    return { submitted: closed, codingPending };
+  }
+
   /** Re-runs coding answers that were waiting for the code runner (e.g. after it's connected). */
   async evaluateCoding(actor: User, orgId: string, examId: string) {
     const exam = await this.prisma.quiz.findFirst({ where: { id: examId, organizationId: orgId } });
@@ -351,8 +438,13 @@ export class ExamAnalyticsService {
       select: { id: true },
       take: 50, // one request stays within serverless time limits; call again for more
     });
+    // Stay inside one serverless request (~30 s); the page calls again while some remain.
+    const deadline = Date.now() + 22_000;
     let evaluated = 0;
-    for (const a of pending) if (await this.engine.regrade(a.id)) evaluated++;
+    for (const a of pending) {
+      if (Date.now() > deadline - 3000) break;
+      if (await this.engine.regrade(a.id, deadline)) evaluated++;
+    }
     const remaining = await this.prisma.quizAttempt.count({
       where: { quizId: examId, status: 'GRADED', codingPending: true },
     });

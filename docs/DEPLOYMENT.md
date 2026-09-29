@@ -206,6 +206,45 @@ so the runner only rebuilds when its own files change.
 For local development only, `CODE_RUNNER=local` runs `gcc` / `python3` on your own machine — never use
 it in production (it is not a sandbox).
 
+## 10. AI marking for coding questions (no test cases)
+
+For questions like "write a DHT11 sketch", choose **How is it marked? → AI marking** in the question
+editor and write a **marking scheme** (e.g. "Reads the DHT11 on pin 2 — 4 marks", "Fan logic — 4",
+"Prints readings — 2"). On submit the code is compiled, then an AI marks it against the scheme: any
+correct approach gets marks, partial work gets partial marks, and code that doesn't compile loses the
+% you set. Faculty can open any attempt on the Results page and **Change** the marks.
+
+Free setup with **Groq** (no card):
+
+1. **console.groq.com** → sign in → **API Keys → Create API Key** → copy it.
+2. Vercel → **arclabs-api** → Environment Variables → add, then **Redeploy**:
+
+   | Name                | Value        |
+   | ------------------- | ------------ |
+   | `AI_GRADER_API_KEY` | the Groq key |
+
+   Defaults: `AI_GRADER_BASE_URL=https://api.groq.com/openai/v1`,
+   `AI_GRADER_MODEL=llama-3.3-70b-versatile`, `AI_GRADER_RPM=6` (the free plan allows ~6 answers a
+   minute, ~1,000 a day).
+
+3. Question bank → an AI-marked question → **Try the AI marking** → **Mark the reference solution**
+   should give full marks.
+
+On the free plan, 80 students take about 15 minutes to mark: answers show "being evaluated" until
+then. After the exam, open **Results** — marking runs automatically while the page is open (or click
+**Evaluate coding answers**).
+
+Any OpenAI-compatible service works instead — e.g. **OpenRouter**:
+`AI_GRADER_BASE_URL=https://openrouter.ai/api/v1`, `AI_GRADER_MODEL=<a model id, e.g. one ending in
+:free>`, `AI_GRADER_API_KEY=<OpenRouter key>` (its free plan allows only 50 requests a day unless you
+add credit).
+
+## 11. Stopping an exam early
+
+Exam page or Results page → **Stop exam** (only while it's live). The window closes at once, everyone
+still writing is submitted with their saved answers, and nobody else can start. Coding answers are
+then marked on the Results page.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

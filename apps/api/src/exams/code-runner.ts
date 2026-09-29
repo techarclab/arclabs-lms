@@ -32,6 +32,8 @@ export interface CodeRunnerImpl {
   ): Promise<RunOutput[]>;
   /** Optional: quick reachability check (also wakes a sleeping runner). */
   health?(): Promise<boolean>;
+  /** Optional: compile / syntax-check only. */
+  compile?(language: CodeLanguageName, code: string): Promise<RunOutput>;
 }
 
 export class RunnerUnavailableError extends Error {
@@ -144,11 +146,21 @@ export class ArcRunner implements CodeRunnerImpl {
     return (await this.runBatch(language, code, [stdin], timeLimitMs))[0]!;
   }
 
-  async runBatch(language: CodeLanguageName, code: string, inputs: string[], timeLimitMs: number) {
+  async compile(language: CodeLanguageName, code: string) {
+    return (await this.runBatch(language, code, [''], 2000, true))[0]!;
+  }
+
+  async runBatch(
+    language: CodeLanguageName,
+    code: string,
+    inputs: string[],
+    timeLimitMs: number,
+    compileOnly = false,
+  ) {
     const res = await fetch(`${this.base}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.token}` },
-      body: JSON.stringify({ language, code, inputs, timeLimitMs }),
+      body: JSON.stringify({ language, code, inputs, timeLimitMs, compileOnly }),
       signal: AbortSignal.timeout(25_000),
     });
     if (!res.ok) throw new Error(`Code runner responded ${res.status}`);
@@ -317,6 +329,26 @@ export class CodeRunner {
     if (!this.lastHealth || Date.now() - this.lastHealth.at > 30_000)
       this.lastHealth = { at: Date.now(), ok: await this.impl.health() };
     return { ...base, ready: this.lastHealth.ok };
+  }
+
+  /** Compiles (or syntax-checks) without running. */
+  async compile(
+    language: CodeLanguageName,
+    code: string,
+  ): Promise<{ ok: boolean; error: string | null }> {
+    if (!this.impl) throw new RunnerUnavailableError();
+    try {
+      const r = this.impl.compile
+        ? await this.impl.compile(language, code)
+        : await this.impl.run(language, code, '', 2000);
+      if (r.status === 'INTERNAL_ERROR') throw new Error(r.error ?? 'runner error');
+      return r.status === 'COMPILE_ERROR'
+        ? { ok: false, error: r.error }
+        : { ok: true, error: null };
+    } catch (e) {
+      this.logger.warn(`Compile failed: ${(e as Error).message}`);
+      throw new RunnerUnavailableError('The code runner is not responding');
+    }
   }
 
   /** Pings the runner so a sleeping free-tier host wakes up (fire-and-forget). */

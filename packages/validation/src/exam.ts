@@ -33,18 +33,39 @@ export const codingConfigSchema = z
   .object({
     languages: z.array(codeLanguageSchema).min(1, 'Pick at least one language').max(3),
     starter: z.partialRecord(codeLanguageSchema, z.string().max(MAX_CODE)).default({}),
-    testCases: z
-      .array(testCaseSchema)
-      .min(1, 'Add at least one test case')
-      .max(30, 'Up to 30 test cases'),
+    testCases: z.array(testCaseSchema).max(30, 'Up to 30 test cases').default([]),
     timeLimitMs: z.coerce.number().int().min(500).max(10_000).default(2000),
     compare: z.enum(['exact', 'flexible']).default('flexible'),
+    mode: z.enum(['tests', 'ai']).default('tests'),
+    rubric: z
+      .array(
+        z.object({
+          text: z.string().trim().min(3, 'Describe what earns these marks').max(300),
+          points: z.coerce.number().min(0.5).max(100),
+        }),
+      )
+      .max(12, 'Up to 12 rubric items')
+      .default([]),
+    compilePenaltyPct: z.coerce.number().int().min(0).max(100).default(25),
     solution: z
       .object({ language: codeLanguageSchema, code: z.string().max(MAX_CODE) })
       .optional()
       .nullable(),
   })
   .superRefine((c, ctx) => {
+    if (c.mode === 'ai') {
+      if (!c.rubric.length)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['rubric'],
+          message: 'Add the marking scheme: what the code must do and marks for each part',
+        });
+      return; // no test cases needed
+    }
+    if (!c.testCases.length) {
+      ctx.addIssue({ code: 'custom', path: ['testCases'], message: 'Add at least one test case' });
+      return;
+    }
     if (!c.testCases.some((t) => t.sample)) {
       ctx.addIssue({
         code: 'custom',
@@ -317,3 +338,26 @@ export const checkCodingSchema = z.object({
   code: z.string().min(1).max(MAX_CODE),
 });
 export type CheckCodingInput = z.infer<typeof checkCodingSchema>;
+
+/** Staff: try AI marking on some code before the exam (e.g. the reference or a weak answer). */
+export const aiCheckSchema = z.object({
+  prompt: z.string().trim().min(3).max(10_000),
+  rubric: z
+    .array(
+      z.object({ text: z.string().trim().min(3).max(300), points: z.coerce.number().min(0.5) }),
+    )
+    .min(1, 'Add the marking scheme first')
+    .max(12),
+  compilePenaltyPct: z.coerce.number().int().min(0).max(100).default(25),
+  solution: z.string().max(MAX_CODE).optional().nullable(),
+  language: codeLanguageSchema,
+  code: z.string().min(1, 'Paste some code to mark').max(MAX_CODE),
+});
+export type AiCheckInput = z.infer<typeof aiCheckSchema>;
+
+/** Faculty: set the marks for one question by hand (null clears it). */
+export const setMarksSchema = z.object({
+  questionId: z.uuid(),
+  marks: z.coerce.number().min(-100).max(1000).nullable(),
+});
+export type SetMarksInput = z.infer<typeof setMarksSchema>;

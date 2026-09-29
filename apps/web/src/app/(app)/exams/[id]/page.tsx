@@ -45,6 +45,7 @@ import {
 import { AddQuestionsDialog } from '@/components/exams/AddQuestionsDialog';
 import { AudiencePicker } from '@/components/exams/AudiencePicker';
 import { DifficultyBadge, ExamStateBadge, QuestionTypeBadge } from '@/components/exams/badges';
+import { StopExamButton } from '@/components/exams/StopExamButton';
 import { ExamSettingsForm } from '@/components/exams/ExamSettingsForm';
 import { QuestionEditor } from '@/components/exams/QuestionEditor';
 import { OrgRequired } from '@/components/shell/OrgRequired';
@@ -183,6 +184,13 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
                 <BarChart3 /> {exam.state === 'LIVE' ? 'Live monitor' : 'Results'}
               </Link>
             </Button>
+          )}
+          {exam.state === 'LIVE' && (
+            <StopExamButton
+              examId={id}
+              orgId={orgId}
+              onStopped={() => router.push(`/exams/${id}/results`)}
+            />
           )}
           {exam.state === 'DRAFT' ? (
             <Button

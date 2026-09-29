@@ -35,6 +35,7 @@ import {
 } from '@arc/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { PromptText, ReviewCard } from '@/components/exams/AnswerView';
+import { StopExamButton } from '@/components/exams/StopExamButton';
 import { DifficultyBadge, ExamStateBadge } from '@/components/exams/badges';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { hasPermission, type OrgRole } from '@arc/types';
@@ -97,6 +98,38 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
   const [search, setSearch] = useState('');
   const [openQ, setOpenQ] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  /** Marks waiting coding answers, calling again while progress is made (each call is ~20 s max). */
+  async function evaluateAll(quiet: boolean) {
+    setEvaluating(true);
+    let total = 0;
+    try {
+      for (let round = 0; round < 120; round++) {
+        const r = await mutate<{ evaluated: number; remaining: number }>(
+          `/exams/${id}/evaluate-coding`,
+          'POST',
+          {},
+          orgId,
+        );
+        total += r.evaluated;
+        void reload();
+        if (!r.remaining) break;
+        if (r.evaluated === 0) {
+          if (!quiet)
+            toast.error('Marking isn’t available right now', {
+              description:
+                'The code runner may be waking up or the AI limit was reached. Try again in a minute.',
+            });
+          return;
+        }
+      }
+      if (total || !quiet) toast.success(`Marked ${total} submission${total === 1 ? '' : 's'}`);
+    } catch (e) {
+      if (!quiet) toast.error((e as Error).message);
+    } finally {
+      setEvaluating(false);
+    }
+  }
 
   const candidates = useMemo(() => {
     let c = data?.candidates ?? [];
@@ -164,64 +197,43 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
             {formatDateTime(exam.startsAt)} → {formatDateTime(exam.endsAt)}
           </p>
         </div>
-        <Button
-          variant="secondary"
-          onClick={async () => {
-            try {
-              await downloadFile(`/exams/${id}/results.csv`, {
-                token: await getToken(),
-                orgId,
-                fallbackName: 'results.csv',
-              });
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          }}
-        >
-          <Download /> Export CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {!viewOnly && exam.state === 'LIVE' && (
+            <StopExamButton
+              examId={id}
+              orgId={orgId}
+              writing={stats.inProgress}
+              onStopped={() => void reload().then(() => void evaluateAll(true))}
+            />
+          )}
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              try {
+                await downloadFile(`/exams/${id}/results.csv`, {
+                  token: await getToken(),
+                  orgId,
+                  fallbackName: 'results.csv',
+                });
+              } catch (e) {
+                toast.error((e as Error).message);
+              }
+            }}
+          >
+            <Download /> Export CSV
+          </Button>
+        </div>
       </div>
 
       {stats.codingPending > 0 && (
         <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center">
           <p className="flex-1 text-sm text-amber-900">
             <b>{stats.codingPending}</b> submission{stats.codingPending === 1 ? ' has' : 's have'}{' '}
-            coding answers waiting for the code runner. Their scores update after evaluation.
+            coding answers waiting to be marked (code runner / AI marking). Their scores update
+            after evaluation.
           </p>
           {!viewOnly && (
-            <Button
-              size="sm"
-              loading={evaluating}
-              onClick={async () => {
-                setEvaluating(true);
-                try {
-                  const r = await mutate<{ evaluated: number; remaining: number }>(
-                    `/exams/${id}/evaluate-coding`,
-                    'POST',
-                    {},
-                    orgId,
-                  );
-                  if (r.evaluated === 0 && r.remaining > 0)
-                    toast.error('The code runner isn’t available yet', {
-                      description: 'Connect a runner (see the deployment guide), then try again.',
-                    });
-                  else
-                    toast.success(
-                      `Evaluated ${r.evaluated} submission${r.evaluated === 1 ? '' : 's'}`,
-                      {
-                        description: r.remaining
-                          ? `${r.remaining} still waiting — run again.`
-                          : undefined,
-                      },
-                    );
-                  void reload();
-                } catch (e) {
-                  toast.error((e as Error).message);
-                } finally {
-                  setEvaluating(false);
-                }
-              }}
-            >
+            <Button size="sm" loading={evaluating} onClick={() => void evaluateAll(false)}>
               Evaluate coding answers
             </Button>
           )}
@@ -599,6 +611,7 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         attemptId={detailId}
         viewOnly={viewOnly}
         onClose={() => setDetailId(null)}
+        onChanged={() => void reload()}
       />
     </>
   );
@@ -708,12 +721,14 @@ function AttemptDialog({
   attemptId,
   viewOnly = false,
   onClose,
+  onChanged,
 }: {
   examId: string;
   orgId: string;
   attemptId: string | null;
   viewOnly?: boolean;
   onClose: () => void;
+  onChanged?: () => void;
 }) {
   const mutate = useApiMutation();
   const { data, mutate: reload } = useApi<AttemptDetail>(
@@ -812,7 +827,34 @@ function AttemptDialog({
               )}
               <div className="space-y-3">
                 {data.review.map((r, i) => (
-                  <ReviewCard key={r.questionId} item={r} index={i} />
+                  <ReviewCard
+                    key={r.questionId}
+                    item={r}
+                    index={i}
+                    onSetMarks={
+                      !viewOnly && data.candidate.status === 'SUBMITTED'
+                        ? async (marks) => {
+                            try {
+                              await reload(
+                                await mutate<AttemptDetail>(
+                                  `/exams/${examId}/attempts/${attemptId}/marks`,
+                                  'PUT',
+                                  { questionId: r.questionId, marks },
+                                  orgId,
+                                ),
+                                { revalidate: false },
+                              );
+                              onChanged?.();
+                              toast.success(
+                                marks === null ? 'Automatic marks restored' : 'Marks updated',
+                              );
+                            } catch (e) {
+                              toast.error((e as Error).message);
+                            }
+                          }
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             </div>

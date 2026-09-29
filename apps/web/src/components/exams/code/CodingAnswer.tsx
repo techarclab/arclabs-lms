@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Info, Loader2, Play, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Info, Loader2, Play, RotateCcw, Sparkles, XCircle } from 'lucide-react';
 import type { CodeLanguageName, DeliveredQuestion, RunCodeResponse } from '@arc/types';
 import { Button, cn } from '@arc/ui';
 import { ApiError } from '@/lib/api';
@@ -33,6 +33,7 @@ export function CodingAnswer({
     answer ? { [answer.language]: answer.code } : {},
   );
   const [code, setCode] = useState(answer?.code ?? c.starter[language] ?? '');
+  const ai = c.mode === 'ai';
   const [tab, setTab] = useState<'samples' | 'custom'>('samples');
   const [stdin, setStdin] = useState(c.samples[0]?.input ?? '');
   const [running, setRunning] = useState(false);
@@ -113,14 +114,36 @@ export function CodingAnswer({
         </button>
       </div>
 
+      {ai && c.rubric?.length ? (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 px-4 py-3">
+          <p className="flex items-center gap-2 text-[13px] font-semibold text-violet-900">
+            <Sparkles className="size-4" /> How this answer is marked
+          </p>
+          <ul className="mt-2 space-y-1 text-[13px] text-ink-700">
+            {c.rubric.map((r, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="tabular w-16 shrink-0 font-semibold text-violet-800">
+                  {r.points} mark{r.points === 1 ? '' : 's'}
+                </span>
+                <span>{r.text}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-ink-500">
+            Write it your own way — any correct approach gets the marks. Code that doesn’t compile
+            loses some marks.
+          </p>
+        </div>
+      ) : null}
+
       <CodeEditor key={language} language={language} value={code} onChange={edit} height="380px" />
 
       <div className="rounded-2xl border border-ink-200">
         <div className="flex items-center gap-1 border-b border-ink-100 px-3 pt-2">
           {(
             [
-              ['samples', `Sample tests (${c.samples.length})`],
-              ['custom', 'Custom input'],
+              ['samples', ai ? 'Compile check' : `Sample tests (${c.samples.length})`],
+              ['custom', language === 'arduino' ? 'Try on the board' : 'Custom input'],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -141,11 +164,20 @@ export function CodingAnswer({
             onClick={run}
             disabled={running || !code.trim()}
           >
-            {running ? <Loader2 className="animate-spin" /> : <Play />} Run code
+            {running ? <Loader2 className="animate-spin" /> : <Play />}{' '}
+            {ai && tab === 'samples' ? 'Compile' : 'Run code'}
           </Button>
         </div>
         <div className="space-y-3 p-4">
-          {tab === 'samples' ? (
+          {tab === 'samples' && ai ? (
+            !result && (
+              <p className="text-[13px] text-ink-600">
+                Press <b>Compile</b> to check your code builds. There are no test cases — your code
+                is marked against the marking scheme above after you submit, so any correct approach
+                earns marks.
+              </p>
+            )
+          ) : tab === 'samples' ? (
             !result &&
             c.samples.map((s, i) => (
               <div key={i} className="grid gap-3 md:grid-cols-2">
@@ -189,15 +221,44 @@ export function CodingAnswer({
               {runError}
             </p>
           )}
-          {result && <TestResults results={result.results} />}
-          <p className="flex items-start gap-2 text-xs text-ink-500">
-            <Info className="mt-0.5 size-3.5 shrink-0" />
-            {c.hiddenCount} hidden test{c.hiddenCount === 1 ? '' : 's'} will check your code after
-            you submit. Marks are given for each test passed. Time limit {c.timeLimitMs / 1000}s per
-            test.
-          </p>
+          {result &&
+            (ai && tab === 'samples' ? (
+              <CompileResult
+                ok={result.results[0]?.status === 'OK'}
+                error={result.results[0]?.error ?? null}
+              />
+            ) : (
+              <TestResults results={result.results} />
+            ))}
+          {!ai && (
+            <p className="flex items-start gap-2 text-xs text-ink-500">
+              <Info className="mt-0.5 size-3.5 shrink-0" />
+              {c.hiddenCount} hidden test{c.hiddenCount === 1 ? '' : 's'} will check your code after
+              you submit. Marks are given for each test passed. Time limit {c.timeLimitMs / 1000}s
+              per test.
+            </p>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CompileResult({ ok, error }: { ok: boolean; error: string | null }) {
+  return ok ? (
+    <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-800">
+      <CheckCircle2 className="size-4" /> Compiled successfully.
+    </p>
+  ) : (
+    <div className="rounded-lg bg-rose-50 px-3 py-2">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-rose-800">
+        <XCircle className="size-4" /> Doesn’t compile yet
+      </p>
+      {error && (
+        <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-ink-950 px-3 py-2 font-mono text-[12px] whitespace-pre-wrap text-rose-200">
+          {error}
+        </pre>
+      )}
     </div>
   );
 }

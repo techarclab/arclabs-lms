@@ -28,6 +28,31 @@ export interface CodingConfig {
   solution?: { language: CodeLanguageName; code: string } | null;
   /** exact (default for old questions) or flexible: ignore spacing / case / blank lines, 31 = 31.00. */
   compare?: OutputCompare;
+  /** tests (default): marks per test case passed · ai: AI marks the code against the rubric. */
+  mode?: CodingMode;
+  rubric?: RubricItem[];
+  /** AI mode: % of the marks taken off when the code doesn't compile (default 25). */
+  compilePenaltyPct?: number;
+}
+
+export type CodingMode = 'tests' | 'ai';
+
+export interface RubricItem {
+  text: string;
+  points: number;
+}
+
+/** AI marking of one coding answer (stored with the attempt's results). */
+export interface AiReview {
+  compiled: boolean;
+  compileError: string | null;
+  criteria: { text: string; points: number; awarded: number; comment: string }[];
+  /** Rubric total before / after the compile penalty. */
+  awarded: number;
+  max: number;
+  penaltyPct: number;
+  feedback: string;
+  model: string;
 }
 
 export type OutputCompare = 'exact' | 'flexible';
@@ -39,6 +64,9 @@ export interface DeliveredCoding {
   samples: { input: string; output: string }[];
   hiddenCount: number;
   timeLimitMs: number;
+  mode?: CodingMode;
+  /** AI mode: the marking scheme, shown to students. */
+  rubric?: RubricItem[];
 }
 
 export type RunStatus =
@@ -64,6 +92,8 @@ export interface CodeRunnerStatus {
   languages: CodeLanguageName[];
   /** Whether the runner answered a health check just now (false while it is waking up). */
   ready?: boolean;
+  /** Whether AI marking (for coding questions without test cases) is set up. */
+  aiGrader?: boolean;
 }
 
 /** Staff view of a question (includes the answer key). */
@@ -226,6 +256,10 @@ export interface ReviewItem {
   testsPassed?: number;
   testsTotal?: number;
   pending?: boolean; // waiting for the code runner
+  /** AI-marked coding questions: rubric breakdown and feedback. */
+  ai?: AiReview;
+  /** Set when faculty changed the marks by hand. */
+  override?: number;
 }
 
 export interface AttemptResult {

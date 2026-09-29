@@ -16,9 +16,13 @@ import {
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import {
+  aiCheckSchema,
+  setMarksSchema,
   checkCodingSchema,
   createExamSchema,
   runCodeSchema,
+  type AiCheckInput,
+  type SetMarksInput,
   type CheckCodingInput,
   type RunCodeInput,
   listExamsQuery,
@@ -44,6 +48,7 @@ import { CurrentUser, OrgContext, Public, RequirePermission } from '../auth/deco
 import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
+import { AiGrader } from './ai-grader';
 import { CodeRunner } from './code-runner';
 import { AttemptsService } from './attempts.service';
 import { ExamAnalyticsService } from './exam-analytics.service';
@@ -74,6 +79,13 @@ export class QuestionsController {
   @Get('topics')
   topics(@OrgContext() org: OrgContextInfo) {
     return this.questions.topics(org.organizationId);
+  }
+
+  /** Try AI marking on some code against a rubric (nothing is saved). */
+  @Post('ai-check')
+  @HttpCode(200)
+  aiCheck(@Body(new ZodValidationPipe(aiCheckSchema)) body: AiCheckInput) {
+    return this.questions.aiCheck(body);
   }
 
   /** Try a reference solution against test cases (nothing is saved). */
@@ -289,6 +301,29 @@ export class ExamsController {
     return this.analytics.evaluateCoding(u, org.organizationId, id);
   }
 
+  /** Stop a live exam now: everyone still writing is submitted. */
+  @Post(':id/end')
+  @HttpCode(200)
+  endNow(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.analytics.endNow(u, org.organizationId, id);
+  }
+
+  /** Faculty changes (or clears) the marks for one question of a submitted attempt. */
+  @Put(':id/attempts/:attemptId/marks')
+  setMarks(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+    @Body(new ZodValidationPipe(setMarksSchema)) body: SetMarksInput,
+  ) {
+    return this.analytics.setMarks(u, org.organizationId, id, attemptId, body);
+  }
+
   @Post(':id/attempts/:attemptId/force-submit')
   @HttpCode(200)
   forceSubmit(
@@ -402,12 +437,15 @@ export class MyExamsController {
 @ApiBearerAuth()
 @Controller('code-runner')
 export class CodeRunnerController {
-  constructor(private readonly runner: CodeRunner) {}
+  constructor(
+    private readonly runner: CodeRunner,
+    private readonly ai: AiGrader,
+  ) {}
 
   /** Whether coding answers can be run right now (any signed-in user). */
   @Get('status')
-  status() {
-    return this.runner.status();
+  async status() {
+    return { ...(await this.runner.status()), aiGrader: this.ai.configured };
   }
 
   /** Wakes a sleeping free-tier runner (also called daily by the Vercel cron in vercel.json). */

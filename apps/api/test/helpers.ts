@@ -9,6 +9,7 @@ import { loadEnv } from '../src/config/env';
 import type { OrgRole } from '@arc/types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CODE_RUNNER_IMPL, type CodeRunnerImpl } from '../src/exams/code-runner';
+import { AiGrader, AiGraderUnavailableError, type AiGradeInput } from '../src/exams/ai-grader';
 
 /** Test env: real Postgres (test DB) + Redis, fake Firebase. */
 export function applyTestEnv() {
@@ -69,6 +70,41 @@ const fakeRunnerImpl: CodeRunnerImpl = {
   },
 };
 
+/**
+ * Stand-in AI marker. Code containing FULL gets every rubric mark, HALF gets half of each item,
+ * anything else gets 0. Set `fakeAi.down` to simulate the AI service being unavailable.
+ */
+export const fakeAi = { down: false, calls: 0 };
+const fakeAiGrader = {
+  get configured() {
+    return true;
+  },
+  async grade(input: AiGradeInput) {
+    fakeAi.calls++;
+    if (fakeAi.down) throw new AiGraderUnavailableError('AI offline');
+    const f = input.code.includes('FULL') ? 1 : input.code.includes('HALF') ? 0.5 : 0;
+    const criteria = input.rubric.map((r) => ({
+      text: r.text,
+      points: r.points,
+      awarded: r.points * f,
+      comment: f ? 'ok' : 'missing',
+    }));
+    const max = input.rubric.reduce((s, r) => s + r.points, 0);
+    const sum = criteria.reduce((s, c) => s + c.awarded, 0);
+    const penaltyPct = input.compiled ? 0 : input.penaltyPct;
+    return {
+      compiled: input.compiled,
+      compileError: input.compileError,
+      criteria,
+      awarded: Math.round(sum * (1 - penaltyPct / 100) * 100) / 100,
+      max,
+      penaltyPct,
+      feedback: 'fake feedback',
+      model: 'fake',
+    };
+  },
+};
+
 export async function createTestApp() {
   applyTestEnv();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -76,6 +112,8 @@ export async function createTestApp() {
     .useValue(fakeFirebaseAuth)
     .overrideProvider(CODE_RUNNER_IMPL)
     .useValue(fakeRunnerImpl)
+    .overrideProvider(AiGrader)
+    .useValue(fakeAiGrader)
     .compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, loadEnv());

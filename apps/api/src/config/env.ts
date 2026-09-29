@@ -30,6 +30,15 @@ const envSchema = z.object({
   CODE_RUNNER: z.enum(['arc', 'judge0', 'local']).optional(),
   CODE_RUNNER_URL: z.string().optional(),
   CODE_RUNNER_TOKEN: z.string().optional(),
+  /**
+   * AI marking for coding questions without test cases. Any OpenAI-compatible API:
+   * Groq (default, free tier), OpenRouter, Google Gemini's OpenAI endpoint, OpenAI…
+   */
+  AI_GRADER_API_KEY: z.string().optional(),
+  AI_GRADER_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
+  AI_GRADER_MODEL: z.string().default('llama-3.3-70b-versatile'),
+  /** Answers marked per minute. Groq free (llama-3.3-70b, 12k tokens/min) ≈ 6. Raise on paid plans. */
+  AI_GRADER_RPM: z.coerce.number().int().min(1).max(10_000).default(6),
   JUDGE0_URL: z.string().optional(),
   JUDGE0_AUTH_TOKEN: z.string().optional(),
   JUDGE0_RAPIDAPI_KEY: z.string().optional(),

@@ -1,6 +1,7 @@
 /**
  * Pure grading and statistics helpers — no I/O, fully unit-tested.
  */
+import type { AiReview } from '@arc/types';
 
 export interface GradableQuestion {
   id: string;
@@ -20,10 +21,17 @@ export interface QuestionResult {
   testsPassed?: number;
   testsTotal?: number;
   pending?: boolean;
+  /** AI-marked coding questions: the rubric breakdown and feedback. */
+  ai?: AiReview;
+  /** Marks set by faculty by hand; replaces the automatic marks. */
+  override?: number;
 }
 
-/** Outcome of running a coding answer against all its test cases, or 'pending' (no runner). */
-export type CodeOutcome = { passed: number; total: number } | 'pending';
+/**
+ * Outcome of evaluating a coding answer: tests passed out of total (or AI marks out of the rubric
+ * total), or 'pending' when it couldn't be evaluated yet.
+ */
+export type CodeOutcome = { passed: number; total: number; ai?: AiReview } | 'pending';
 
 export function isAnswered(answer: unknown): boolean {
   if (answer === undefined || answer === null || answer === '') return false;
@@ -64,8 +72,20 @@ export function gradeQuestion(
   answer: unknown,
   negativeMarking: boolean,
   code?: CodeOutcome,
+  override?: number,
 ): QuestionResult {
   const answered = isAnswered(answer);
+  if (typeof override === 'number') {
+    const marks = round2(Math.max(-q.negativeMarks, Math.min(q.points, override)));
+    const base = q.type === 'CODING' && code && code !== 'pending' ? code : undefined;
+    return {
+      answered,
+      correct: marks >= q.points,
+      marks,
+      override: marks,
+      ...(base ? { testsPassed: base.passed, testsTotal: base.total, ai: base.ai } : {}),
+    };
+  }
   if (q.type === 'CODING') {
     // Partial credit per test case passed; no negative marking for code.
     if (!answered) return { answered, correct: false, marks: 0, testsPassed: 0, testsTotal: 0 };
@@ -78,6 +98,7 @@ export function gradeQuestion(
       marks,
       testsPassed: code.passed,
       testsTotal: code.total,
+      ...(code.ai ? { ai: code.ai } : {}),
     };
   }
   const correct = isCorrect(q, answer);
@@ -104,6 +125,7 @@ export function gradeAttempt(
   answers: Record<string, unknown>,
   opts: { negativeMarking: boolean; passPct: number },
   code: Record<string, CodeOutcome> = {},
+  overrides: Record<string, number> = {},
 ): GradeSummary {
   const results: Record<string, QuestionResult> = {};
   let raw = 0;
@@ -113,7 +135,7 @@ export function gradeAttempt(
   let unansweredCount = 0;
   let pending = false;
   for (const q of questions) {
-    const r = gradeQuestion(q, answers[q.id], opts.negativeMarking, code[q.id]);
+    const r = gradeQuestion(q, answers[q.id], opts.negativeMarking, code[q.id], overrides[q.id]);
     if (r.pending) pending = true;
     results[q.id] = r;
     raw += r.marks;
