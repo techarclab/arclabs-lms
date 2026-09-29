@@ -231,7 +231,9 @@ def run_batch(language, code, inputs, time_limit_ms, compile_only=False):
             with slots:
                 st, _, to, _, err = jailed(
                     "compile", 20, 1024, 64 * 1024,
-                    ["g++", "-std=gnu++17", "-O1", "-w", f"-I{ARDUINO_DIR}/include", "-include", "Arduino.h",
+                    # dhtlib/ holds <dht.h>, kept apart from <DHT.h> so Windows checkouts don't collide.
+                    ["g++", "-std=gnu++17", "-O1", "-w", f"-I{ARDUINO_DIR}/include", f"-I{ARDUINO_DIR}/dhtlib",
+                     "-include", "Arduino.h",
                      "-o", "main", "sketch.cpp", f"{ARDUINO_DIR}/libarduinosim.a", "-lm"],
                     work, empty, 40 * SLOWDOWN,
                 )
