@@ -109,6 +109,16 @@ export function CodingSetup({
         </div>
       )}
 
+      {runner?.configured && runner.ready === false && (
+        <div className="flex gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] text-sky-900">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>
+            The code runner is waking up — this takes about a minute after a quiet period. “Check
+            test cases” will work once it’s ready.
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end gap-6">
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink-800">Languages allowed</p>

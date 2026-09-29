@@ -56,8 +56,10 @@ export interface RunCodeResponse {
 
 export interface CodeRunnerStatus {
   configured: boolean;
-  provider: 'judge0' | 'local' | null;
+  provider: 'arc' | 'judge0' | 'local' | null;
   languages: CodeLanguageName[];
+  /** Whether the runner answered a health check just now (false while it is waking up). */
+  ready?: boolean;
 }
 
 /** Staff view of a question (includes the answer key). */

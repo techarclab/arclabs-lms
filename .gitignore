@@ -21,3 +21,4 @@ infra/firebase/emulator-data/*
 
 # Vercel
 .vercel
+__pycache__/

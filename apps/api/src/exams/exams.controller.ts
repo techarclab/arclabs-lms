@@ -40,7 +40,7 @@ import {
 } from '@arc/validation';
 import { hasPermission } from '@arc/types';
 import type { OrgContextInfo } from '../auth/auth.types';
-import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
+import { CurrentUser, OrgContext, Public, RequirePermission } from '../auth/decorators';
 import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
@@ -308,7 +308,10 @@ export class ExamsController {
 @ApiBearerAuth()
 @Controller('my')
 export class MyExamsController {
-  constructor(private readonly attempts: AttemptsService) {}
+  constructor(
+    private readonly attempts: AttemptsService,
+    private readonly runner: CodeRunner,
+  ) {}
 
   @Get('exams')
   list(@CurrentUser() u: User) {
@@ -317,6 +320,8 @@ export class MyExamsController {
 
   @Get('exams/:id')
   lobby(@CurrentUser() u: User, @Param('id', UuidPipe) id: string) {
+    // A free runner may be asleep; students spend a minute in the lobby, so wake it now.
+    this.runner.wake();
     return this.attempts.lobby(u, id);
   }
 
@@ -403,5 +408,13 @@ export class CodeRunnerController {
   @Get('status')
   status() {
     return this.runner.status();
+  }
+
+  /** Keeps a free-tier runner awake (called daily by the Vercel cron in vercel.json). */
+  @Get('ping')
+  @Public()
+  async ping() {
+    const s = await this.runner.status();
+    return { ready: s.ready ?? s.configured };
   }
 }

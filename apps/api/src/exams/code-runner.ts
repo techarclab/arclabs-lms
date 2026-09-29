@@ -16,13 +16,22 @@ export interface RunOutput {
 
 /** Runs one program with one input. Implementations must sandbox and time-limit execution. */
 export interface CodeRunnerImpl {
-  readonly provider: 'judge0' | 'local';
+  readonly provider: 'arc' | 'judge0' | 'local';
   run(
     language: CodeLanguageName,
     code: string,
     stdin: string,
     timeLimitMs: number,
   ): Promise<RunOutput>;
+  /** Optional: one program, many inputs in a single request (compiles once). */
+  runBatch?(
+    language: CodeLanguageName,
+    code: string,
+    inputs: string[],
+    timeLimitMs: number,
+  ): Promise<RunOutput[]>;
+  /** Optional: quick reachability check (also wakes a sleeping runner). */
+  health?(): Promise<boolean>;
 }
 
 export class RunnerUnavailableError extends Error {
@@ -100,6 +109,59 @@ export class Judge0Runner implements CodeRunnerImpl {
       error: error ? clip(error) : null,
       timeMs: j.time ? Math.round(Number(j.time) * 1000) : null,
     };
+  }
+}
+
+// ───────── ARC runner (apps/runner — e.g. a free Hugging Face Space) ─────────
+
+const RUN_STATUSES = new Set<RunStatus>([
+  'OK',
+  'COMPILE_ERROR',
+  'RUNTIME_ERROR',
+  'TIME_LIMIT',
+  'INTERNAL_ERROR',
+]);
+
+export class ArcRunner implements CodeRunnerImpl {
+  readonly provider = 'arc' as const;
+  private readonly base: string;
+  constructor(
+    url: string,
+    private readonly token: string,
+  ) {
+    this.base = url.replace(/\/$/, '');
+  }
+
+  async run(language: CodeLanguageName, code: string, stdin: string, timeLimitMs: number) {
+    return (await this.runBatch(language, code, [stdin], timeLimitMs))[0]!;
+  }
+
+  async runBatch(language: CodeLanguageName, code: string, inputs: string[], timeLimitMs: number) {
+    const res = await fetch(`${this.base}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.token}` },
+      body: JSON.stringify({ language, code, inputs, timeLimitMs }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!res.ok) throw new Error(`Code runner responded ${res.status}`);
+    const j = (await res.json()) as { results?: RunOutput[] };
+    if (!Array.isArray(j.results) || j.results.length !== inputs.length)
+      throw new Error('Code runner returned an invalid response');
+    return j.results.map((r) => ({
+      status: RUN_STATUSES.has(r.status) ? r.status : ('INTERNAL_ERROR' as const),
+      stdout: clip(String(r.stdout ?? '')),
+      error: r.error ? clip(String(r.error)) : null,
+      timeMs: typeof r.timeMs === 'number' ? r.timeMs : null,
+    }));
+  }
+
+  async health() {
+    try {
+      const r = await fetch(`${this.base}/health`, { signal: AbortSignal.timeout(4000) });
+      return r.ok;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -200,7 +262,15 @@ export class LocalRunner implements CodeRunnerImpl {
 export const CODE_RUNNER_IMPL = Symbol('CODE_RUNNER_IMPL');
 
 export function codeRunnerFactory(env: Env): CodeRunnerImpl | null {
-  if (env.CODE_RUNNER === 'judge0' && env.JUDGE0_URL) {
+  const kind = env.CODE_RUNNER ?? (env.CODE_RUNNER_URL ? 'arc' : undefined);
+  if (kind === 'arc') {
+    if (!env.CODE_RUNNER_URL || !env.CODE_RUNNER_TOKEN) {
+      new Logger('CodeRunner').error('CODE_RUNNER=arc needs CODE_RUNNER_URL and CODE_RUNNER_TOKEN');
+      return null;
+    }
+    return new ArcRunner(env.CODE_RUNNER_URL, env.CODE_RUNNER_TOKEN);
+  }
+  if (kind === 'judge0' && env.JUDGE0_URL) {
     const headers: Record<string, string> = {};
     if (env.JUDGE0_AUTH_TOKEN) headers['X-Auth-Token'] = env.JUDGE0_AUTH_TOKEN;
     if (env.JUDGE0_RAPIDAPI_KEY) {
@@ -209,7 +279,7 @@ export function codeRunnerFactory(env: Env): CodeRunnerImpl | null {
     }
     return new Judge0Runner(env.JUDGE0_URL, headers);
   }
-  if (env.CODE_RUNNER === 'local') {
+  if (kind === 'local') {
     if (env.NODE_ENV === 'production') {
       new Logger('CodeRunner').error('CODE_RUNNER=local is not allowed in production; ignoring');
       return null;
@@ -225,12 +295,24 @@ export class CodeRunner {
 
   constructor(@Inject(CODE_RUNNER_IMPL) private readonly impl: CodeRunnerImpl | null) {}
 
-  status(): CodeRunnerStatus {
-    return {
+  private lastHealth: { at: number; ok: boolean } | null = null;
+
+  /** Reports whether a runner is configured and (when it can tell) whether it is awake. */
+  async status(): Promise<CodeRunnerStatus> {
+    const base: CodeRunnerStatus = {
       configured: Boolean(this.impl),
       provider: this.impl?.provider ?? null,
       languages: ['c', 'python'],
     };
+    if (!this.impl?.health) return base;
+    if (!this.lastHealth || Date.now() - this.lastHealth.at > 30_000)
+      this.lastHealth = { at: Date.now(), ok: await this.impl.health() };
+    return { ...base, ready: this.lastHealth.ok };
+  }
+
+  /** Pings the runner so a sleeping free-tier host wakes up (fire-and-forget). */
+  wake() {
+    void this.impl?.health?.();
   }
 
   get configured() {
@@ -259,6 +341,14 @@ export class CodeRunner {
     concurrency = 4,
   ): Promise<RunOutput[]> {
     if (!inputs.length) return [];
+    if (this.impl?.runBatch) {
+      try {
+        return await this.impl.runBatch(language, code, inputs, timeLimitMs);
+      } catch (e) {
+        this.logger.warn(`Code run failed: ${(e as Error).message}`);
+        throw new RunnerUnavailableError('The code runner is not responding');
+      }
+    }
     const first = await this.run(language, code, inputs[0]!, timeLimitMs);
     const out: RunOutput[] = [first];
     if (first.status === 'COMPILE_ERROR') return inputs.map(() => first);
