@@ -72,6 +72,7 @@ export class AiGrader {
       .join('\n\n');
 
     let lastError = 'no response';
+    let jsonMode = true;
     for (let attempt = 0; attempt < 3; attempt++) {
       await this.slot(deadline);
       const left = deadline - Date.now();
@@ -90,8 +91,10 @@ export class AiGrader {
             body: JSON.stringify({
               model: this.env.AI_GRADER_MODEL,
               temperature: 0,
-              max_tokens: 900,
-              response_format: { type: 'json_object' },
+              // Reasoning models (gpt-oss, qwen…) spend tokens thinking before they answer.
+              max_tokens: 3000,
+              ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+              ...(/gpt-oss/.test(this.env.AI_GRADER_MODEL) ? { reasoning_effort: 'low' } : {}),
               messages: [
                 { role: 'system', content: SYSTEM },
                 { role: 'user', content: user },
@@ -107,7 +110,15 @@ export class AiGrader {
           continue;
         }
         if (!res.ok) {
-          lastError = `provider responded ${res.status}: ${(await res.text()).slice(0, 200)}`;
+          const text = (await res.text()).slice(0, 300);
+          lastError = `provider responded ${res.status}: ${text}`;
+          // Some models don't support JSON mode — ask again without it.
+          if (res.status === 400 && jsonMode && /response_format|json/i.test(text)) {
+            jsonMode = false;
+            continue;
+          }
+          if (res.status === 404 || /model_not_found|does not exist/i.test(text))
+            lastError = `the AI model "${this.env.AI_GRADER_MODEL}" isn't available from this provider — set AI_GRADER_MODEL to a current model (see docs/DEPLOYMENT.md §10)`;
           break;
         }
         const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };

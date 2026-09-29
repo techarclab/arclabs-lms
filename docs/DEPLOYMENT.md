@@ -224,8 +224,11 @@ Free setup with **Groq** (no card):
    | `AI_GRADER_API_KEY` | the Groq key |
 
    Defaults: `AI_GRADER_BASE_URL=https://api.groq.com/openai/v1`,
-   `AI_GRADER_MODEL=llama-3.3-70b-versatile`, `AI_GRADER_RPM=6` (the free plan allows ~6 answers a
+   `AI_GRADER_MODEL=openai/gpt-oss-120b`, `AI_GRADER_RPM=6` (the free plan allows ~6 answers a
    minute, ~1,000 a day).
+
+   Providers retire models from time to time. If marking says the model "isn't available", pick a
+   current one from console.groq.com/docs/models and set `AI_GRADER_MODEL` to it (no code change).
 
 3. Question bank → an AI-marked question → **Try the AI marking** → **Mark the reference solution**
    should give full marks.
