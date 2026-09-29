@@ -145,7 +145,7 @@ function LoginInner() {
         <div className="absolute -top-40 -left-40 size-[520px] rounded-full bg-brand-600/30 blur-[120px]" />
         <div className="absolute -right-32 -bottom-40 size-[420px] rounded-full bg-cyan-500/20 blur-[120px]" />
         <div className="relative flex flex-1 flex-col justify-between p-12">
-          <Link href="/" aria-label="ARC LABS home">
+          <Link href="/login" aria-label="ARC LABS">
             <BrandLockup inverted className="w-44" />
           </Link>
 

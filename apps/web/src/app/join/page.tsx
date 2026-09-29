@@ -7,7 +7,7 @@ export const metadata = { title: 'Join your college' };
 export default function JoinCodePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-ink-50 px-6">
-      <Link href="/" className="mb-8">
+      <Link href="/login" className="mb-8">
         <Logo />
       </Link>
       <div className="w-full max-w-md rounded-3xl border border-ink-200 bg-white p-8 shadow-sm">
