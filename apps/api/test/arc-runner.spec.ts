@@ -28,6 +28,32 @@ d('ArcRunner (live runner)', () => {
     expect((await r.run('python', 'print(1/0)', '', 1000)).status).toBe('RUNTIME_ERROR');
   });
 
+  it('runs Arduino sketches on the virtual board (DHT, pins, simulated time)', async () => {
+    const sketch = [
+      '#include <DHT.h>',
+      'DHT dht(2, DHT11);',
+      'void setup() { Serial.begin(9600); dht.begin(); pinMode(8, OUTPUT); }',
+      'void loop() {',
+      '  float t = dht.readTemperature();',
+      '  if (isnan(t)) { Serial.println("error"); delay(2000); return; }',
+      '  Serial.println(t, 0);',
+      '  digitalWrite(8, t > 30 ? HIGH : LOW);',
+      '  delay(2000);',
+      '}',
+    ].join('\n');
+    const out = await r.runBatch(
+      'arduino',
+      sketch,
+      ['temp=31\ntrace=D8', 'temp=20\n@1000 temp=40', 'dht=error'],
+      2000,
+    );
+    expect(out.map((o) => o.stdout)).toEqual([
+      '31\n[9 ms] D8 HIGH\n31\n',
+      '20\n40\n',
+      'error\nerror\n',
+    ]);
+  });
+
   it('rejects a wrong token', async () => {
     await expect(
       new ArcRunner(url ?? '', 'wrong').run('python', 'print(1)', '', 1000),

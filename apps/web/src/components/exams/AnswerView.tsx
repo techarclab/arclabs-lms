@@ -1,5 +1,6 @@
 import { Check, X } from 'lucide-react';
-import type { ReviewItem } from '@arc/types';
+import type { CodeLanguageName, ReviewItem } from '@arc/types';
+import { LANGUAGE_LABEL } from './code/CodeEditor';
 import { cn } from '@arc/ui';
 
 /** Renders prompt text with ``` code blocks in monospace. */
@@ -158,7 +159,7 @@ function CodingReview({ item }: { item: ReviewItem }) {
       {a?.code ? (
         <div>
           <p className="mb-1 text-[11px] font-semibold tracking-wide text-ink-400 uppercase">
-            Your code · {a.language === 'python' ? 'Python 3' : 'C'}
+            Your code · {LANGUAGE_LABEL[a.language as CodeLanguageName] ?? a.language}
           </p>
           <pre className="max-h-80 overflow-auto rounded-xl bg-ink-950 px-4 py-3 font-mono text-[12.5px] leading-relaxed text-ink-100">
             {a.code}

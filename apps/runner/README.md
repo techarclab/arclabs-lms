@@ -1,6 +1,8 @@
 # ARC LABS code runner
 
-Compiles and runs students' **C** and **Python** exam answers for the ARC LABS LMS.
+Compiles and runs students' **C**, **Python** and **Arduino** exam answers for the ARC LABS LMS.
+Arduino sketches run on a virtual board (`arduino/`): simulated clock, pins, DHT11/22, analog sensors,
+HC-SR04, Servo, LCDs and the Serial Monitor — see the header of `arduino/src/board.cpp`.
 
 - `GET /health` — status (no login needed; also wakes a sleeping free instance)
 - `POST /run` — needs `Authorization: Bearer <RUNNER_TOKEN>`

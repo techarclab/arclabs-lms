@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Eye, EyeOff, FlaskConical, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Cpu, Eye, EyeOff, FlaskConical, Plus, Trash2, Wand2 } from 'lucide-react';
 import type { CodeLanguageName, CodeRunnerStatus, CodingConfig, RunCodeResponse } from '@arc/types';
 import { Button, cn, Field, Input } from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
@@ -17,6 +17,13 @@ export interface CodingDraft {
 }
 
 export const C_STARTER = '#include <stdio.h>\n\nint main(void) {\n    \n    return 0;\n}\n';
+export const ARDUINO_STARTER =
+  'void setup() {\n  Serial.begin(9600);\n  \n}\n\nvoid loop() {\n  \n}\n';
+const STARTERS: Record<CodeLanguageName, string> = {
+  c: C_STARTER,
+  python: '',
+  arduino: ARDUINO_STARTER,
+};
 
 export function blankCoding(): CodingDraft {
   return {
@@ -34,7 +41,11 @@ export function blankCoding(): CodingDraft {
 export function codingFromQuestion(c: CodingConfig): CodingDraft {
   return {
     languages: c.languages,
-    starter: { c: c.starter.c ?? '', python: c.starter.python ?? '' },
+    starter: {
+      c: c.starter.c ?? '',
+      python: c.starter.python ?? '',
+      arduino: c.starter.arduino ?? '',
+    },
     tests: c.testCases.map((t) => ({ ...t })),
     timeLimitMs: String(c.timeLimitMs ?? 2000),
     solution: c.solution ?? { language: c.languages[0] ?? 'c', code: '' },
@@ -51,7 +62,7 @@ export function codingToInput(d: CodingDraft) {
   };
 }
 
-const LANGS: CodeLanguageName[] = ['c', 'python'];
+const LANGS: CodeLanguageName[] = ['c', 'python', 'arduino'];
 
 /** Author-side setup for a coding question: languages, starter code, test cases, solution check. */
 export function CodingSetup({
@@ -133,7 +144,17 @@ export function CodingSetup({
                     const next = on
                       ? value.languages.filter((x) => x !== l)
                       : [...value.languages, l];
-                    if (next.length) set({ languages: LANGS.filter((x) => next.includes(x)) });
+                    if (!next.length) return;
+                    const starter = { ...value.starter };
+                    if (!on && !starter[l]?.trim()) starter[l] = STARTERS[l];
+                    const languages = LANGS.filter((x) => next.includes(x));
+                    set({
+                      languages,
+                      starter,
+                      solution: languages.includes(value.solution.language)
+                        ? value.solution
+                        : { language: languages[0]!, code: '' },
+                    });
                   }}
                   className={cn(
                     'rounded-lg border px-4 py-1.5 text-sm font-medium transition',
@@ -197,6 +218,7 @@ export function CodingSetup({
             used for grading — marks are split equally across all tests.
           </p>
         </div>
+        {value.languages.includes('arduino') && <ArduinoHelp />}
         {value.tests.map((t, i) => (
           <div key={i} className="rounded-xl border border-ink-200 p-3">
             <div className="mb-2 flex items-center gap-2">
@@ -230,11 +252,20 @@ export function CodingSetup({
               {(['input', 'output'] as const).map((k) => (
                 <label key={k} className="block">
                   <span className="mb-1 block text-xs text-ink-500">
-                    {k === 'input' ? 'Input (stdin)' : 'Expected output'}
+                    {k === 'input'
+                      ? value.languages.includes('arduino')
+                        ? 'Board setup (sensors, pins, time) / input'
+                        : 'Input (stdin)'
+                      : 'Expected output'}
                   </span>
                   <textarea
-                    rows={3}
+                    rows={value.languages.includes('arduino') ? 4 : 3}
                     spellCheck={false}
+                    placeholder={
+                      k === 'input' && value.languages.includes('arduino')
+                        ? 'temp=31\nhumidity=70\ntime=5000'
+                        : undefined
+                    }
                     value={t[k]}
                     onChange={(e) =>
                       set({
@@ -308,11 +339,74 @@ export function CodingSetup({
         </div>
         {checkError && <p className="mt-3 text-[13px] text-rose-700">{checkError}</p>}
         {check && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-3">
             <TestResults results={check.results} />
+            {check.results.some((r) => r.status === 'OK' && !r.passed) && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl bg-ink-50 px-4 py-3">
+                <p className="flex-1 text-[13px] text-ink-600">
+                  Is the solution right and the expected outputs wrong (common for Arduino tests)?
+                  Use what the solution printed as the expected output.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    set({
+                      tests: value.tests.map((t, i) => {
+                        const r = check.results[i];
+                        return r && r.status === 'OK' ? { ...t, output: r.output } : t;
+                      }),
+                    });
+                    setCheck(null);
+                  }}
+                >
+                  <Wand2 /> Use solution output as expected
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Cheat-sheet for the virtual Arduino board's test-case settings. */
+function ArduinoHelp() {
+  const rows: [string, string][] = [
+    ['temp=31  humidity=70', 'DHT11 / DHT22 readings (dht=error → sensor fails)'],
+    ['D2=LOW', 'Digital input on pin 2 (button, PIR, IR…); INPUT_PULLUP pins default HIGH'],
+    ['A0=512', 'Analog input 0–1023 (LDR, LM35, potentiometer, soil, gas…)'],
+    ['distance=25', 'HC-SR04 distance in cm (pulseIn returns the echo time)'],
+    ['serial=5\\n', 'Text typed into the Serial Monitor'],
+    ['@2000 D2=LOW', 'Change something at 2000 ms (button press, new temperature…)'],
+    ['time=5000', 'How long the sketch runs (ms, default 3000) — delay() is simulated'],
+    ['trace=D8', 'Also check pin D8 (LED/relay/buzzer/servo) — shown as “[1000 ms] D8 HIGH”'],
+    ['dht_pin=2', 'Only when students read the DHT by hand (bit-banging) on pin 2'],
+  ];
+  return (
+    <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3 text-[13px]">
+      <p className="flex items-center gap-2 font-semibold text-ink-900">
+        <Cpu className="size-4 text-brand-600" /> Virtual Arduino board
+      </p>
+      <p className="mt-1 text-ink-600">
+        Students write a normal sketch (setup/loop, DHT, Servo, LiquidCrystal / LiquidCrystal_I2C,
+        Wire). Each test describes the board: one setting per line. Tests compare what the sketch
+        prints on Serial, plus traced pins and the final LCD screen.
+      </p>
+      <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-[max-content_1fr]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="font-mono text-[12px] text-brand-800">{k}</dt>
+            <dd className="text-ink-600">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-ink-500">
+        Tip: write the reference solution, press “Check test cases”, then “Use solution output as
+        expected”.
+      </p>
     </div>
   );
 }

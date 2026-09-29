@@ -13,7 +13,11 @@ const CodeMirror = dynamic(() => import('@uiw/react-codemirror'), {
   loading: () => <div className="size-full animate-pulse bg-[#282c34]" />,
 });
 
-export const LANGUAGE_LABEL: Record<CodeLanguageName, string> = { c: 'C', python: 'Python 3' };
+export const LANGUAGE_LABEL: Record<CodeLanguageName, string> = {
+  c: 'C',
+  python: 'Python 3',
+  arduino: 'Arduino',
+};
 
 /** Code editor with syntax highlighting (no autocompletion — students write their own code). */
 export function CodeEditor({

@@ -11,11 +11,12 @@ export const gradableTypeSchema = z.enum([
 ]);
 
 /** Languages students can write coding answers in. */
-export const codeLanguageSchema = z.enum(['c', 'python']);
+export const codeLanguageSchema = z.enum(['c', 'python', 'arduino']);
 export type CodeLanguage = z.infer<typeof codeLanguageSchema>;
 export const CODE_LANGUAGES: { id: CodeLanguage; label: string }[] = [
   { id: 'c', label: 'C' },
   { id: 'python', label: 'Python 3' },
+  { id: 'arduino', label: 'Arduino (embedded C/C++)' },
 ];
 
 const MAX_CODE = 20_000;
@@ -30,7 +31,7 @@ export const testCaseSchema = z.object({
 
 export const codingConfigSchema = z
   .object({
-    languages: z.array(codeLanguageSchema).min(1, 'Pick at least one language').max(2),
+    languages: z.array(codeLanguageSchema).min(1, 'Pick at least one language').max(3),
     starter: z.partialRecord(codeLanguageSchema, z.string().max(MAX_CODE)).default({}),
     testCases: z
       .array(testCaseSchema)

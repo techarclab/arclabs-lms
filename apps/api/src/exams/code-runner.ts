@@ -47,7 +47,14 @@ const clip = (s: string) =>
 // ───────── Judge0 (self-hosted or RapidAPI) ─────────
 
 /** Judge0 CE language ids. */
-const JUDGE0_LANG: Record<CodeLanguageName, number> = { c: 50, python: 71 };
+const JUDGE0_LANG: Partial<Record<CodeLanguageName, number>> = { c: 50, python: 71 };
+
+const NEEDS_ARC = (language: CodeLanguageName): RunOutput => ({
+  status: 'COMPILE_ERROR',
+  stdout: '',
+  error: `${language} sketches need the ARC LABS runner (CODE_RUNNER=arc)`,
+  timeMs: null,
+});
 
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 const unb64 = (s: string | null | undefined) =>
@@ -61,6 +68,7 @@ export class Judge0Runner implements CodeRunnerImpl {
   ) {}
 
   async run(language: CodeLanguageName, code: string, stdin: string, timeLimitMs: number) {
+    if (!JUDGE0_LANG[language]) return NEEDS_ARC(language);
     const res = await fetch(
       `${this.url.replace(/\/$/, '')}/submissions?base64_encoded=true&wait=true`,
       {
@@ -211,6 +219,7 @@ export class LocalRunner implements CodeRunnerImpl {
   readonly provider = 'local' as const;
 
   async run(language: CodeLanguageName, code: string, stdin: string, timeLimitMs: number) {
+    if (language === 'arduino') return NEEDS_ARC(language);
     const dir = await mkdtemp(join(tmpdir(), 'arc-run-'));
     try {
       if (language === 'c') {
@@ -302,7 +311,7 @@ export class CodeRunner {
     const base: CodeRunnerStatus = {
       configured: Boolean(this.impl),
       provider: this.impl?.provider ?? null,
-      languages: ['c', 'python'],
+      languages: this.impl?.provider === 'arc' ? ['c', 'python', 'arduino'] : ['c', 'python'],
     };
     if (!this.impl?.health) return base;
     if (!this.lastHealth || Date.now() - this.lastHealth.at > 30_000)

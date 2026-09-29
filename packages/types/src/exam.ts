@@ -10,7 +10,7 @@ export interface QuestionOption {
   text: string;
 }
 
-export type CodeLanguageName = 'c' | 'python';
+export type CodeLanguageName = 'c' | 'python' | 'arduino';
 
 export interface CodingTestCase {
   id: string;

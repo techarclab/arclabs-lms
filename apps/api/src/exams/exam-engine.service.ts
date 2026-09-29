@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ExamState, SubmitReasonName } from '@arc/types';
+import type { ExamState, SubmitReasonName, CodeLanguageName } from '@arc/types';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeOutput } from '@arc/validation';
@@ -86,7 +86,7 @@ export class ExamEngine {
       try {
         const runs = await Promise.race([
           this.runner.runMany(
-            a.language as 'c' | 'python',
+            a.language as CodeLanguageName,
             a.code,
             cfg.testCases.map((t) => t.input),
             cfg.timeLimitMs ?? 2000,

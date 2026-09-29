@@ -143,6 +143,65 @@ def classify(status, cpu, timed_out, stdout, stderr, limit_s):
     return {"status": "OK", "stdout": clip(stdout), "error": None, "timeMs": ms}
 
 
+# ───────── Arduino sketches (virtual board, see arduino/) ─────────
+
+ARDUINO_DIR = os.environ.get("ARDUINO_DIR", "/usr/local/share/arduino-sim")
+_NOT_FUNCS = {"if", "for", "while", "switch", "return", "else", "do", "sizeof", "catch", "main"}
+_FUNC = re.compile(
+    r"^[ \t]*((?:(?:static|inline|unsigned|signed|const|volatile|long|short|struct)\s+)*"
+    r"[A-Za-z_]\w*(?:\s*<[^;{}()]*>)?[\s*&]+)([A-Za-z_]\w*)\s*\(([^;{}()]*)\)\s*(?:const\s*)?\{",
+    re.M,
+)
+
+
+def _blank_comments_and_strings(src: str) -> str:
+    """Same length as src, with comments / string and char literals replaced by spaces."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if src.startswith("//", i):
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i)); i = j
+        elif src.startswith("/*", i):
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == "\n" else " " for ch in src[i:j])); i = j
+        elif c in "\"'":
+            j = i + 1
+            while j < n and src[j] != c and src[j] != "\n":
+                j += 2 if src[j] == "\\" else 1
+            j = min(j + 1, n)
+            out.append(" " * (j - i)); i = j
+        else:
+            out.append(c); i += 1
+    return "".join(out)
+
+
+def arduino_source(code: str) -> str:
+    """Does what the Arduino IDE does: declares every function up front so order doesn't matter."""
+    clean = _blank_comments_and_strings(code)
+    protos, first = [], None
+    for m in _FUNC.finditer(clean):
+        ret, name, args = m.group(1).strip(), m.group(2), m.group(3)
+        if name in _NOT_FUNCS or ret.split()[-1] in _NOT_FUNCS:
+            continue
+        before = clean[: m.start()]
+        if before.count("{") != before.count("}"):  # inside a class/struct: a method, skip
+            continue
+        args = re.sub(r"=[^,]*", "", args)  # default values belong on one declaration only
+        protos.append(f"{ret} {name}({args.strip()});")
+        first = m.start() if first is None else first
+    if not protos:
+        return f'#line 1 "sketch.ino"\n{code}'
+    line = code.count("\n", 0, first) + 1
+    return (
+        f'#line 1 "sketch.ino"\n{code[:first]}'
+        + "\n".join(protos)
+        + f'\n#line {line} "sketch.ino"\n{code[first:]}'
+    )
+
+
 def run_batch(language, code, inputs, time_limit_ms):
     limit_s = max(0.5, min(10.0, time_limit_ms / 1000))
     cpu_s = int(limit_s) + 1
@@ -163,6 +222,23 @@ def run_batch(language, code, inputs, time_limit_ms):
             if to or not os.WIFEXITED(st) or os.WEXITSTATUS(st) != 0:
                 msg = clip(err.replace(work + "/", "").strip() or "Compilation failed")
                 return [{"status": "COMPILE_ERROR", "stdout": "", "error": msg, "timeMs": None}] * len(inputs)
+            argv = ["./main"]
+            mem = 256
+        elif language == "arduino":
+            with open(os.path.join(work, "sketch.cpp"), "w", encoding="utf-8") as f:
+                f.write(arduino_source(code))
+            with slots:
+                st, _, to, _, err = jailed(
+                    "compile", 20, 1024, 64 * 1024,
+                    ["g++", "-std=gnu++17", "-O1", "-w", f"-I{ARDUINO_DIR}/include", "-include", "Arduino.h",
+                     "-o", "main", "sketch.cpp", f"{ARDUINO_DIR}/libarduinosim.a", "-lm"],
+                    work, empty, 40 * SLOWDOWN,
+                )
+            if to or not os.WIFEXITED(st) or os.WEXITSTATUS(st) != 0:
+                msg = err.replace(work + "/", "").replace(ARDUINO_DIR + "/include/", "").strip()
+                if "undefined reference to `setup()'" in msg or "undefined reference to `loop()'" in msg:
+                    msg = "Your sketch needs both void setup() and void loop()."
+                return [{"status": "COMPILE_ERROR", "stdout": "", "error": clip(msg or "Compilation failed"), "timeMs": None}] * len(inputs)
             argv = ["./main"]
             mem = 256
         else:
@@ -277,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
             code = body["code"]
             inputs = body.get("inputs") or [""]
             tl = int(body.get("timeLimitMs") or 2000)
-            assert language in ("c", "python") and isinstance(code, str) and len(code) <= 100_000
+            assert language in ("c", "python", "arduino") and isinstance(code, str) and len(code) <= 100_000
             assert isinstance(inputs, list) and 1 <= len(inputs) <= MAX_INPUTS
             assert all(isinstance(s, str) and len(s) <= 256 * 1024 for s in inputs)
         except Exception:
@@ -299,7 +375,7 @@ def main():
     hide_environment()
     INFO.update(
         version=VERSION,
-        languages=["c", "python"],
+        languages=["c", "python", "arduino"] if os.path.exists(f"{ARDUINO_DIR}/libarduinosim.a") else ["c", "python"],
         sandbox=probe_sandbox(),
         gcc=version_of(["gcc", "--version"]),
         python=version_of(["python3", "--version"]),

@@ -151,7 +151,7 @@ export function CodingAnswer({
               <div key={i} className="grid gap-3 md:grid-cols-2">
                 <div>
                   <p className="mb-1 text-[11px] font-semibold tracking-wide text-ink-400 uppercase">
-                    Sample {i + 1} · input
+                    Sample {i + 1} · {language === 'arduino' ? 'board setup' : 'input'}
                   </p>
                   <pre className="rounded-lg bg-ink-50 px-3 py-2 font-mono text-[12.5px] whitespace-pre-wrap">
                     {s.input || ' '}
@@ -170,7 +170,9 @@ export function CodingAnswer({
           ) : (
             <label className="block">
               <span className="mb-1 block text-[11px] font-semibold tracking-wide text-ink-400 uppercase">
-                Input (stdin)
+                {language === 'arduino'
+                  ? 'Board setup — e.g. temp=31, D2=LOW, A0=512, distance=25, time=5000'
+                  : 'Input (stdin)'}
               </span>
               <textarea
                 data-allow-typing
