@@ -225,13 +225,13 @@ export function ExamRunner({
 
   // ───────── Lockdown ─────────
   const onEvent = useCallback(
-    async (type: LockdownEvent) => {
+    async (type: LockdownEvent, meta?: Record<string, string>) => {
       if (done.current) return;
       try {
         // keepalive: the report still reaches the server if the student is closing the page.
         const r = await call<ProctorEventResult>(
           `/my/attempts/${session.attemptId}/events`,
-          { type },
+          { type, ...(meta ? { meta } : {}) },
           true,
         );
         if (r.autoSubmitted) {
@@ -704,7 +704,11 @@ export function ExamRunner({
                 ? 'You switched away from the exam window.'
                 : warning?.type === 'DEVTOOLS'
                   ? 'Developer tools are not allowed during the exam.'
-                  : 'An exam rule was broken.'}{' '}
+                  : warning?.type === 'MULTIPLE_SCREENS'
+                    ? 'A second screen was detected. Disconnect it — only one screen is allowed.'
+                    : warning?.type === 'AI_EXTENSION'
+                      ? 'A browser extension (such as an AI assistant) was detected on the exam page. AI help is not allowed.'
+                      : 'An exam rule was broken.'}{' '}
               This has been recorded and is visible to your instructor.
             </p>
             {warning?.remaining !== null && warning?.remaining !== undefined && (

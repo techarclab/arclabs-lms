@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { hasExtraScreens, watchInjections } from './integrity';
 
 export type LockdownEvent =
   | 'FULLSCREEN_EXIT'
@@ -11,7 +12,9 @@ export type LockdownEvent =
   | 'CONTEXT_MENU'
   | 'DEVTOOLS'
   | 'SHORTCUT'
-  | 'CAMERA_OFF';
+  | 'CAMERA_OFF'
+  | 'MULTIPLE_SCREENS'
+  | 'AI_EXTENSION';
 
 /** Keys a student may press anywhere on the exam page (answering and moving around only). */
 const PLAIN_ALLOWED = new Set([
@@ -87,7 +90,7 @@ export function useLockdown({
   active: boolean;
   requireFullscreen: boolean;
   blockCopyPaste: boolean;
-  onEvent: (type: LockdownEvent) => void;
+  onEvent: (type: LockdownEvent, meta?: Record<string, string>) => void;
   onFullscreenChange: (inFullscreen: boolean) => void;
 }) {
   const onEventRef = useRef(onEvent);
@@ -98,11 +101,11 @@ export function useLockdown({
   useEffect(() => {
     if (!active) return;
     const last = new Map<string, number>();
-    const report = (type: LockdownEvent, gapMs = 1500) => {
+    const report = (type: LockdownEvent, gapMs = 1500, meta?: Record<string, string>) => {
       const now = Date.now();
       if (now - (last.get(type) ?? 0) < gapMs) return;
       last.set(type, now);
-      onEventRef.current(type);
+      onEventRef.current(type, meta);
     };
     const stop = (e: Event) => {
       e.preventDefault();
@@ -201,6 +204,15 @@ export function useLockdown({
       e.preventDefault();
     };
 
+    // AI helpers: another window/app or the browser's AI side panel taking focus (polled, because
+    // blur events are sometimes skipped), a second monitor being connected, or an extension
+    // injecting a panel into the page.
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible' && !document.hasFocus()) report('WINDOW_BLUR');
+      if (hasExtraScreens()) report('MULTIPLE_SCREENS', 10_000);
+    }, 1000);
+    const stopWatch = watchInjections((what) => report('AI_EXTENSION', 10_000, { what }));
+
     const opts = { capture: true } as const;
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);
@@ -220,6 +232,8 @@ export function useLockdown({
     window.addEventListener('popstate', onPop);
     window.addEventListener('beforeunload', onUnload);
     return () => {
+      clearInterval(poll);
+      stopWatch();
       unlockKeyboard();
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);

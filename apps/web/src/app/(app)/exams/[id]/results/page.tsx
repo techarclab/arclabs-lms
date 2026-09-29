@@ -70,6 +70,8 @@ const EVENT_LABEL: Record<string, string> = {
   SESSION_TAKEOVER: 'Opened on another device',
   RESUMED: 'Resumed',
   CAMERA_OFF: 'Camera turned off',
+  MULTIPLE_SCREENS: 'Second screen connected',
+  AI_EXTENSION: 'AI / browser extension on page',
   SHORTCUT: 'Tried a blocked shortcut',
 };
 

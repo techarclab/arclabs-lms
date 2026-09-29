@@ -426,6 +426,22 @@ describe('Examinations', () => {
       expect(r.body.submitReason).toBe('VIOLATIONS');
     });
 
+    it('treats signs of AI help (extension on the page, second screen) as leaving', async () => {
+      const s = await me(l2).post(`/my/exams/${strictId}/start`);
+      const ai = await withSession(
+        me(l2).post(`/my/attempts/${s.body.attemptId}/events`, {
+          type: 'AI_EXTENSION',
+          meta: { what: 'div#sider-root' },
+        }),
+        s.body.sessionId,
+      );
+      expect(ai.body).toMatchObject({ violationCount: 1, autoSubmitted: true });
+      const ev = await prisma.proctorEvent.findFirst({
+        where: { attemptId: s.body.attemptId, type: 'AI_EXTENSION' },
+      });
+      expect(ev).toMatchObject({ counted: true, meta: { what: 'div#sider-root' } });
+    });
+
     it('gives read-only viewers results and people, but no way to change anything', async () => {
       const viewer = (
         await makeUser(prisma, { memberOf: [{ orgId: orgA, roles: ['ORG_VIEWER'] }] })

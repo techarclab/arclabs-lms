@@ -135,6 +135,8 @@ enum ProctorEventType {
   RESUMED
   CAMERA_OFF
   SHORTCUT
+  MULTIPLE_SCREENS // a second monitor was connected
+  AI_EXTENSION // a browser extension injected UI into the exam page
 }
 
 enum AttemptStatus {

@@ -39,7 +39,7 @@ const REASON_NOTE: Record<string, { tone: string; text: string }> = {
   },
   VIOLATIONS: {
     tone: 'rose',
-    text: 'Your exam was submitted automatically because you left the exam screen (full screen, tab or window).',
+    text: 'Your exam was submitted automatically because an exam rule was broken: leaving the exam screen (full screen, tab or window) or using AI help (second screen, AI app or extension).',
   },
   INSTRUCTOR: { tone: 'amber', text: 'Your exam was ended by the instructor.' },
 };

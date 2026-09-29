@@ -50,7 +50,15 @@ import {
  * (devtools/shortcut keys, copy, paste, right-click) and camera drops are logged only — the key
  * never took effect, and a stray F12 on a laptop shouldn't end a strict exam.
  */
-const COUNTED = new Set(['FULLSCREEN_EXIT', 'TAB_HIDDEN', 'WINDOW_BLUR', 'SESSION_TAKEOVER']);
+const COUNTED = new Set([
+  'FULLSCREEN_EXIT',
+  'TAB_HIDDEN',
+  'WINDOW_BLUR',
+  'SESSION_TAKEOVER',
+  // Signs of AI help
+  'MULTIPLE_SCREENS',
+  'AI_EXTENSION',
+]);
 /** A blur and a tab-hide usually fire together; count at most one violation per this many ms. */
 const VIOLATION_DEBOUNCE_MS = 2500;
 /** A session seen this recently is considered "still open" when another device starts. */

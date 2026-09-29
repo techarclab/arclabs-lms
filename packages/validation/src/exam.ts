@@ -240,6 +240,8 @@ export const proctorEventSchema = z.object({
     'DEVTOOLS',
     'CAMERA_OFF',
     'SHORTCUT',
+    'MULTIPLE_SCREENS',
+    'AI_EXTENSION',
   ]),
   meta: z.record(z.string(), z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
 });

@@ -66,6 +66,23 @@ export function useCamera({ autoStart = false }: { autoStart?: boolean } = {}) {
     else if (shared) watch(shared);
   }, [autoStart, start, watch]);
 
+  // When the student unblocks the camera in the browser's site settings, turn it on by itself.
+  useEffect(() => {
+    if (state !== 'denied' || !navigator.permissions?.query) return;
+    let status: PermissionStatus | null = null;
+    const onChange = () => {
+      if (status?.state === 'granted' || status?.state === 'prompt') void start();
+    };
+    navigator.permissions
+      .query({ name: 'camera' as PermissionName })
+      .then((s) => {
+        status = s;
+        s.addEventListener('change', onChange);
+      })
+      .catch(() => {});
+    return () => status?.removeEventListener('change', onChange);
+  }, [state, start]);
+
   return { state, stream, start };
 }
 

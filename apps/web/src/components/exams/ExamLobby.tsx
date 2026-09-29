@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
+  Bot,
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
@@ -23,6 +24,7 @@ import { Button, cn } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { formatDateTime, timeUntil } from '@/lib/format';
 import { CameraView, useCamera } from './camera';
+import { findInjectedElements, hasExtraScreens } from './integrity';
 
 export function ExamLobby({
   lobby,
@@ -37,8 +39,6 @@ export function ExamLobby({
 }) {
   const [agree, setAgree] = useState(false);
   const canTake = lobby.state === 'LIVE' && lobby.canStart;
-  const camera = useCamera();
-  const cameraReady = !lobby.requireCamera || camera.state === 'on';
   const strict = lobby.maxViolations === 1;
   const [, tick] = useState(0);
   useEffect(() => {
@@ -51,6 +51,24 @@ export function ExamLobby({
     .filter(Boolean);
   const resuming = Boolean(lobby.inProgressAttemptId);
   const leftStrict = canTake && strict && resuming;
+  // Ask for the camera as soon as the student opens an exam they can take.
+  const camera = useCamera({ autoStart: lobby.requireCamera && canTake && !leftStrict });
+  const cameraReady = !lobby.requireCamera || camera.state === 'on';
+  // AI-help checks (re-checked every second: extensions can inject late, screens can be plugged in).
+  const [extraScreen, setExtraScreen] = useState(false);
+  const [injected, setInjected] = useState<string[]>([]);
+  useEffect(() => {
+    if (!canTake || leftStrict) return;
+    const check = () => {
+      setExtraScreen(hasExtraScreens());
+      const f = findInjectedElements();
+      setInjected((prev) => (prev.join() === f.join() ? prev : f));
+    };
+    check();
+    const t = setInterval(check, 1000);
+    return () => clearInterval(t);
+  }, [canTake, leftStrict]);
+  const integrityOk = !extraScreen && injected.length === 0;
   const attemptsLeft = lobby.maxAttempts - lobby.attemptsUsed;
 
   return (
@@ -158,6 +176,11 @@ export function ExamLobby({
                       )}
                     </>
                   )}
+                  <li className="flex gap-2">
+                    <Bot className="mt-0.5 size-3.5 shrink-0" /> No AI tools: second screens, AI
+                    apps and browser extensions (ChatGPT, Gemini, AI sidebars) are detected and
+                    count as a violation.
+                  </li>
                   {lobby.requireCamera && (
                     <li className="flex gap-2">
                       <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
@@ -191,12 +214,42 @@ export function ExamLobby({
                   {(camera.state === 'denied' || camera.state === 'unavailable') && (
                     <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
                       {camera.state === 'denied'
-                        ? 'Camera permission was blocked. Click the camera icon in the address bar, choose Allow, then try again.'
-                        : 'No camera found. Connect a webcam, or ask your instructor for help.'}
+                        ? 'Camera is blocked. Click the camera (or lock) icon at the left of the address bar → Camera → Allow. It turns on by itself once allowed; if not, press “Turn on camera” again or reload the page.'
+                        : 'No camera found, or another app (Zoom, Teams, Camera) is using it. Close that app or connect a webcam, then press “Turn on camera”.'}
                     </p>
                   )}
                   <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
                     Keep your face clearly visible. The camera must stay on until you submit.
+                  </p>
+                </div>
+              )}
+
+              {canTake && !leftStrict && !integrityOk && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                    <ShieldAlert className="size-4" /> Fix this before you start
+                  </p>
+                  <ul className="mt-2 space-y-2 text-[13px] leading-relaxed text-rose-900/85">
+                    {extraScreen && (
+                      <li>
+                        <b>A second screen is connected.</b> Disconnect the extra monitor or TV (or
+                        switch Windows to “PC screen only” with Win + P). Only one screen is
+                        allowed.
+                      </li>
+                    )}
+                    {injected.length > 0 && (
+                      <li>
+                        <b>A browser extension is running on this page</b> (for example an AI
+                        assistant, grammar or translate tool). Open this exam in an Incognito /
+                        InPrivate window, or turn off extensions, then reload.
+                        <span className="mt-1 block font-mono text-[11px] text-rose-700/80">
+                          Detected: {injected.slice(0, 3).join(', ')}
+                        </span>
+                      </li>
+                    )}
+                  </ul>
+                  <p className="mt-2 text-[12px] text-rose-800/80">
+                    This updates automatically once fixed. AI tools are not allowed in this exam.
                   </p>
                 </div>
               )}
@@ -234,7 +287,7 @@ export function ExamLobby({
                   <Button
                     size="lg"
                     className="w-full"
-                    disabled={!agree || !cameraReady}
+                    disabled={!agree || !cameraReady || !integrityOk}
                     loading={starting}
                     onClick={onStart}
                   >
@@ -243,9 +296,11 @@ export function ExamLobby({
                   <p className="text-center text-xs text-ink-500">
                     {!cameraReady
                       ? 'Turn on your camera to start.'
-                      : resuming
-                        ? 'Your timer kept running while you were away.'
-                        : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
+                      : !integrityOk
+                        ? 'Fix the problems above to start.'
+                        : resuming
+                          ? 'Your timer kept running while you were away.'
+                          : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
                   </p>
                 </>
               ) : (

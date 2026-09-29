@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "ProctorEventType" ADD VALUE 'MULTIPLE_SCREENS';
+ALTER TYPE "ProctorEventType" ADD VALUE 'AI_EXTENSION';
