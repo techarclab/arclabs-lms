@@ -9,7 +9,7 @@ import type {
 import { AuditService } from '../audit/audit.service';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ExamEngine } from './exam-engine.service';
+import { ExamEngine, examState } from './exam-engine.service';
 import { ExamsService } from './exams.service';
 import {
   competitionRanks,
@@ -29,7 +29,15 @@ export class ExamAnalyticsService {
     private readonly audit: AuditService,
   ) {}
 
-  async analytics(orgId: string, examId: string): Promise<ExamAnalytics> {
+  /**
+   * Full results for an exam. `viewOnly` callers (read-only coordinators) don't get question texts,
+   * options or answer keys until the exam has ended, so nothing can leak while students write.
+   */
+  async analytics(
+    orgId: string,
+    examId: string,
+    opts: { viewOnly?: boolean } = {},
+  ): Promise<ExamAnalytics> {
     await this.engine.finalizeExpired({ quizId: examId });
     const exam = await this.prisma.quiz.findFirst({
       where: { id: examId, organizationId: orgId },
@@ -205,7 +213,8 @@ export class ExamAnalyticsService {
         codingPending: graded.filter((a) => a.codingPending).length,
       },
       distribution: distribution(pcts),
-      questions: questionStats,
+      questions: opts.viewOnly && summary.state !== 'ENDED' ? [] : questionStats,
+      questionsHidden: Boolean(opts.viewOnly && summary.state !== 'ENDED'),
       topics: [...topicMap.entries()]
         .map(([topic, v]) => ({ topic, avgPct: round2(v.sum / v.n), questions: v.n }))
         .sort((a, b) => a.avgPct - b.avgPct),
@@ -222,7 +231,12 @@ export class ExamAnalyticsService {
     };
   }
 
-  async attemptDetail(orgId: string, examId: string, attemptId: string): Promise<AttemptDetail> {
+  async attemptDetail(
+    orgId: string,
+    examId: string,
+    attemptId: string,
+    opts: { viewOnly?: boolean } = {},
+  ): Promise<AttemptDetail> {
     const a = await this.prisma.quizAttempt.findFirst({
       where: { id: attemptId, quizId: examId, organizationId: orgId },
       include: {
@@ -240,6 +254,11 @@ export class ExamAnalyticsService {
       },
     });
     if (!a) throw new NotFoundException();
+    const quiz = await this.prisma.quiz.findUniqueOrThrow({
+      where: { id: examId },
+      select: { status: true, startsAt: true, endsAt: true },
+    });
+    const reviewHidden = Boolean(opts.viewOnly && examState(quiz) !== 'ENDED');
     const questions = await this.engine.gradableQuestions(examId);
     const byId = new Map(questions.map((q) => [q.id, q]));
     const order = a.questionOrder as unknown as { questionId: string }[];
@@ -263,7 +282,8 @@ export class ExamAnalyticsService {
         submitReason: a.submitReason,
         submittedAt: a.submittedAt?.toISOString() ?? null,
       },
-      review: order.map(({ questionId }) => {
+      reviewHidden,
+      review: (reviewHidden ? [] : order).map(({ questionId }) => {
         const q = byId.get(questionId)!;
         const r: {
           answered: boolean;

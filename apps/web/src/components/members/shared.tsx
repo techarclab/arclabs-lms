@@ -11,6 +11,11 @@ export const ROLE_OPTIONS = [
     label: 'Content Manager',
     hint: 'Builds courses, lessons and question banks',
   },
+  {
+    value: 'ORG_VIEWER',
+    label: 'Viewer (read-only)',
+    hint: 'Sees exams, results, analytics and people — can’t change anything',
+  },
   { value: 'ORG_ADMIN', label: 'Org Admin', hint: 'Full control of this organization' },
 ] as const;
 

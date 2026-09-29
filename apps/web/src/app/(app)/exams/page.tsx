@@ -28,7 +28,9 @@ import {
   Progress,
   Skeleton,
 } from '@arc/ui';
+import { hasPermission, type OrgRole } from '@arc/types';
 import { ExamStateBadge } from '@/components/exams/badges';
+import { useOrg } from '@/components/providers/OrgProvider';
 import { OrgRequired } from '@/components/shell/OrgRequired';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { formatDateTime, timeUntil } from '@/lib/format';
@@ -47,7 +49,7 @@ export default function ExamsPage() {
     <OrgRequired
       title="Exams"
       description="Create, schedule and monitor exams."
-      permission="quiz.author"
+      permission="exam.results.view"
     >
       {(org) => <ExamList orgId={org.id} />}
     </OrgRequired>
@@ -56,6 +58,10 @@ export default function ExamsPage() {
 
 function ExamList({ orgId }: { orgId: string }) {
   const router = useRouter();
+  const { current, isSuperAdmin } = useOrg();
+  // Read-only viewers (e.g. college coordinators) only see results.
+  const viewOnly =
+    !isSuperAdmin && !hasPermission((current?.roles ?? []) as OrgRole[], 'quiz.author');
   const [tab, setTab] = useState<ExamState | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
@@ -81,24 +87,30 @@ function ExamList({ orgId }: { orgId: string }) {
     <>
       <PageHeader
         title="Exams"
-        description="Schedule strict, auto-graded exams and see results the moment students submit."
+        description={
+          viewOnly
+            ? 'Results and analytics for your organization’s exams.'
+            : 'Schedule strict, auto-graded exams and see results the moment students submit.'
+        }
         actions={
-          <>
-            <Button variant="secondary" asChild>
-              <Link href="/questions">
-                <FileQuestion /> Question bank
-              </Link>
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus /> New exam
-            </Button>
-          </>
+          !viewOnly && (
+            <>
+              <Button variant="secondary" asChild>
+                <Link href="/questions">
+                  <FileQuestion /> Question bank
+                </Link>
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus /> New exam
+              </Button>
+            </>
+          )
         }
       />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex rounded-lg bg-ink-100/80 p-0.5">
-          {TABS.map((t) => (
+          {TABS.filter((t) => !viewOnly || t.value !== 'DRAFT').map((t) => (
             <button
               key={t.value}
               onClick={() => setTab(t.value)}
@@ -137,102 +149,115 @@ function ExamList({ orgId }: { orgId: string }) {
           <EmptyState
             icon={<ClipboardList />}
             title={q || tab !== 'ALL' ? 'No exams here' : 'No exams yet'}
-            description="Create an exam, add questions from the bank, choose who takes it and publish."
+            description={
+              viewOnly
+                ? 'Exams scheduled for your organization will appear here.'
+                : 'Create an exam, add questions from the bank, choose who takes it and publish.'
+            }
             action={
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus /> New exam
-              </Button>
+              !viewOnly && (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> New exam
+                </Button>
+              )
             }
           />
         </Card>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {data?.data.map((e) => {
-          const progress = e.assignedCount
-            ? Math.round((e.submittedCount / e.assignedCount) * 100)
-            : 0;
-          return (
-            <Link key={e.id} href={`/exams/${e.id}`} className="group">
-              <Card
-                className={cn(
-                  'h-full p-5 transition group-hover:border-ink-300 group-hover:shadow-md group-hover:shadow-ink-900/[0.04]',
-                  e.state === 'LIVE' && 'border-rose-200 ring-1 ring-rose-100',
-                )}
+        {data?.data
+          .filter((e) => !viewOnly || e.state !== 'DRAFT')
+          .map((e) => {
+            const progress = e.assignedCount
+              ? Math.round((e.submittedCount / e.assignedCount) * 100)
+              : 0;
+            return (
+              <Link
+                key={e.id}
+                href={viewOnly ? `/exams/${e.id}/results` : `/exams/${e.id}`}
+                className="group"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-2 flex items-center gap-2">
-                      <ExamStateBadge state={e.state} />
-                      {e.state === 'LIVE' && e.endsAt && (
-                        <span className="text-xs text-ink-500">
-                          closes in {timeUntil(e.endsAt)}
-                        </span>
-                      )}
-                      {e.state === 'SCHEDULED' && e.startsAt && (
-                        <span className="text-xs text-ink-500">
-                          opens in {timeUntil(e.startsAt)}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="truncate text-[16px] font-semibold text-ink-900 group-hover:text-brand-700">
-                      {e.title}
-                    </h3>
-                  </div>
-                  {e.state !== 'DRAFT' && (
-                    <span className="flex items-center gap-1 rounded-lg bg-ink-50 px-2 py-1 text-xs font-medium text-ink-600">
-                      <BarChart3 className="size-3.5" /> Results
-                    </span>
+                <Card
+                  className={cn(
+                    'h-full p-5 transition group-hover:border-ink-300 group-hover:shadow-md group-hover:shadow-ink-900/[0.04]',
+                    e.state === 'LIVE' && 'border-rose-200 ring-1 ring-rose-100',
                   )}
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-3 text-[13px]">
-                  <span className="flex items-center gap-1.5 text-ink-600">
-                    <FileQuestion className="size-4 text-ink-400" /> {e.questionCount} Qs ·{' '}
-                    {e.totalMarks} marks
-                  </span>
-                  <span className="flex items-center gap-1.5 text-ink-600">
-                    <Timer className="size-4 text-ink-400" /> {e.durationMinutes ?? '—'} min
-                  </span>
-                  <span className="flex items-center gap-1.5 text-ink-600">
-                    <Users className="size-4 text-ink-400" /> {e.assignedCount} assigned
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center gap-1.5 text-[13px] text-ink-500">
-                  <CalendarClock className="size-4 text-ink-400" />
-                  {e.startsAt
-                    ? `${formatDateTime(e.startsAt)} → ${formatDateTime(e.endsAt)}`
-                    : 'Not scheduled yet'}
-                </div>
-                {e.state !== 'DRAFT' && (
-                  <div className="mt-4 border-t border-ink-100 pt-4">
-                    <div className="mb-1.5 flex justify-between text-xs">
-                      <span className="text-ink-500">
-                        <b className="font-semibold text-ink-900">{e.submittedCount}</b> of{' '}
-                        {e.assignedCount} submitted
-                        {e.inProgressCount > 0 && (
-                          <span className="ml-1.5 text-rose-600">
-                            · {e.inProgressCount} writing now
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-2 flex items-center gap-2">
+                        <ExamStateBadge state={e.state} />
+                        {e.state === 'LIVE' && e.endsAt && (
+                          <span className="text-xs text-ink-500">
+                            closes in {timeUntil(e.endsAt)}
                           </span>
                         )}
-                      </span>
-                      {e.avgPct !== null && (
-                        <span className="text-ink-500">
-                          avg <b className="font-semibold text-ink-900">{e.avgPct}%</b>
-                        </span>
-                      )}
+                        {e.state === 'SCHEDULED' && e.startsAt && (
+                          <span className="text-xs text-ink-500">
+                            opens in {timeUntil(e.startsAt)}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="truncate text-[16px] font-semibold text-ink-900 group-hover:text-brand-700">
+                        {e.title}
+                      </h3>
                     </div>
-                    <Progress value={progress} tone={e.state === 'ENDED' ? 'emerald' : 'brand'} />
+                    {e.state !== 'DRAFT' && (
+                      <span className="flex items-center gap-1 rounded-lg bg-ink-50 px-2 py-1 text-xs font-medium text-ink-600">
+                        <BarChart3 className="size-3.5" /> Results
+                      </span>
+                    )}
                   </div>
-                )}
-                {e.state === 'DRAFT' && (
-                  <p className="mt-4 flex items-center gap-1.5 border-t border-ink-100 pt-4 text-xs text-ink-400">
-                    <Clock className="size-3.5" /> Draft — finish setup and publish
-                  </p>
-                )}
-              </Card>
-            </Link>
-          );
-        })}
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-[13px]">
+                    <span className="flex items-center gap-1.5 text-ink-600">
+                      <FileQuestion className="size-4 text-ink-400" /> {e.questionCount} Qs ·{' '}
+                      {e.totalMarks} marks
+                    </span>
+                    <span className="flex items-center gap-1.5 text-ink-600">
+                      <Timer className="size-4 text-ink-400" /> {e.durationMinutes ?? '—'} min
+                    </span>
+                    <span className="flex items-center gap-1.5 text-ink-600">
+                      <Users className="size-4 text-ink-400" /> {e.assignedCount} assigned
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-[13px] text-ink-500">
+                    <CalendarClock className="size-4 text-ink-400" />
+                    {e.startsAt
+                      ? `${formatDateTime(e.startsAt)} → ${formatDateTime(e.endsAt)}`
+                      : 'Not scheduled yet'}
+                  </div>
+                  {e.state !== 'DRAFT' && (
+                    <div className="mt-4 border-t border-ink-100 pt-4">
+                      <div className="mb-1.5 flex justify-between text-xs">
+                        <span className="text-ink-500">
+                          <b className="font-semibold text-ink-900">{e.submittedCount}</b> of{' '}
+                          {e.assignedCount} submitted
+                          {e.inProgressCount > 0 && (
+                            <span className="ml-1.5 text-rose-600">
+                              · {e.inProgressCount} writing now
+                            </span>
+                          )}
+                        </span>
+                        {e.avgPct !== null && (
+                          <span className="text-ink-500">
+                            avg <b className="font-semibold text-ink-900">{e.avgPct}%</b>
+                          </span>
+                        )}
+                      </div>
+                      <Progress value={progress} tone={e.state === 'ENDED' ? 'emerald' : 'brand'} />
+                    </div>
+                  )}
+                  {e.state === 'DRAFT' && (
+                    <p className="mt-4 flex items-center gap-1.5 border-t border-ink-100 pt-4 text-xs text-ink-400">
+                      <Clock className="size-3.5" />{' '}
+                      {viewOnly ? 'Being prepared' : 'Draft — finish setup and publish'}
+                    </p>
+                  )}
+                </Card>
+              </Link>
+            );
+          })}
       </div>
 
       <CreateExamDialog

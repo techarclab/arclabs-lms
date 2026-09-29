@@ -78,7 +78,7 @@ export class DepartmentsController {
   constructor(private readonly departments: DepartmentsService) {}
 
   @Get()
-  @RequirePermission('user.manage')
+  @RequirePermission('member.view')
   list(@OrgContext() org: OrgContextInfo) {
     return this.departments.list(org.organizationId);
   }

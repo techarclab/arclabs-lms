@@ -36,6 +36,7 @@ enum OrgRole {
   LEARNER
   EVALUATOR
   CONTENT_MANAGER
+  ORG_VIEWER // read-only coordinator
 }
 
 enum ContentStatus {

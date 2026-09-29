@@ -37,6 +37,8 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { PromptText, ReviewCard } from '@/components/exams/AnswerView';
 import { DifficultyBadge, ExamStateBadge } from '@/components/exams/badges';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { hasPermission, type OrgRole } from '@arc/types';
+import { useOrg } from '@/components/providers/OrgProvider';
 import { OrgRequired } from '@/components/shell/OrgRequired';
 import { downloadFile } from '@/lib/api';
 import {
@@ -51,7 +53,7 @@ import { useApi, useApiMutation } from '@/lib/use-api';
 export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <OrgRequired title="Exam results" description="" permission="quiz.author">
+    <OrgRequired title="Exam results" description="" permission="exam.results.view">
       {(org) => <Results id={id} orgId={org.id} />}
     </OrgRequired>
   );
@@ -73,6 +75,10 @@ const EVENT_LABEL: Record<string, string> = {
 
 function Results({ id, orgId }: { id: string; orgId: string }) {
   const { getToken } = useAuth();
+  const { current, isSuperAdmin } = useOrg();
+  // Read-only viewers (college coordinators) see everything but can't act on attempts.
+  const viewOnly =
+    !isSuperAdmin && !hasPermission((current?.roles ?? []) as OrgRole[], 'quiz.author');
   const mutate = useApiMutation();
   const [evaluating, setEvaluating] = useState(false);
   const {
@@ -130,9 +136,13 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
           Exams
         </Link>
         <span className="text-ink-300">/</span>
-        <Link href={`/exams/${id}`} className="truncate hover:text-ink-900">
-          {exam.title}
-        </Link>
+        {viewOnly ? (
+          <span className="truncate">{exam.title}</span>
+        ) : (
+          <Link href={`/exams/${id}`} className="truncate hover:text-ink-900">
+            {exam.title}
+          </Link>
+        )}
         <span className="text-ink-300">/</span>
         <span className="text-ink-700">Results</span>
       </nav>
@@ -176,41 +186,43 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
             <b>{stats.codingPending}</b> submission{stats.codingPending === 1 ? ' has' : 's have'}{' '}
             coding answers waiting for the code runner. Their scores update after evaluation.
           </p>
-          <Button
-            size="sm"
-            loading={evaluating}
-            onClick={async () => {
-              setEvaluating(true);
-              try {
-                const r = await mutate<{ evaluated: number; remaining: number }>(
-                  `/exams/${id}/evaluate-coding`,
-                  'POST',
-                  {},
-                  orgId,
-                );
-                if (r.evaluated === 0 && r.remaining > 0)
-                  toast.error('The code runner isn’t available yet', {
-                    description: 'Connect a runner (see the deployment guide), then try again.',
-                  });
-                else
-                  toast.success(
-                    `Evaluated ${r.evaluated} submission${r.evaluated === 1 ? '' : 's'}`,
-                    {
-                      description: r.remaining
-                        ? `${r.remaining} still waiting — run again.`
-                        : undefined,
-                    },
+          {!viewOnly && (
+            <Button
+              size="sm"
+              loading={evaluating}
+              onClick={async () => {
+                setEvaluating(true);
+                try {
+                  const r = await mutate<{ evaluated: number; remaining: number }>(
+                    `/exams/${id}/evaluate-coding`,
+                    'POST',
+                    {},
+                    orgId,
                   );
-                void reload();
-              } catch (e) {
-                toast.error((e as Error).message);
-              } finally {
-                setEvaluating(false);
-              }
-            }}
-          >
-            Evaluate coding answers
-          </Button>
+                  if (r.evaluated === 0 && r.remaining > 0)
+                    toast.error('The code runner isn’t available yet', {
+                      description: 'Connect a runner (see the deployment guide), then try again.',
+                    });
+                  else
+                    toast.success(
+                      `Evaluated ${r.evaluated} submission${r.evaluated === 1 ? '' : 's'}`,
+                      {
+                        description: r.remaining
+                          ? `${r.remaining} still waiting — run again.`
+                          : undefined,
+                      },
+                    );
+                  void reload();
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setEvaluating(false);
+                }
+              }}
+            >
+              Evaluate coding answers
+            </Button>
+          )}
         </div>
       )}
 
@@ -346,7 +358,14 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         </Card>
       </div>
 
-      <Card className="mt-6 overflow-hidden">
+      {data.questionsHidden && (
+        <Card className="mt-6 px-6 py-5 text-sm text-ink-600">
+          <b className="font-semibold text-ink-900">Question analysis</b> — question texts and
+          answers become visible here when the exam window closes.
+        </Card>
+      )}
+
+      <Card className={cn('mt-6 overflow-hidden', data.questionsHidden && 'hidden')}>
         <CardHeader>
           <div>
             <CardTitle>Question analysis</CardTitle>
@@ -576,6 +595,7 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         examId={id}
         orgId={orgId}
         attemptId={detailId}
+        viewOnly={viewOnly}
         onClose={() => setDetailId(null)}
       />
     </>
@@ -684,11 +704,13 @@ function AttemptDialog({
   examId,
   orgId,
   attemptId,
+  viewOnly = false,
   onClose,
 }: {
   examId: string;
   orgId: string;
   attemptId: string | null;
+  viewOnly?: boolean;
   onClose: () => void;
 }) {
   const mutate = useApiMutation();
@@ -733,7 +755,7 @@ function AttemptDialog({
                 </div>
               ))}
             </div>
-            {data.candidate.status === 'IN_PROGRESS' && (
+            {data.candidate.status === 'IN_PROGRESS' && !viewOnly && (
               <Button
                 variant="destructive-outline"
                 onClick={async () => {
@@ -781,6 +803,11 @@ function AttemptDialog({
             </div>
             <div>
               <p className="mb-3 text-sm font-semibold">Answers</p>
+              {data.reviewHidden && (
+                <p className="text-sm text-ink-500">
+                  Answers are shown here after the exam window closes.
+                </p>
+              )}
               <div className="space-y-3">
                 {data.review.map((r, i) => (
                   <ReviewCard key={r.questionId} item={r} index={i} />

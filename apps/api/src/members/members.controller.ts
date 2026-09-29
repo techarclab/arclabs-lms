@@ -26,6 +26,7 @@ export class MembersController {
   constructor(private readonly members: MembersService) {}
 
   @Get()
+  @RequirePermission('member.view')
   list(
     @CurrentUser() user: User,
     @OrgContext() org: OrgContextInfo,
@@ -35,6 +36,7 @@ export class MembersController {
   }
 
   @Get('summary')
+  @RequirePermission('member.view')
   summary(@OrgContext() org: OrgContextInfo) {
     return this.members.counts(org);
   }

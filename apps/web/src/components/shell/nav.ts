@@ -46,7 +46,7 @@ export const NAV: NavSection[] = [
   {
     title: 'Examinations',
     items: [
-      { label: 'Exams', href: '/exams', icon: ClipboardList, permission: 'quiz.author' },
+      { label: 'Exams', href: '/exams', icon: ClipboardList, permission: 'exam.results.view' },
       { label: 'Question bank', href: '/questions', icon: FileQuestion, permission: 'quiz.author' },
       { label: 'My exams', href: '/my-exams', icon: ClipboardCheck, learnerOnly: true },
     ],
@@ -54,7 +54,7 @@ export const NAV: NavSection[] = [
   {
     title: 'People & insights',
     items: [
-      { label: 'People', href: '/users', icon: Users, permission: 'user.manage' },
+      { label: 'People', href: '/users', icon: Users, permission: 'member.view' },
       {
         label: 'Analytics',
         href: '/analytics',

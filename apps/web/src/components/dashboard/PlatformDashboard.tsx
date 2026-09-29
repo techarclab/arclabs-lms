@@ -50,7 +50,9 @@ export function PlatformDashboard() {
   const { select } = useOrg();
   const { data, isLoading } = useApi<PlatformOverview>('/analytics/platform');
   const t = data?.totals;
-  const firstName = me?.fullName.split(' ')[0] ?? '';
+  // Skip honorifics so "Dr. Suresh Rao" is greeted as Suresh.
+  const firstName =
+    me?.fullName.split(' ').find((w) => !/^(dr|prof|mr|mrs|ms|sri|smt)\.?$/i.test(w)) ?? '';
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',

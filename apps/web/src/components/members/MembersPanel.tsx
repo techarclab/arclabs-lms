@@ -60,6 +60,7 @@ export function MembersPanel({
   orgId,
   orgName,
   canGrantAdmin,
+  readOnly = false,
   onChanged,
   inviteSignal,
   importSignal,
@@ -67,6 +68,8 @@ export function MembersPanel({
   orgId: string;
   orgName: string;
   canGrantAdmin: boolean;
+  /** Viewers can browse and search members but not change them. */
+  readOnly?: boolean;
   onChanged?: () => void;
   /** Increment to open the invite dialog from outside (e.g. page header button). */
   inviteSignal?: number;
@@ -261,51 +264,53 @@ export function MembersPanel({
                     )}
                   </td>
                   <td className="py-3 pr-4 pl-3">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="rounded-lg p-1.5 text-ink-400 opacity-60 transition group-hover:opacity-100 hover:bg-ink-100 hover:text-ink-700 data-[state=open]:bg-ink-100 data-[state=open]:opacity-100">
-                        <MoreHorizontal className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem icon={<Pencil />} onSelect={() => setEditing(m)}>
-                          Edit roles & details
-                        </DropdownMenuItem>
-                        {m.state === 'INVITED' && (
-                          <DropdownMenuItem icon={<Send />} onSelect={() => resend(m)}>
-                            Resend invitation
+                    {!readOnly && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="rounded-lg p-1.5 text-ink-400 opacity-60 transition group-hover:opacity-100 hover:bg-ink-100 hover:text-ink-700 data-[state=open]:bg-ink-100 data-[state=open]:opacity-100">
+                          <MoreHorizontal className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem icon={<Pencil />} onSelect={() => setEditing(m)}>
+                            Edit roles & details
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          icon={<Copy />}
-                          onSelect={() => {
-                            void navigator.clipboard.writeText(m.email);
-                            toast.success('Email copied');
-                          }}
-                        >
-                          Copy email
-                        </DropdownMenuItem>
-                        {!m.isSelf && (
-                          <>
-                            <DropdownMenuSeparator />
-                            {m.state === 'INACTIVE' ? (
-                              <DropdownMenuItem
-                                icon={<UserCheck />}
-                                onSelect={() => setActive(m, true)}
-                              >
-                                Reactivate
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                danger
-                                icon={<UserMinus />}
-                                onSelect={() => setActive(m, false)}
-                              >
-                                Deactivate
-                              </DropdownMenuItem>
-                            )}
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          {m.state === 'INVITED' && (
+                            <DropdownMenuItem icon={<Send />} onSelect={() => resend(m)}>
+                              Resend invitation
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            icon={<Copy />}
+                            onSelect={() => {
+                              void navigator.clipboard.writeText(m.email);
+                              toast.success('Email copied');
+                            }}
+                          >
+                            Copy email
+                          </DropdownMenuItem>
+                          {!m.isSelf && (
+                            <>
+                              <DropdownMenuSeparator />
+                              {m.state === 'INACTIVE' ? (
+                                <DropdownMenuItem
+                                  icon={<UserCheck />}
+                                  onSelect={() => setActive(m, true)}
+                                >
+                                  Reactivate
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  danger
+                                  icon={<UserMinus />}
+                                  onSelect={() => setActive(m, false)}
+                                >
+                                  Deactivate
+                                </DropdownMenuItem>
+                              )}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -334,7 +339,7 @@ export function MembersPanel({
                 >
                   Clear filters
                 </Button>
-              ) : (
+              ) : readOnly ? null : (
                 <div className="flex gap-2.5">
                   <Button variant="secondary" onClick={() => setImportOpen(true)}>
                     <FileSpreadsheet /> Import CSV

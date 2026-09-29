@@ -426,6 +426,37 @@ describe('Examinations', () => {
       expect(r.body.submitReason).toBe('VIOLATIONS');
     });
 
+    it('gives read-only viewers results and people, but no way to change anything', async () => {
+      const viewer = (
+        await makeUser(prisma, { memberOf: [{ orgId: orgA, roles: ['ORG_VIEWER'] }] })
+      ).token;
+      const v = orgApi(app, viewer, orgA);
+      // Can see
+      expect((await v.get('/exams')).status).toBe(200);
+      expect((await v.get(`/exams/${examId}/analytics`)).status).toBe(200);
+      expect((await v.get(`/exams/${examId}/results.csv`)).status).toBe(200);
+      expect((await v.get('/members')).status).toBe(200);
+      expect((await v.get('/members/summary')).status).toBe(200);
+      expect((await v.get('/departments')).status).toBe(200);
+      // Live exam: no question texts or answer keys for viewers (staff still get them)
+      const live = await v.get(`/exams/${strictId}/analytics`);
+      expect(live.body).toMatchObject({ questions: [], questionsHidden: true });
+      expect((await staff().get(`/exams/${strictId}/analytics`)).body.questions.length).toBe(2);
+      // Can't change or author anything
+      expect((await v.get(`/exams/${examId}`)).status).toBe(403);
+      expect((await v.post('/exams', { title: 'Nope nope', durationMinutes: 10 })).status).toBe(
+        403,
+      );
+      expect((await v.patch(`/exams/${strictId}`, { title: 'Changed title' })).status).toBe(403);
+      expect((await v.post(`/exams/${strictId}/unpublish`)).status).toBe(403);
+      expect((await v.get('/questions')).status).toBe(403);
+      expect(
+        (await v.post('/members', { email: 'x@y.z', fullName: 'X Y', roles: ['LEARNER'] })).status,
+      ).toBe(403);
+      expect((await v.post('/departments', { name: 'MECH' })).status).toBe(403);
+      expect((await v.get('/join-settings')).status).toBe(403);
+    });
+
     it('submits when the student comes back after closing the page', async () => {
       const s = await me(l4).post(`/my/exams/${strictId}/start`);
       // Page closed without the "left" event arriving; the attempt looks idle.

@@ -13,6 +13,8 @@ export const PERMISSIONS = [
   'course.publish',
   'course.view',
   'quiz.author',
+  'exam.results.view', // exam list, results, analytics, CSV (read-only)
+  'member.view', // people list and departments (read-only)
   'program.manage',
   'program.view',
   'batch.manage',
@@ -40,6 +42,8 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'department.manage',
     'user.manage',
     'user.role.assign',
+    'member.view',
+    'exam.results.view',
     'course.manage',
     'course.publish',
     'course.view',
@@ -63,6 +67,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'audit.view',
   ],
   CONTENT_MANAGER: [
+    'exam.results.view',
     'course.manage',
     'course.publish',
     'course.view',
@@ -74,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'analytics.view',
   ],
   INSTRUCTOR: [
+    'exam.results.view',
     'course.view',
     'quiz.author',
     'program.view',
@@ -98,6 +104,8 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'learning.participate',
     'analytics.view',
   ],
+  /** College coordinator: sees everything about their organization's exams, changes nothing. */
+  ORG_VIEWER: ['exam.results.view', 'member.view', 'analytics.view'],
 };
 
 export function permissionsFor(roles: readonly OrgRole[]): Set<Permission> {

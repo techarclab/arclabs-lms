@@ -37,6 +37,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const ROLE_LABEL: Record<string, string> = {
   ORG_ADMIN: 'Org Admin',
+  ORG_VIEWER: 'Viewer (read-only)',
   CONTENT_MANAGER: 'Content Manager',
   INSTRUCTOR: 'Instructor',
   EVALUATOR: 'Evaluator',

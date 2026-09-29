@@ -306,6 +306,8 @@ export interface ExamAnalytics {
   };
   distribution: { from: number; to: number; count: number }[];
   questions: QuestionStat[];
+  /** True for read-only viewers while the exam hasn't ended (no question texts / answer keys yet). */
+  questionsHidden: boolean;
   topics: { topic: string; avgPct: number; questions: number }[];
   departments: { department: string; submitted: number; avgPct: number; passRate: number }[];
   violationsByType: Record<string, number>;
@@ -314,6 +316,7 @@ export interface ExamAnalytics {
 
 export interface AttemptDetail {
   candidate: CandidateRow;
+  reviewHidden: boolean;
   review: ReviewItem[];
   events: { type: string; counted: boolean; occurredAt: string }[];
   ipAddress: string | null;

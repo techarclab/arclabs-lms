@@ -7,6 +7,7 @@ export const orgRoleSchema = z.enum([
   'INSTRUCTOR',
   'EVALUATOR',
   'LEARNER',
+  'ORG_VIEWER',
 ]);
 export const memberStatusFilter = z.enum(['ACTIVE', 'INVITED', 'INACTIVE']);
 

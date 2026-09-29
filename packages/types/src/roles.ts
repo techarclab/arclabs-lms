@@ -5,5 +5,6 @@ export const ORG_ROLES = [
   'INSTRUCTOR',
   'EVALUATOR',
   'LEARNER',
+  'ORG_VIEWER', // read-only: results, analytics and people (e.g. a college coordinator)
 ] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];

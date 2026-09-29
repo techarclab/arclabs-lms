@@ -42,6 +42,7 @@ export const ROLE_LABEL: Record<string, string> = {
   INSTRUCTOR: 'Instructor',
   EVALUATOR: 'Evaluator',
   LEARNER: 'Learner',
+  ORG_VIEWER: 'Viewer',
 };
 
 export function formatDateTime(iso: string | null | undefined) {

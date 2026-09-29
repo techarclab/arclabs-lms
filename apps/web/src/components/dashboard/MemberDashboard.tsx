@@ -43,7 +43,9 @@ import { StatCard } from './StatCard';
 export function MemberDashboard() {
   const { me } = useAuth();
   const { current, isSuperAdmin } = useOrg();
-  const firstName = me?.fullName.split(' ')[0] ?? '';
+  // Skip honorifics so "Dr. Suresh Rao" is greeted as Suresh.
+  const firstName =
+    me?.fullName.split(' ').find((w) => !/^(dr|prof|mr|mrs|ms|sri|smt)\.?$/i.test(w)) ?? '';
 
   if (!current) {
     return (
@@ -59,7 +61,8 @@ export function MemberDashboard() {
   }
 
   const roles = current.roles as OrgRole[];
-  const isStaff = isSuperAdmin || hasPermission(roles, 'quiz.author');
+  const isStaff = isSuperAdmin || hasPermission(roles, 'exam.results.view');
+  const viewOnly = !isSuperAdmin && !hasPermission(roles, 'quiz.author');
   const isLearner = roles.includes('LEARNER');
 
   return (
@@ -86,7 +89,7 @@ export function MemberDashboard() {
           isStaff && (
             <Button asChild>
               <Link href="/exams">
-                <ClipboardList /> Manage exams
+                <ClipboardList /> {viewOnly ? 'View exams & results' : 'Manage exams'}
               </Link>
             </Button>
           )
@@ -97,7 +100,7 @@ export function MemberDashboard() {
           Exams you manage
         </h2>
       )}
-      {isStaff && <StaffPanel orgId={current.id} />}
+      {isStaff && <StaffPanel orgId={current.id} viewOnly={viewOnly} />}
       {isStaff && isLearner && (
         <h2 className="mt-10 mb-4 text-sm font-semibold tracking-wide text-ink-500 uppercase">
           Exams you take
@@ -215,7 +218,7 @@ function LearnerPanel() {
   );
 }
 
-function StaffPanel({ orgId }: { orgId: string }) {
+function StaffPanel({ orgId, viewOnly = false }: { orgId: string; viewOnly?: boolean }) {
   const { data } = useApi<Paginated<ExamSummary>>('/exams?pageSize=50', {
     orgId,
     refreshInterval: 20_000,
@@ -266,7 +269,7 @@ function StaffPanel({ orgId }: { orgId: string }) {
           {[...live, ...scheduled, ...ended].slice(0, 6).map((e) => (
             <Link
               key={e.id}
-              href={e.state === 'DRAFT' ? `/exams/${e.id}` : `/exams/${e.id}/results`}
+              href={e.state === 'DRAFT' && !viewOnly ? `/exams/${e.id}` : `/exams/${e.id}/results`}
               className="flex items-center gap-4 border-b border-ink-100 px-6 py-3.5 transition last:border-0 hover:bg-ink-50/70"
             >
               <ExamStateBadge state={e.state} />

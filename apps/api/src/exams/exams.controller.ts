@@ -38,6 +38,7 @@ import {
   type SetExamAudienceInput,
   type UpdateExamInput,
 } from '@arc/validation';
+import { hasPermission } from '@arc/types';
 import type { OrgContextInfo } from '../auth/auth.types';
 import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
 import { UuidPipe } from '../common/uuid.pipe';
@@ -48,6 +49,9 @@ import { AttemptsService } from './attempts.service';
 import { ExamAnalyticsService } from './exam-analytics.service';
 import { ExamsService } from './exams.service';
 import { QuestionsService } from './questions.service';
+
+/** Read-only roles (e.g. a college coordinator) can't author exams. */
+const viewOnly = (org: OrgContextInfo) => !hasPermission(org.roles, 'quiz.author');
 
 // ───────────── Staff: question bank ─────────────
 
@@ -152,6 +156,7 @@ export class ExamsController {
   ) {}
 
   @Get()
+  @RequirePermission('exam.results.view')
   list(
     @OrgContext() org: OrgContextInfo,
     @Query(new ZodValidationPipe(listExamsQuery)) q: ListExamsQuery,
@@ -244,11 +249,13 @@ export class ExamsController {
   }
 
   @Get(':id/analytics')
+  @RequirePermission('exam.results.view')
   examAnalytics(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
-    return this.analytics.analytics(org.organizationId, id);
+    return this.analytics.analytics(org.organizationId, id, { viewOnly: viewOnly(org) });
   }
 
   @Get(':id/results.csv')
+  @RequirePermission('exam.results.view')
   async csv(
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
@@ -261,12 +268,15 @@ export class ExamsController {
   }
 
   @Get(':id/attempts/:attemptId')
+  @RequirePermission('exam.results.view')
   attempt(
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Param('attemptId', UuidPipe) attemptId: string,
   ) {
-    return this.analytics.attemptDetail(org.organizationId, id, attemptId);
+    return this.analytics.attemptDetail(org.organizationId, id, attemptId, {
+      viewOnly: viewOnly(org),
+    });
   }
 
   @Post(':id/evaluate-coding')

@@ -40,6 +40,7 @@ const ROLE_COLOR: Record<string, string> = {
   INSTRUCTOR: 'bg-violet-500',
   EVALUATOR: 'bg-amber-500',
   LEARNER: 'bg-emerald-500',
+  ORG_VIEWER: 'bg-ink-400',
 };
 
 export default function UsersPage() {
@@ -48,13 +49,14 @@ export default function UsersPage() {
   const [importSignal, setImportSignal] = useState(0);
   const roles = (current?.roles ?? []) as OrgRole[];
   const canManage = isSuperAdmin || hasPermission(roles, 'user.manage');
+  const canView = canManage || hasPermission(roles, 'member.view');
   const canGrantAdmin = isSuperAdmin || hasPermission(roles, 'user.role.assign');
   const canManageDepts = isSuperAdmin || hasPermission(roles, 'department.manage');
   const {
     data: counts,
     isLoading,
     mutate: reloadCounts,
-  } = useApi<MemberCounts>(current && canManage ? '/members/summary' : null, {
+  } = useApi<MemberCounts>(current && canView ? '/members/summary' : null, {
     orgId: current?.id,
   });
 
@@ -87,7 +89,7 @@ export default function UsersPage() {
     );
   }
 
-  if (!canManage) {
+  if (!canView) {
     return (
       <Card className="mx-auto mt-10 max-w-lg">
         <EmptyState
@@ -110,16 +112,22 @@ export default function UsersPage() {
           </span>
         }
         title="People"
-        description="Invite and manage learners, instructors, evaluators and admins."
+        description={
+          canManage
+            ? 'Invite and manage learners, instructors, evaluators and admins.'
+            : 'Everyone registered in your organization.'
+        }
         actions={
-          <>
-            <Button variant="secondary" onClick={() => setImportSignal((n) => n + 1)}>
-              <FileSpreadsheet /> Import CSV
-            </Button>
-            <Button onClick={() => setInviteSignal((n) => n + 1)}>
-              <UserPlus /> Invite people
-            </Button>
-          </>
+          canManage && (
+            <>
+              <Button variant="secondary" onClick={() => setImportSignal((n) => n + 1)}>
+                <FileSpreadsheet /> Import CSV
+              </Button>
+              <Button onClick={() => setInviteSignal((n) => n + 1)}>
+                <UserPlus /> Invite people
+              </Button>
+            </>
+          )
         }
       />
 
@@ -161,12 +169,13 @@ export default function UsersPage() {
           orgId={current.id}
           orgName={current.name}
           canGrantAdmin={canGrantAdmin}
+          readOnly={!canManage}
           onChanged={() => void reloadCounts()}
           inviteSignal={inviteSignal}
           importSignal={importSignal}
         />
         <div className="grid items-start gap-6 md:grid-cols-2 2xl:grid-cols-1">
-          <JoinLinkCard orgId={current.id} orgName={current.name} />
+          {canManage && <JoinLinkCard orgId={current.id} orgName={current.name} />}
           <Card>
             <CardHeader>
               <div>
