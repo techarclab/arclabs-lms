@@ -1,4 +1,4 @@
-# ARC LABS code runner — C (gcc) and Python 3, sandboxed. Built for Hugging Face Spaces (Docker).
+# ARC LABS code runner — C (gcc) and Python 3, sandboxed. Runs on Render (free), Cloud Run or any VM.
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update \
@@ -8,12 +8,13 @@ RUN apt-get update \
 COPY jail.c /tmp/jail.c
 RUN gcc -O2 -Wall -o /usr/local/bin/jail /tmp/jail.c -lseccomp && rm /tmp/jail.c
 
-# Hugging Face runs Spaces as uid 1000.
+# Never run students' code as root.
 RUN useradd -m -u 1000 runner
 USER runner
 WORKDIR /home/runner/app
 COPY --chown=runner server.py .
 
-ENV PORT=7860 PYTHONUNBUFFERED=1
-EXPOSE 7860
+# Hosts like Render pass their own PORT; 10000 is Render's default.
+ENV PORT=10000 PYTHONUNBUFFERED=1
+EXPOSE 10000
 CMD ["python3", "server.py"]

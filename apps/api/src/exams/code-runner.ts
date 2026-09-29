@@ -112,7 +112,7 @@ export class Judge0Runner implements CodeRunnerImpl {
   }
 }
 
-// ───────── ARC runner (apps/runner — e.g. a free Hugging Face Space) ─────────
+// ───────── ARC runner (apps/runner — e.g. on Render's free plan) ─────────
 
 const RUN_STATUSES = new Set<RunStatus>([
   'OK',

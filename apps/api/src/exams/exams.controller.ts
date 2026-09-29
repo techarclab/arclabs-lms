@@ -410,7 +410,7 @@ export class CodeRunnerController {
     return this.runner.status();
   }
 
-  /** Keeps a free-tier runner awake (called daily by the Vercel cron in vercel.json). */
+  /** Wakes a sleeping free-tier runner (also called daily by the Vercel cron in vercel.json). */
   @Get('ping')
   @Public()
   async ping() {

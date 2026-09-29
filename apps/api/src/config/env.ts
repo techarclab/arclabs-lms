@@ -23,7 +23,7 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().default('ARC LABS <no-reply@arclabs.local>'),
   /**
-   * Code runner for coding questions: arc (our own runner, apps/runner — free on Hugging Face),
+   * Code runner for coding questions: arc (our own runner, apps/runner — free on Render),
    * judge0 (self-hosted or RapidAPI) or local (development only). Auto-picks arc when
    * CODE_RUNNER_URL is set.
    */

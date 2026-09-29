@@ -140,45 +140,66 @@ coding marks show as "being evaluated". Once a runner is connected, students can
 during the exam, answers are graded on submit, and older answers can be graded from the exam's
 **Results** page → **Evaluate coding answers**.
 
-### A. Free: ARC LABS runner on Hugging Face (recommended to start)
+### A. Free: ARC LABS runner on Render (recommended to start)
 
-The runner lives in `apps/runner` (Dockerfile, `server.py`, `jail.c`). Hugging Face Spaces' free
-"CPU basic" hardware (2 vCPU, 16 GB RAM) comfortably handles one college (80 students all pressing
-**Run** at once finish in a few seconds). Every program runs in a jail: CPU / memory / output limits,
-no internet, no extra processes, and no access to other students' files.
+The runner lives in `apps/runner` (Dockerfile, `server.py`, `jail.c`). Render's free web service
+needs no card. Every program runs in a jail: CPU / memory / output limits, no internet, no extra
+processes, and no access to other students' files.
 
-1. Sign up at **huggingface.co** (free) → **New → Space**.
-   - Space name `arclabs-runner`, **SDK: Docker → Blank**, hardware **CPU basic · Free**, **Public**
-     (free Spaces are public; the code is harmless to show and running it needs the secret token).
-2. **Settings → Variables and secrets → New secret**: name `RUNNER_TOKEN`, value a long random
-   string. Make one in PowerShell:
+The free machine is small (0.1 CPU). Pressing **Run** takes a second or two; when a whole class
+submits at once, some coding answers may show "being evaluated" for a few minutes — click
+**Evaluate coding answers** on the exam's Results page after the exam to finish them.
+
+1. Go to **render.com** → **Get started** → sign up **with GitHub** (the account that owns
+   `arclabs-lms`). No card needed.
+2. **New + → Web Service → Git provider → GitHub** → allow Render to see the `arclabs-lms`
+   repository → select it.
+3. Fill in:
+
+   | Field          | Value            |
+   | -------------- | ---------------- |
+   | Name           | `arclabs-runner` |
+   | Region         | **Singapore**    |
+   | Branch         | `main`           |
+   | Root Directory | `apps/runner`    |
+   | Language       | **Docker**       |
+   | Instance Type  | **Free**         |
+
+4. **Environment Variables → Add**: name `RUNNER_TOKEN`, value → click **Generate** (or make one
+   in PowerShell and paste it):
 
    ```powershell
    -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 40 | ForEach-Object { [char]$_ })
    ```
 
-3. **Files → Add file → Upload files**: drag in the four files from `C:\dev\arclabs-lms\apps\runner`
-   (`Dockerfile`, `jail.c`, `server.py`, `README.md` — replace the existing README) → **Commit**.
-   The Space builds for 2–3 minutes and then shows **Running**.
-4. Open `https://<your-hf-username>-arclabs-runner.hf.space/health`. You should see
-   `"ok": true` and `"sandbox": "seccomp+landlock"` (`"seccomp"` alone is also fine; `"limits-only"` means the host blocks the sandbox — tell your developer).
-5. Vercel → **arclabs-api** → Environment Variables → add, then **Redeploy**:
+5. **Deploy Web Service**. The first build takes 3–5 minutes; wait for **Live**. Your address is
+   shown at the top, e.g. `https://arclabs-runner.onrender.com`.
+6. Open `https://arclabs-runner.onrender.com/health` (your address + `/health`). You should see
+   `"ok": true` and `"sandbox": "seccomp+landlock"` (`"seccomp"` alone is also fine;
+   `"limits-only"` means the host blocks the sandbox — tell your developer).
+7. Vercel → **arclabs-api** → Environment Variables → add, then **Redeploy**:
 
-   | Name                | Value                                                |
-   | ------------------- | ---------------------------------------------------- |
-   | `CODE_RUNNER`       | `arc`                                                |
-   | `CODE_RUNNER_URL`   | `https://<your-hf-username>-arclabs-runner.hf.space` |
-   | `CODE_RUNNER_TOKEN` | the same value as the Space's `RUNNER_TOKEN`         |
+   | Name                | Value                                     |
+   | ------------------- | ----------------------------------------- |
+   | `CODE_RUNNER`       | `arc`                                     |
+   | `CODE_RUNNER_URL`   | `https://arclabs-runner.onrender.com`     |
+   | `CODE_RUNNER_TOKEN` | the same value as Render's `RUNNER_TOKEN` |
 
-6. Question bank → open a coding question → **Check test cases** — every test should pass.
+8. Question bank → open a coding question → **Check test cases** — every test should pass.
 
-Free Spaces sleep after a long quiet period. The API pings the runner once a day (Vercel cron) and
-whenever a student opens an exam, so it is normally awake; on exam day, open the `/health` link
-above a few minutes before the start to be sure.
+**Sleep:** free Render services sleep after 15 minutes without use and take about a minute to wake.
+The API wakes the runner whenever a student opens an exam. On exam day, open the `/health` link
+2–3 minutes before the start so it's awake when the first student presses **Run**.
+
+Optional: Render → arclabs-runner → **Settings → Build Filters → Included paths** `apps/runner/**`,
+so the runner only rebuilds when its own files change.
 
 ### B. Paid, when more colleges join
 
-- **Upgrade the Space** hardware (Settings → Space hardware) — no other changes, or
+- **Upgrade the Render instance** (Settings → Instance Type, e.g. Starter) — no other changes;
+  it stays awake and runs much faster, or
+- **Google Cloud Run** (deploy `apps/runner` the same way; its free tier is generous but needs a
+  card on the account), or
 - **Judge0 CE** on your own server or on RapidAPI: set `CODE_RUNNER=judge0`, `JUDGE0_URL` and
   `JUDGE0_AUTH_TOKEN` (self-hosted) or `JUDGE0_RAPIDAPI_KEY` (RapidAPI) instead.
 

@@ -29,7 +29,33 @@ VERSION = "1.0.0"
 TOKEN = os.environ.get("RUNNER_TOKEN", "")
 PORT = int(os.environ.get("PORT", "7860"))
 JAIL = os.environ.get("JAIL_BIN", "/usr/local/bin/jail")
-PARALLEL = int(os.environ.get("RUNNER_PARALLEL", str(max(2, os.cpu_count() or 2))))
+
+
+def cpu_share() -> float:
+    """CPUs this container may really use (cgroup quota), e.g. 0.1 on Render's free plan."""
+    if os.environ.get("RUNNER_CPUS"):
+        return float(os.environ["RUNNER_CPUS"])
+    try:
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()
+        if quota != "max":
+            return max(0.05, int(quota) / int(period))
+    except Exception:
+        pass
+    try:
+        q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        p = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        if q > 0:
+            return max(0.05, q / p)
+    except Exception:
+        pass
+    return float(len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1)
+
+
+CPUS = cpu_share()
+PARALLEL = int(os.environ.get("RUNNER_PARALLEL", str(max(2, min(8, round(CPUS))))))
+# On a fraction of a CPU, programs get their CPU time slowly: stretch wall-clock timeouts to match.
+# Time limits themselves are measured in CPU time, so students are judged fairly either way.
+SLOWDOWN = max(1.0, 1.0 / min(CPUS, 1.0))
 MAX_BODY = 512 * 1024
 MAX_INPUTS = 50
 MAX_OUTPUT = 64 * 1024
@@ -131,7 +157,8 @@ def run_batch(language, code, inputs, time_limit_ms):
             with slots:
                 st, _, to, _, err = jailed(
                     "compile", 20, 1024, 64 * 1024,
-                    ["gcc", "-O2", "-std=gnu11", "-o", "main", "main.c", "-lm"], work, empty, 30,
+                    ["gcc", "-O2", "-std=gnu11", "-o", "main", "main.c", "-lm"], work, empty,
+                    30 * SLOWDOWN,
                 )
             if to or not os.WIFEXITED(st) or os.WEXITSTATUS(st) != 0:
                 msg = clip(err.replace(work + "/", "").strip() or "Compilation failed")
@@ -146,7 +173,7 @@ def run_batch(language, code, inputs, time_limit_ms):
                     "run", 10, 512, 1024,
                     ["python3", "-I", "-B", "-c",
                      "import sys; compile(open('main.py', encoding='utf-8').read(), 'main.py', 'exec')"],
-                    work, empty, 15,
+                    work, empty, 15 * SLOWDOWN,
                 )
             if to or not os.WIFEXITED(st) or os.WEXITSTATUS(st) != 0:
                 lines = [l for l in err.strip().splitlines() if not l.startswith("Traceback") and "<string>" not in l]
@@ -165,7 +192,9 @@ def run_batch(language, code, inputs, time_limit_ms):
             with open(inp, "w", encoding="utf-8") as f:
                 f.write(stdin)
             with slots:
-                res = jailed("run", cpu_s, mem, 1024, argv, d, inp, limit_s * 2 + 1)
+                # Wall clock: stretched on slow hosts, but capped so a sleeping program can't hold a slot.
+                wall = min((limit_s * 2 + 1) * SLOWDOWN, max(limit_s * 2 + 1, 20))
+                res = jailed("run", cpu_s, mem, 1024, argv, d, inp, wall)
             return classify(*res, limit_s)
 
         futures = [pool.submit(one, i, s) for i, s in enumerate(inputs)]
@@ -195,7 +224,7 @@ def probe_sandbox():
     try:
         empty = os.path.join(d, ".empty")
         open(empty, "wb").close()
-        _, _, _, out, _ = jailed("run", 5, 512, 64, ["python3", "-I", "-c", PROBE], d, empty, 10)
+        _, _, _, out, _ = jailed("run", 5, 512, 64, ["python3", "-I", "-c", PROBE], d, empty, 10 * SLOWDOWN)
         net, _, files = out.strip().partition(" ")
         parts = [p for p, ok in (("seccomp", net == "blocked"), ("landlock", files == "blocked")) if ok]
         return "+".join(parts) or "limits-only"
@@ -229,7 +258,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/health"):
-            return self.send(200, {"ok": True, "busy": busy, "parallel": PARALLEL, **INFO})
+            return self.send(200, {"ok": True, "busy": busy, "parallel": PARALLEL, "cpus": round(CPUS, 2), **INFO})
         self.send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -276,7 +305,7 @@ def main():
         python=version_of(["python3", "--version"]),
         tokenSet=bool(TOKEN),
     )
-    print(f"arc-runner {VERSION} on :{PORT} · parallel={PARALLEL} · sandbox={INFO['sandbox']}", flush=True)
+    print(f"arc-runner {VERSION} on :{PORT} · cpus={CPUS:.2f} · parallel={PARALLEL} · sandbox={INFO['sandbox']}", flush=True)
     ThreadingHTTPServer.daemon_threads = True
     ThreadingHTTPServer.request_queue_size = 256  # a whole class pressing "Run" together
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
