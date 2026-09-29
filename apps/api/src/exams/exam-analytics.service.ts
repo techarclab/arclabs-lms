@@ -232,6 +232,25 @@ export class ExamAnalyticsService {
     };
   }
 
+  /** Camera evidence photos for one attempt (taken when the camera AI reported a violation). */
+  async snapshots(orgId: string, examId: string, attemptId: string) {
+    const a = await this.prisma.quizAttempt.findFirst({
+      where: { id: attemptId, quizId: examId, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!a) throw new NotFoundException();
+    const rows = await this.prisma.proctorSnapshot.findMany({
+      where: { attemptId },
+      orderBy: { takenAt: 'asc' },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      eventType: r.eventType,
+      takenAt: r.takenAt.toISOString(),
+      image: `data:image/jpeg;base64,${Buffer.from(r.image).toString('base64')}`,
+    }));
+  }
+
   async attemptDetail(
     orgId: string,
     examId: string,

@@ -137,6 +137,10 @@ enum ProctorEventType {
   SHORTCUT
   MULTIPLE_SCREENS // a second monitor was connected
   AI_EXTENSION // a browser extension injected UI into the exam page
+  FACE_MISSING // camera AI: no face in view
+  MULTIPLE_FACES // camera AI: someone else in view
+  LOOKING_AWAY // camera AI: head/eyes turned away from the screen
+  PHONE_DETECTED // camera AI: a phone in view
 }
 
 enum AttemptStatus {
@@ -693,6 +697,7 @@ model QuizAttempt {
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   batch        Batch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
   events       ProctorEvent[]
+  snapshots    ProctorSnapshot[]
 
   @@unique([quizId, userId, attemptNo])
   @@index([organizationId])
@@ -953,4 +958,18 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+/// A small camera photo taken at the moment the camera AI reported a violation (evidence).
+model ProctorSnapshot {
+  id        String           @id @default(uuid()) @db.Uuid
+  attemptId String           @db.Uuid
+  eventType ProctorEventType
+  image     Bytes // JPEG, ~20 KB
+  takenAt   DateTime         @default(now())
+
+  attempt QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@map("proctor_snapshots")
 }

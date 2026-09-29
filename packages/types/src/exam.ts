@@ -364,3 +364,11 @@ export interface AttemptDetail {
   startedAt: string;
   deadlineAt: string | null;
 }
+
+/** Camera evidence photo (staff view). */
+export interface ProctorSnapshotItem {
+  id: string;
+  eventType: string;
+  takenAt: string;
+  image: string; // data:image/jpeg;base64,…
+}

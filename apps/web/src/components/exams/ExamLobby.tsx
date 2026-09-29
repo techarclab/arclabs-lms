@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Bot,
+  ScanFace,
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
@@ -24,6 +25,7 @@ import { Button, cn } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { formatDateTime, timeUntil } from '@/lib/format';
 import { CameraView, useCamera } from './camera';
+import { useProctorAi } from './proctor-ai';
 import { findInjectedElements, hasExtraScreens } from './integrity';
 
 export function ExamLobby({
@@ -53,7 +55,14 @@ export function ExamLobby({
   const leftStrict = canTake && strict && resuming;
   // Ask for the camera as soon as the student opens an exam they can take.
   const camera = useCamera({ autoStart: lobby.requireCamera && canTake && !leftStrict });
-  const cameraReady = !lobby.requireCamera || camera.state === 'on';
+  // Camera AI face check (also loads the models before the exam starts).
+  const faceCheck = useProctorAi({
+    stream: camera.stream,
+    active: lobby.requireCamera && camera.state === 'on' && canTake && !leftStrict,
+    reportViolations: false,
+  });
+  const faceOk = faceCheck.status !== 'ready' || faceCheck.faces === 1;
+  const cameraReady = !lobby.requireCamera || (camera.state === 'on' && faceOk);
   // AI-help checks (re-checked every second: extensions can inject late, screens can be plugged in).
   const [extraScreen, setExtraScreen] = useState(false);
   const [injected, setInjected] = useState<string[]>([]);
@@ -187,6 +196,14 @@ export function ExamLobby({
                       the whole exam.
                     </li>
                   )}
+                  {lobby.requireCamera && (
+                    <li className="flex gap-2">
+                      <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
+                      you are in view, that you look at your screen and that no phone is used. You
+                      are warned first; if it continues it counts as a violation and a photo is
+                      saved for your instructor.
+                    </li>
+                  )}
                 </ul>
               </div>
 
@@ -216,6 +233,29 @@ export function ExamLobby({
                       {camera.state === 'denied'
                         ? 'Camera is blocked. Click the camera (or lock) icon at the left of the address bar → Camera → Allow. It turns on by itself once allowed; if not, press “Turn on camera” again or reload the page.'
                         : 'No camera found, or another app (Zoom, Teams, Camera) is using it. Close that app or connect a webcam, then press “Turn on camera”.'}
+                    </p>
+                  )}
+                  {camera.state === 'on' && (
+                    <p
+                      className={cn(
+                        'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] font-medium',
+                        faceCheck.status === 'loading'
+                          ? 'bg-ink-50 text-ink-600'
+                          : faceCheck.status === 'unavailable' || faceOk
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'bg-rose-50 text-rose-800',
+                      )}
+                    >
+                      <ScanFace className="size-4 shrink-0" />
+                      {faceCheck.status === 'loading'
+                        ? 'Starting the camera check…'
+                        : faceCheck.status === 'unavailable'
+                          ? 'Camera on.'
+                          : faceCheck.faces === 1
+                            ? 'Face detected — you’re ready.'
+                            : faceCheck.faces === 0 || faceCheck.faces === null
+                              ? 'We can’t see your face. Sit facing the camera in good light.'
+                              : 'More than one person is in view. Only you may be in the camera.'}
                     </p>
                   )}
                   <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
@@ -295,7 +335,9 @@ export function ExamLobby({
                   </Button>
                   <p className="text-center text-xs text-ink-500">
                     {!cameraReady
-                      ? 'Turn on your camera to start.'
+                      ? camera.state === 'on'
+                        ? 'Your face must be clearly visible, alone, to start.'
+                        : 'Turn on your camera to start.'
                       : !integrityOk
                         ? 'Fix the problems above to start.'
                         : resuming

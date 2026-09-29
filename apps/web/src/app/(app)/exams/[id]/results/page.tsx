@@ -17,7 +17,7 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { AttemptDetail, CandidateRow, ExamAnalytics } from '@arc/types';
+import type { AttemptDetail, CandidateRow, ExamAnalytics, ProctorSnapshotItem } from '@arc/types';
 import {
   Avatar,
   Badge,
@@ -73,6 +73,10 @@ const EVENT_LABEL: Record<string, string> = {
   CAMERA_OFF: 'Camera turned off',
   MULTIPLE_SCREENS: 'Second screen connected',
   AI_EXTENSION: 'AI / browser extension on page',
+  FACE_MISSING: 'Face not in camera',
+  MULTIPLE_FACES: 'Another person in camera',
+  LOOKING_AWAY: 'Looking away from screen',
+  PHONE_DETECTED: 'Phone in camera',
   SHORTCUT: 'Tried a blocked shortcut',
 };
 
@@ -735,6 +739,11 @@ function AttemptDialog({
     attemptId ? `/exams/${examId}/attempts/${attemptId}` : null,
     { orgId },
   );
+  const { data: photos } = useApi<ProctorSnapshotItem[]>(
+    attemptId ? `/exams/${examId}/attempts/${attemptId}/snapshots` : null,
+    { orgId },
+  );
+  const [bigPhoto, setBigPhoto] = useState<ProctorSnapshotItem | null>(null);
   return (
     <Dialog open={Boolean(attemptId)} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
@@ -812,6 +821,48 @@ function AttemptDialog({
                 </ol>
               ) : (
                 <p className="text-sm text-emerald-600">No violations recorded.</p>
+              )}
+              {photos && photos.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-semibold">
+                    Camera evidence{' '}
+                    <span className="font-normal text-ink-500">({photos.length})</span>
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {photos.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setBigPhoto(bigPhoto?.id === p.id ? null : p)}
+                        className="overflow-hidden rounded-xl border border-ink-200 text-left hover:ring-2 hover:ring-brand-400"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.image}
+                          alt={EVENT_LABEL[p.eventType] ?? p.eventType}
+                          className="aspect-[4/3] w-full object-cover"
+                        />
+                        <p className="px-2 py-1.5 text-[11px] leading-tight">
+                          <span className="block font-medium text-rose-700">
+                            {EVENT_LABEL[p.eventType] ?? p.eventType}
+                          </span>
+                          <span className="text-ink-400">
+                            {new Date(p.takenAt).toLocaleTimeString('en-IN')}
+                          </span>
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                  {bigPhoto && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={bigPhoto.image}
+                      alt="Camera evidence"
+                      className="mt-3 w-full rounded-xl border border-ink-200"
+                      onClick={() => setBigPhoto(null)}
+                    />
+                  )}
+                </div>
               )}
               <p className="mt-3 text-xs text-ink-400">
                 Started {formatDateTime(data.startedAt)} · IP {data.ipAddress ?? '—'} ·{' '}

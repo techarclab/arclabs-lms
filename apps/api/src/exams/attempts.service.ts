@@ -59,7 +59,15 @@ const COUNTED = new Set([
   // Signs of AI help
   'MULTIPLE_SCREENS',
   'AI_EXTENSION',
+  // Camera AI (only reported after an on-screen warning, see proctor-ai.ts)
+  'FACE_MISSING',
+  'MULTIPLE_FACES',
+  'LOOKING_AWAY',
+  'PHONE_DETECTED',
 ]);
+const CAMERA_EVENTS = new Set(['FACE_MISSING', 'MULTIPLE_FACES', 'LOOKING_AWAY', 'PHONE_DETECTED']);
+/** At most this many evidence photos per attempt. */
+const MAX_SNAPSHOTS = 30;
 /** A blur and a tab-hide usually fire together; count at most one violation per this many ms. */
 const VIOLATION_DEBOUNCE_MS = 2500;
 /** A session seen this recently is considered "still open" when another device starts. */
@@ -533,6 +541,17 @@ export class AttemptsService {
       },
       select: { violationCount: true },
     });
+    if (input.snapshot && CAMERA_EVENTS.has(input.type)) {
+      const count = await this.prisma.proctorSnapshot.count({ where: { attemptId } });
+      if (count < MAX_SNAPSHOTS)
+        await this.prisma.proctorSnapshot.create({
+          data: {
+            attemptId,
+            eventType: input.type,
+            image: Buffer.from(input.snapshot.slice(input.snapshot.indexOf(',') + 1), 'base64'),
+          },
+        });
+    }
     const limit = exam.maxViolations;
     let autoSubmitted = false;
     if (counted && limit > 0 && updated.violationCount >= limit) {

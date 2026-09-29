@@ -279,6 +279,16 @@ export class ExamsController {
     res.send(body);
   }
 
+  @Get(':id/attempts/:attemptId/snapshots')
+  @RequirePermission('exam.results.view')
+  snapshots(
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+  ) {
+    return this.analytics.snapshots(org.organizationId, id, attemptId);
+  }
+
   @Get(':id/attempts/:attemptId')
   @RequirePermission('exam.results.view')
   attempt(

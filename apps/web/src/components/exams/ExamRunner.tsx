@@ -18,6 +18,7 @@ import {
   Maximize,
   Send,
   ShieldAlert,
+  ScanFace,
   Timer,
 } from 'lucide-react';
 import type {
@@ -32,6 +33,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
 import { PromptText } from './AnswerView';
 import { CameraView, stopCamera, useCamera } from './camera';
+import { ISSUE_MESSAGE, useProctorAi, type CameraIssue } from './proctor-ai';
 import { CodingAnswer } from './code/CodingAnswer';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
 
@@ -75,9 +77,10 @@ export function ExamRunner({
   const [visited, setVisited] = useState<Set<string>>(() => new Set([qs[0]?.id ?? '']));
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [violations, setViolations] = useState(initial.violationCount);
-  const [warning, setWarning] = useState<{ type: LockdownEvent; remaining: number | null } | null>(
-    null,
-  );
+  const [warning, setWarning] = useState<{
+    type: LockdownEvent | CameraIssue;
+    remaining: number | null;
+  } | null>(null);
   const [inFullscreen, setInFullscreen] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [finishing, setFinishing] = useState<string | null>(null);
@@ -225,14 +228,15 @@ export function ExamRunner({
 
   // ───────── Lockdown ─────────
   const onEvent = useCallback(
-    async (type: LockdownEvent, meta?: Record<string, string>) => {
+    async (type: LockdownEvent | CameraIssue, meta?: Record<string, string>, snapshot?: string) => {
       if (done.current) return;
       try {
-        // keepalive: the report still reaches the server if the student is closing the page.
+        // keepalive: the report still reaches the server if the student is closing the page
+        // (browsers cap keepalive bodies at 64 KB, so not when a photo is attached).
         const r = await call<ProctorEventResult>(
           `/my/attempts/${session.attemptId}/events`,
-          { type, ...(meta ? { meta } : {}) },
-          true,
+          { type, ...(meta ? { meta } : {}), ...(snapshot ? { snapshot } : {}) },
+          !snapshot,
         );
         if (r.autoSubmitted) {
           void finish('violations');
@@ -250,8 +254,14 @@ export function ExamRunner({
     [call, finish, handleError, session.attemptId, strict],
   );
 
-  // ───────── Camera (presence only — never recorded) ─────────
+  // ───────── Camera + camera AI (face, gaze, phone; a photo only when a rule is broken) ─────────
   const camera = useCamera({ autoStart: session.requireCamera });
+  const cameraAi = useProctorAi({
+    stream: camera.stream,
+    active: session.requireCamera && camera.state === 'on' && !finishing,
+    reportViolations: true,
+    onViolation: (issue, photo, meta) => void onEvent(issue, meta, photo),
+  });
   const cameraBlocked =
     session.requireCamera && !['on', 'requesting', 'idle'].includes(camera.state);
   useEffect(() => {
@@ -676,6 +686,21 @@ export function ExamRunner({
         </div>
       )}
 
+      {/* Camera AI warning — shown before anything is counted */}
+      {cameraAi.warning && !cameraBlocked && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-40 flex justify-center px-4">
+          <div className="flex animate-pulse items-center gap-3 rounded-2xl bg-rose-600 px-5 py-3 text-white shadow-2xl shadow-rose-900/30">
+            <ScanFace className="size-6 shrink-0" />
+            <div>
+              <p className="text-[15px] font-semibold">{ISSUE_MESSAGE[cameraAi.warning]}</p>
+              <p className="text-xs text-rose-100">
+                If this continues it counts as a violation and a photo is saved.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Camera gate */}
       {cameraBlocked && (inFullscreen || !session.requireFullscreen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 p-6 backdrop-blur-xl">
@@ -708,7 +733,9 @@ export function ExamRunner({
                     ? 'A second screen was detected. Disconnect it — only one screen is allowed.'
                     : warning?.type === 'AI_EXTENSION'
                       ? 'A browser extension (such as an AI assistant) was detected on the exam page. AI help is not allowed.'
-                      : 'An exam rule was broken.'}{' '}
+                      : warning && warning.type in ISSUE_MESSAGE
+                        ? `Camera check: ${ISSUE_MESSAGE[warning.type as CameraIssue]} A photo was saved.`
+                        : 'An exam rule was broken.'}{' '}
               This has been recorded and is visible to your instructor.
             </p>
             {warning?.remaining !== null && warning?.remaining !== undefined && (

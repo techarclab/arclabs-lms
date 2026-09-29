@@ -313,8 +313,18 @@ export const proctorEventSchema = z.object({
     'SHORTCUT',
     'MULTIPLE_SCREENS',
     'AI_EXTENSION',
+    'FACE_MISSING',
+    'MULTIPLE_FACES',
+    'LOOKING_AWAY',
+    'PHONE_DETECTED',
   ]),
   meta: z.record(z.string(), z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
+  /** Camera AI events: a small JPEG taken at that moment (data URL), kept as evidence. */
+  snapshot: z
+    .string()
+    .max(90_000)
+    .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/, 'Snapshot must be a JPEG data URL')
+    .optional(),
 });
 export type ProctorEventInput = z.infer<typeof proctorEventSchema>;
 
