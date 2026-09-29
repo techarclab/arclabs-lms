@@ -27,6 +27,9 @@ export const ISSUE_MESSAGE: Record<CameraIssue, string> = {
 // ───────── Detection models (loaded once, from our own site) ─────────
 
 type Models = { face: FaceLandmarker; objects: ObjectDetector | null };
+
+/** A phone held up to a laptop camera often scores only 0.3–0.5, so accept from 0.3. */
+const PHONE_MIN_SCORE = 0.3;
 let modelsPromise: Promise<Models | null> | null = null;
 
 export function loadProctorModels(): Promise<Models | null> {
@@ -58,7 +61,7 @@ export function loadProctorModels(): Promise<Models | null> {
         ObjectDetector.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: '/proctor/efficientdet_lite0.tflite', delegate },
           runningMode: 'VIDEO',
-          scoreThreshold: 0.45,
+          scoreThreshold: PHONE_MIN_SCORE,
           maxResults: 3,
           categoryAllowlist: ['cell phone'],
         }),
@@ -110,7 +113,7 @@ function observe(models: Models, video: HTMLVideoElement, t: number, withPhone: 
   if (withPhone && models.objects) {
     const d = models.objects.detectForVideo(video, t + 0.001);
     const best = Math.max(0, ...d.detections.map((x) => x.categories[0]?.score ?? 0));
-    obs.phone = best > 0;
+    obs.phone = best >= PHONE_MIN_SCORE;
     obs.phoneScore = Math.round(best * 100) / 100;
   }
   return obs;
@@ -126,24 +129,30 @@ export interface MonitorOutput {
 }
 
 const WARN_AFTER: Record<CameraIssue, number> = {
-  FACE_MISSING: 3000,
-  LOOKING_AWAY: 2500,
+  FACE_MISSING: 1500,
+  LOOKING_AWAY: 1200,
   MULTIPLE_FACES: 0,
   PHONE_DETECTED: 0,
 };
 const VIOLATE_AFTER: Record<CameraIssue, number> = {
-  FACE_MISSING: 8000,
-  LOOKING_AWAY: 6000,
-  MULTIPLE_FACES: 2500,
-  PHONE_DETECTED: 2000,
+  FACE_MISSING: 6000,
+  LOOKING_AWAY: 4000,
+  MULTIPLE_FACES: 2000,
+  PHONE_DETECTED: 1500,
 };
+/** Head turned this many degrees from the student's normal pose counts as looking away. */
+export const YAW_LIMIT = 25;
+const PITCH_LIMIT = 20;
+const PITCH_LIMIT_TYPING = 35;
+const GAZE_SIDE_LIMIT = 0.55;
+const GAZE_DOWN_LIMIT = 0.55;
 const CLEAR_AFTER_MS = 800; // flicker tolerance
 const REPEAT_WINDOW_MS = 90_000; // 3 warnings of the same kind in this window → violation
 const REPEAT_LIMIT = 3;
 const COOLDOWN_MS = 30_000; // don't report the same kind again right away
-const GLANCE_MIN_MS = 1000; // look-aways shorter than this are ignored
+const GLANCE_MIN_MS = 600; // look-aways shorter than this are ignored
 const GLANCE_WINDOW_MS = 60_000;
-const GLANCE_LIMIT = 8; // 8 look-aways within a minute → warning + violation
+const GLANCE_LIMIT = 6; // 6 look-aways within a minute → violation (warning from the 3rd)
 
 export class CameraMonitor {
   private since = new Map<CameraIssue, number>();
@@ -179,12 +188,12 @@ export class CameraMonitor {
       const dYaw = Math.abs(o.yaw - b.yaw);
       const dPitch = Math.abs(o.pitch - b.pitch);
       // Glancing at the keyboard while typing is normal; looking down while NOT typing isn't.
-      const pitchLimit = typingRecently ? 38 : 22;
+      const pitchLimit = typingRecently ? PITCH_LIMIT_TYPING : PITCH_LIMIT;
       const away =
-        dYaw > 30 ||
+        dYaw > YAW_LIMIT ||
         dPitch > pitchLimit ||
-        (o.gazeSide ?? 0) > 0.62 ||
-        (!typingRecently && (o.gazeDown ?? 0) > 0.6);
+        (o.gazeSide ?? 0) > GAZE_SIDE_LIMIT ||
+        (!typingRecently && (o.gazeDown ?? 0) > GAZE_DOWN_LIMIT);
       if (away) out.push('LOOKING_AWAY');
     }
     if (o.phone) out.push('PHONE_DETECTED');
@@ -194,7 +203,7 @@ export class CameraMonitor {
   update(o: FrameObservation, now: number, typingRecently = false): MonitorOutput {
     const present = new Set(this.issues(o, typingRecently));
     // The phone detector runs on some frames only: keep its last answer in between.
-    if (o.phone === undefined && now - this.phoneHitAt < 1500) present.add('PHONE_DETECTED');
+    if (o.phone === undefined && now - this.phoneHitAt < 2000) present.add('PHONE_DETECTED');
     if (o.phone) this.phoneHitAt = now;
 
     let warning: CameraIssue | null = null;
@@ -211,7 +220,7 @@ export class CameraMonitor {
       this.awayStart = null;
     }
     this.glances = this.glances.filter((g) => now - g < GLANCE_WINDOW_MS);
-    if (this.glances.length >= GLANCE_LIMIT - 2) warning = 'LOOKING_AWAY';
+    if (this.glances.length >= GLANCE_LIMIT - 3) warning = 'LOOKING_AWAY';
     if (
       this.glances.length >= GLANCE_LIMIT &&
       now - (this.reportedAt.get('LOOKING_AWAY') ?? -Infinity) >= COOLDOWN_MS
@@ -292,10 +301,13 @@ export function useProctorAi({
   active,
   reportViolations,
   onViolation,
+  debug = false,
 }: {
   stream: MediaStream | null;
   active: boolean;
   reportViolations: boolean;
+  /** Fill `debugInfo` with live head angle / phone score (the ?camcheck=1 test view). */
+  debug?: boolean;
   onViolation?: (
     issue: CameraIssue,
     snapshot: string | undefined,
@@ -305,6 +317,10 @@ export function useProctorAi({
   const [status, setStatus] = useState<ProctorAiStatus>('loading');
   const [faces, setFaces] = useState<number | null>(null);
   const [warning, setWarning] = useState<CameraIssue | null>(null);
+  /** Live numbers for the on-screen check (only filled when `debug` is on). */
+  const [debugInfo, setDebugInfo] = useState<(FrameObservation & { at: number }) | null>(null);
+  /** False when frames stop being analysed (camera frozen, errors) — shown to the student. */
+  const [running, setRunning] = useState(false);
   const cb = useRef(onViolation);
   cb.current = onViolation;
 
@@ -333,18 +349,26 @@ export function useProctorAi({
     window.addEventListener('keydown', onKey, true);
     let tick = 0;
     let lastT = 0;
+    let lastOk = 0;
+    let errorLogged = false;
+    let lastPhone: Pick<FrameObservation, 'phone' | 'phoneScore'> = {};
 
     const loop = async () => {
       if (stopped) return;
       const models = await loadProctorModels();
       let delay = 400;
+      if (video.paused) void video.play().catch(() => {});
       if (models && video.readyState >= 2 && document.visibilityState === 'visible') {
         const started = performance.now();
         const t = Math.max(started, lastT + 1);
         lastT = t;
         try {
-          const o = observe(models, video, t, tick++ % 3 === 0);
+          const o = observe(models, video, t, tick++ % 2 === 0);
+          if (o.phone !== undefined) lastPhone = { phone: o.phone, phoneScore: o.phoneScore };
+          lastOk = Date.now();
+          setRunning(true);
           setFaces(o.faces);
+          if (debug) setDebugInfo({ ...lastPhone, ...o, at: Date.now() });
           // Last observation, for support staff debugging a student's camera from the console.
           (window as unknown as { __arcCameraAi?: FrameObservation }).__arcCameraAi = o;
           if (reportViolations) {
@@ -358,12 +382,15 @@ export function useProctorAi({
               cb.current?.(out.violation, snapshot(video), meta);
             }
           }
-        } catch {
-          /* a dropped frame is fine */
+        } catch (e) {
+          // A dropped frame is fine; keep one line in the console for support.
+          if (!errorLogged) console.warn('Camera AI frame failed', e);
+          errorLogged = true;
         }
         // Slow machines: back off so the exam itself stays smooth.
         if (performance.now() - started > 250) delay = 900;
       }
+      if (Date.now() - lastOk > 5000) setRunning(false);
       timer = setTimeout(() => void loop(), delay);
     };
     void loop();
@@ -373,8 +400,9 @@ export function useProctorAi({
       window.removeEventListener('keydown', onKey, true);
       video.srcObject = null;
       setWarning(null);
+      setRunning(false);
     };
-  }, [active, stream, status, reportViolations]);
+  }, [active, stream, status, reportViolations, debug]);
 
-  return { status, faces, warning };
+  return { status, faces, warning, running, debugInfo };
 }

@@ -26,6 +26,7 @@ import { LogoMark } from '@/components/brand/Logo';
 import { formatDateTime, timeUntil } from '@/lib/format';
 import { CameraView, useCamera } from './camera';
 import { useProctorAi } from './proctor-ai';
+import { CameraAiNumbers, cameraCheckEnabled } from './CameraAiStatus';
 import { findInjectedElements, hasExtraScreens } from './integrity';
 
 export function ExamLobby({
@@ -56,7 +57,9 @@ export function ExamLobby({
   // Ask for the camera as soon as the student opens an exam they can take.
   const camera = useCamera({ autoStart: lobby.requireCamera && canTake && !leftStrict });
   // Camera AI face check (also loads the models before the exam starts).
+  const [camCheck] = useState(cameraCheckEnabled);
   const faceCheck = useProctorAi({
+    debug: camCheck,
     stream: camera.stream,
     active: lobby.requireCamera && camera.state === 'on' && canTake && !leftStrict,
     reportViolations: false,
@@ -250,13 +253,16 @@ export function ExamLobby({
                       {faceCheck.status === 'loading'
                         ? 'Starting the camera check…'
                         : faceCheck.status === 'unavailable'
-                          ? 'Camera on.'
+                          ? 'Camera on. (Camera AI can’t run in this browser — use the latest Chrome or Edge.)'
                           : faceCheck.faces === 1
                             ? 'Face detected — you’re ready.'
                             : faceCheck.faces === 0 || faceCheck.faces === null
                               ? 'We can’t see your face. Sit facing the camera in good light.'
                               : 'More than one person is in view. Only you may be in the camera.'}
                     </p>
+                  )}
+                  {camCheck && camera.state === 'on' && (
+                    <CameraAiNumbers info={faceCheck.debugInfo} />
                   )}
                   <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
                     Keep your face clearly visible. The camera must stay on until you submit.

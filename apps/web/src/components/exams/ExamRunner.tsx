@@ -34,6 +34,7 @@ import { ApiError } from '@/lib/api';
 import { PromptText } from './AnswerView';
 import { CameraView, stopCamera, useCamera } from './camera';
 import { ISSUE_MESSAGE, useProctorAi, type CameraIssue } from './proctor-ai';
+import { CameraAiNumbers, CameraAiStatus, cameraCheckEnabled } from './CameraAiStatus';
 import { CodingAnswer } from './code/CodingAnswer';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
 
@@ -256,7 +257,9 @@ export function ExamRunner({
 
   // ───────── Camera + camera AI (face, gaze, phone; a photo only when a rule is broken) ─────────
   const camera = useCamera({ autoStart: session.requireCamera });
+  const [camCheck] = useState(cameraCheckEnabled);
   const cameraAi = useProctorAi({
+    debug: camCheck,
     stream: camera.stream,
     active: session.requireCamera && camera.state === 'on' && !finishing,
     reportViolations: true,
@@ -589,6 +592,10 @@ export function ExamRunner({
           {session.requireCamera && (
             <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
               <CameraView stream={camera.stream} state={camera.state} compact />
+              {camera.state === 'on' && (
+                <CameraAiStatus status={cameraAi.status} running={cameraAi.running} />
+              )}
+              {camCheck && <CameraAiNumbers info={cameraAi.debugInfo} />}
             </div>
           )}
 
