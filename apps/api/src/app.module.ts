@@ -10,6 +10,7 @@ import { ExamsModule } from './exams/exams.module';
 import { HealthModule } from './health/health.module';
 import { JoinModule } from './join/join.module';
 import { QueueModule } from './mail/queue.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { LabsModule } from './labs/labs.module';
 import { MaterialsModule } from './materials/materials.module';
 import { MembersModule } from './members/members.module';
@@ -36,6 +37,7 @@ import { StorageModule } from './storage/storage.module';
     JoinModule,
     MaterialsModule,
     LabsModule,
+    AnnouncementsModule,
   ],
 })
 export class AppModule {}

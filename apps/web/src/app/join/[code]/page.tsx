@@ -22,7 +22,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import type { JoinInfo, JoinResult } from '@arc/types';
-import { joinOrganizationSchema } from '@arc/validation';
+import { emailOnDomains, joinOrganizationSchema } from '@arc/validation';
 import { Avatar, Button, cn, Field, Input, Select } from '@arc/ui';
 import { Logo } from '@/components/brand/Logo';
 import { JoinCodeForm } from '@/components/join/JoinCodeForm';
@@ -57,6 +57,8 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const [rollNo, setRollNo] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [email, setEmail] = useState('');
+  const [collegeEmail, setCollegeEmail] = useState('');
+  const [loginTouched, setLoginTouched] = useState(false);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const r = await api<JoinResult>(`/join/${encodeURIComponent(code)}`, {
       method: 'POST',
       token,
-      body: { fullName: name, externalId: rollNo, departmentId },
+      body: { fullName: name, externalId: rollNo, departmentId, collegeEmail },
     });
     try {
       localStorage.setItem('arc.currentOrgId', r.organizationId);
@@ -99,9 +101,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
       fullName,
       externalId: rollNo,
       departmentId,
+      collegeEmail,
     });
     if (!details.success) {
       setError(details.error.issues[0]?.message ?? 'Check your details');
+      return;
+    }
+    if (info && !emailOnDomains(collegeEmail, info.collegeEmailDomains)) {
+      setError(`Use your college email (ending in @${info.collegeEmailDomains.join(' or @')})`);
       return;
     }
     if (!firebaseUser && (!email.trim() || !password)) {
@@ -310,16 +317,49 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                 </Field>
               </div>
 
+              <Field
+                label="College email"
+                htmlFor="j-college"
+                required
+                hint={
+                  info.collegeEmailDomains.length
+                    ? `The email your college gave you (…@${info.collegeEmailDomains.join(' or …@')}). Exam reminders are sent here.`
+                    : 'The email your college gave you. Exam reminders are sent here.'
+                }
+              >
+                <Input
+                  id="j-college"
+                  required
+                  type="email"
+                  leading={<Mail />}
+                  value={collegeEmail}
+                  onChange={(e) => {
+                    setCollegeEmail(e.target.value.trim());
+                    // New accounts log in with the college email unless they choose another.
+                    if (!loginTouched) setEmail(e.target.value.trim());
+                  }}
+                  placeholder={
+                    info.collegeEmailDomains[0]
+                      ? `rollno@${info.collegeEmailDomains[0]}`
+                      : 'you@college.edu'
+                  }
+                  autoComplete="email"
+                />
+              </Field>
+
               {!firebaseUser && (
                 <>
-                  <Field label="Email" htmlFor="j-email" required>
+                  <Field label="Login email" htmlFor="j-email" required>
                     <Input
                       id="j-email"
                       required
                       type="email"
                       leading={<Mail />}
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setLoginTouched(true);
+                      }}
                       placeholder="you@college.edu"
                       autoComplete="email"
                     />

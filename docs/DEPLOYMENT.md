@@ -316,6 +316,24 @@ browser, nothing is uploaded), check the questions it found, then **Import**. Wi
 paper must use the usual layout: `1. question`, `A) option`, `Answer: B` or an answer key at the end.
 Scanned (photo) PDFs have no text — paste the questions instead.
 
+## 16. Announcements and exam reminders (email)
+
+**College emails.** People → Student registration link → **College email domain** (e.g.
+`mrec.edu.in`). Students must then register with their institution email; announcements go there.
+Students who registered earlier without one see a banner asking for it; until then their login
+email is used.
+
+**Sending.** Announcements → pick *General message* or *Exam reminder* (or click **Send reminder**
+on an exam), choose all students / departments / students of an exam (optionally only those who
+haven’t taken it), check the reach count, **Send**. Each message is emailed in Bcc batches (students
+don’t see each other’s addresses, replies come to the sender) and shown under **Announcements** in
+the student portal.
+
+**Email setup (API project on Vercel):** `EMAIL_DELIVERY=direct`, `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`. Daily limits: a Gmail account ≈ 500 recipients/day, Google
+Workspace ≈ 2,000/day, Brevo free 300/day. For more students use a paid SMTP (Brevo, Resend, SES).
+Without SMTP, announcements still appear in the student portal.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

@@ -81,6 +81,7 @@ describe('College join links', () => {
       fullName: 'Ravi Teja',
       externalId: '22eg105a01',
       departmentId: ece,
+      collegeEmail: 'Ravi@Anurag.edu.in',
     });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ organizationName: 'Anurag University', alreadyMember: false });
@@ -92,12 +93,17 @@ describe('College join links', () => {
     const m = await prisma.organizationMember.findFirst({
       where: { organizationId: orgId, user: { firebaseUid: uid } },
     });
-    expect(m).toMatchObject({ externalId: '22EG105A01', departmentId: ece });
+    expect(m).toMatchObject({
+      externalId: '22EG105A01',
+      departmentId: ece,
+      collegeEmail: 'ravi@anurag.edu.in',
+    });
 
     const again = await api(app, uid).post(`/join/${code}`, {
       fullName: 'Ravi Teja',
       externalId: '22EG105A01',
       departmentId: ece,
+      collegeEmail: 'ravi@anurag.edu.in',
     });
     expect(again.body.alreadyMember).toBe(true);
   });
@@ -119,6 +125,7 @@ describe('College join links', () => {
           fullName: 'Someone',
           externalId: 'X1',
           departmentId: otherDept,
+          collegeEmail: 'someone@anurag.edu.in',
         })
       ).status,
     ).toBe(400);
@@ -126,6 +133,7 @@ describe('College join links', () => {
       fullName: 'Someone',
       externalId: '22EG105A02',
       departmentId: ece,
+      collegeEmail: 'someone@anurag.edu.in',
     });
     expect(ok.body.alreadyMember).toBe(false);
   });
@@ -173,6 +181,7 @@ describe('College join links', () => {
       fullName: 'Ravi Teja',
       externalId: '22EG105A01',
       departmentId: ece,
+      collegeEmail: 'ravi@anurag.edu.in',
     });
     expect(refused.body.error.code).toBe('MEMBERSHIP_DISABLED');
 

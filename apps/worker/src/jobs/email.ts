@@ -11,7 +11,15 @@ const transport = nodemailer.createTransport({
 });
 
 export async function sendEmail(job: Job<EmailJob>) {
-  const { to, subject, text, html } = job.data;
-  const info = await transport.sendMail({ from: env.MAIL_FROM, to, subject, text, html });
+  const { to, bcc, replyTo, subject, text, html } = job.data;
+  const info = await transport.sendMail({
+    from: env.MAIL_FROM,
+    to,
+    bcc,
+    replyTo,
+    subject,
+    text,
+    html,
+  });
   return { messageId: info.messageId };
 }

@@ -10,11 +10,50 @@ export const joinOrganizationSchema = z.object({
     .max(60)
     .transform((v) => v.toUpperCase()),
   departmentId: z.uuid({ message: 'Choose your department' }),
+  /** The email the institution gave the student (announcements go here). */
+  collegeEmail: z
+    .email('Enter your college email')
+    .trim()
+    .max(200)
+    .transform((v) => v.toLowerCase()),
 });
 export type JoinOrganizationInput = z.input<typeof joinOrganizationSchema>;
 export type JoinOrganizationParsed = z.output<typeof joinOrganizationSchema>;
 
-export const setJoinSettingsSchema = z.object({ enabled: z.boolean() });
+export const setJoinSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  /** e.g. ["mrec.edu.in"] — students must register with an email on one of these. */
+  collegeEmailDomains: z
+    .array(
+      z
+        .string()
+        .trim()
+        .toLowerCase()
+        .transform((d) => d.replace(/^@/, ''))
+        .pipe(
+          z.string().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/, 'Enter a domain like college.edu.in'),
+        ),
+    )
+    .max(10)
+    .optional(),
+});
+
+/** True when the email is on one of the domains (or a subdomain of one). Empty list = any. */
+export function emailOnDomains(email: string, domains: readonly string[]) {
+  if (!domains.length) return true;
+  const host = email.trim().toLowerCase().split('@')[1] ?? '';
+  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+export const setCollegeEmailSchema = z.object({
+  organizationId: z.uuid(),
+  collegeEmail: z
+    .email('Enter your college email')
+    .trim()
+    .max(200)
+    .transform((v) => v.toLowerCase()),
+});
+export type SetCollegeEmailInput = z.infer<typeof setCollegeEmailSchema>;
 
 /** Normalises what a student types: " anurag-7k2q " → "ANURAG-7K2Q". */
 export function normalizeJoinCode(code: string) {

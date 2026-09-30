@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Copy, Link2, MessageCircle, RefreshCw } from 'lucide-react';
+import { AtSign, Copy, Link2, MessageCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { JoinSettings } from '@arc/types';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Switch } from '@arc/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Switch,
+} from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
 
 /** Admin card to open/close student self-registration and share the college's join link. */
@@ -13,6 +22,10 @@ export function JoinLinkCard({ orgId, orgName }: { orgId: string; orgName: strin
   const { data, mutate: set } = useApi<JoinSettings>('/join-settings', { orgId });
   const [busy, setBusy] = useState(false);
   const [origin, setOrigin] = useState('');
+  const [domains, setDomains] = useState<string | null>(null);
+  const domainText = domains ?? (data?.collegeEmailDomains ?? []).join(', ');
+  const domainsChanged =
+    domains !== null && domains.trim() !== (data?.collegeEmailDomains ?? []).join(', ');
   useEffect(() => setOrigin(window.location.origin), []);
   const link = data?.code ? `${origin}/join/${data.code}` : '';
 
@@ -105,7 +118,51 @@ export function JoinLinkCard({ orgId, orgName }: { orgId: string; orgName: strin
               </button>
             </div>
           </>
-        ) : (
+        ) : null}
+        <div className="border-t border-ink-100 pt-4">
+          <label
+            htmlFor="jl-domains"
+            className="flex items-center gap-1.5 text-sm font-medium text-ink-800"
+          >
+            <AtSign className="size-3.5 text-ink-400" /> College email domain
+          </label>
+          <p className="mt-0.5 text-[12.5px] text-ink-500">
+            Students must register with their institution email (e.g. rollno@college.edu.in).
+            Announcements and exam reminders go there. Separate several with commas.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Input
+              id="jl-domains"
+              value={domainText}
+              onChange={(e) => setDomains(e.target.value)}
+              placeholder="college.edu.in"
+            />
+            <Button
+              variant="secondary"
+              disabled={!data || busy || !domainsChanged}
+              onClick={() =>
+                run(
+                  () =>
+                    mutate<JoinSettings>(
+                      '/join-settings',
+                      'PUT',
+                      {
+                        collegeEmailDomains: domainText
+                          .split(/[\s,;]+/)
+                          .map((d) => d.trim())
+                          .filter(Boolean),
+                      },
+                      orgId,
+                    ),
+                  'College email domain saved',
+                ).then(() => setDomains(null))
+              }
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+        {!(data?.enabled && data.code) && (
           <p className="text-sm text-ink-500">
             Turn this on to get a link and code for {orgName}. Share it with students before the
             exam; turn it off when registration is over.

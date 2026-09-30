@@ -34,6 +34,8 @@ export class MailService {
           await this.smtp().sendMail({
             from: this.env.MAIL_FROM,
             to: job.to,
+            bcc: job.bcc,
+            replyTo: job.replyTo,
             subject: job.subject,
             text: job.text,
             html: job.html,

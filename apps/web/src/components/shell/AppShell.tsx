@@ -7,6 +7,7 @@ import { Button } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { OrgProvider } from '@/components/providers/OrgProvider';
+import { CollegeEmailBanner } from '@/components/announcements/CollegeEmailBanner';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -54,7 +55,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="lg:pl-[264px]">
         <Topbar onMenu={() => setNavOpen(true)} />
-        <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-10">{children}</main>
+        <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 lg:px-10">
+          <CollegeEmailBanner />
+          {children}
+        </main>
       </div>
     </OrgProvider>
   );

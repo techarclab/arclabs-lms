@@ -7,7 +7,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { JoinInfo, JoinResult, JoinSettings } from '@arc/types';
-import { normalizeJoinCode, type JoinOrganizationParsed } from '@arc/validation';
+import {
+  emailOnDomains,
+  normalizeJoinCode,
+  type JoinOrganizationParsed,
+  type SetCollegeEmailInput,
+} from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import type { FirebaseIdentityInfo } from '../auth/auth.types';
@@ -30,12 +35,34 @@ export class JoinService {
   async settings(orgId: string): Promise<JoinSettings> {
     const org = await this.prisma.organization.findUniqueOrThrow({
       where: { id: orgId },
-      select: { joinCode: true, joinEnabled: true },
+      select: { joinCode: true, joinEnabled: true, collegeEmailDomains: true },
     });
     const learnerCount = await this.prisma.organizationMember.count({
       where: { organizationId: orgId, status: 'ACTIVE', roles: { has: 'LEARNER' } },
     });
-    return { enabled: org.joinEnabled, code: org.joinCode, learnerCount };
+    return {
+      enabled: org.joinEnabled,
+      code: org.joinCode,
+      learnerCount,
+      collegeEmailDomains: org.collegeEmailDomains,
+    };
+  }
+
+  async setDomains(actor: User, orgId: string, domains: string[]): Promise<JoinSettings> {
+    const clean = [...new Set(domains.map((d) => d.toLowerCase()))];
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: { collegeEmailDomains: clean },
+    });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'join_link.email_domains',
+      entityType: 'organization',
+      entityId: orgId,
+      meta: { domains: clean },
+    });
+    return this.settings(orgId);
   }
 
   async setEnabled(actor: User, orgId: string, enabled: boolean): Promise<JoinSettings> {
@@ -120,7 +147,32 @@ export class JoinService {
       organizationType: org.type,
       primaryColor: org.primaryColor,
       departments,
+      collegeEmailDomains: org.collegeEmailDomains,
     };
+  }
+
+  private checkCollegeEmail(email: string, domains: string[]) {
+    if (!emailOnDomains(email, domains))
+      throw new BadRequestException({
+        code: 'COLLEGE_EMAIL_REQUIRED',
+        message: `Use your college email (ending in @${domains.join(' or @')})`,
+      });
+  }
+
+  /** A student adds / corrects the college email for one of their colleges. */
+  async setCollegeEmail(user: User, input: SetCollegeEmailInput) {
+    const m = await this.prisma.organizationMember.findUnique({
+      where: { organizationId_userId: { organizationId: input.organizationId, userId: user.id } },
+      include: { organization: { select: { collegeEmailDomains: true } } },
+    });
+    if (!m || m.status !== 'ACTIVE')
+      throw new NotFoundException('You aren’t a member of this college');
+    this.checkCollegeEmail(input.collegeEmail, m.organization.collegeEmailDomains);
+    await this.prisma.organizationMember.update({
+      where: { id: m.id },
+      data: { collegeEmail: input.collegeEmail },
+    });
+    return { collegeEmail: input.collegeEmail };
   }
 
   async join(
@@ -138,6 +190,7 @@ export class JoinService {
         code: 'INVALID_DEPARTMENT',
         message: 'Choose your department from the list',
       });
+    this.checkCollegeEmail(input.collegeEmail, org.collegeEmailDomains);
     const user = existing ?? (await this.auth.sync(identity, { fullName: input.fullName }));
     if (user.status !== 'ACTIVE')
       throw new ForbiddenException({
@@ -155,6 +208,11 @@ export class JoinService {
           message: `Your access to ${org.name} has been disabled. Contact your college admin.`,
         });
       }
+      if (!membership.collegeEmail)
+        await this.prisma.organizationMember.update({
+          where: { id: membership.id },
+          data: { collegeEmail: input.collegeEmail },
+        });
       return { organizationId: org.id, organizationName: org.name, alreadyMember: true };
     }
 
@@ -166,6 +224,7 @@ export class JoinService {
           roles: ['LEARNER'],
           departmentId: input.departmentId,
           externalId: input.externalId,
+          collegeEmail: input.collegeEmail,
         },
       }),
       // Keep the name the student typed if their account had only an email-derived name.

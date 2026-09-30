@@ -102,3 +102,31 @@ export function accessCodeEmail(o: {
   ].join('\n');
   return { subject, html, text };
 }
+
+/** An announcement / exam reminder to students. */
+export function announcementEmail(o: {
+  orgName: string;
+  subject: string;
+  body: string;
+  linkUrl: string | null;
+  linkLabel: string | null;
+  senderName: string;
+  portalUrl: string;
+}) {
+  const paragraphs = o.body
+    .split(/\n{2,}/)
+    .map((para) => p(escText(para).replace(/\n/g, '<br>')))
+    .join('');
+  const html = layout({
+    preheader: o.body.slice(0, 120),
+    heading: o.subject,
+    body:
+      paragraphs +
+      p(`<span style="color:#6b7389">— ${escText(o.senderName)}, ${escText(o.orgName)}</span>`),
+    ctaLabel: o.linkLabel || (o.linkUrl ? 'Open' : 'Open the portal'),
+    ctaUrl: o.linkUrl || o.portalUrl,
+    footer: `You received this because you are a student of ${o.orgName} on ARC LABS.`,
+  });
+  const text = `${o.subject}\n\n${o.body}\n\n— ${o.senderName}, ${o.orgName}\n\n${o.linkUrl || o.portalUrl}\n`;
+  return { subject: o.subject, html, text };
+}

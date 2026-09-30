@@ -58,4 +58,7 @@ export interface EmailJob {
   subject: string;
   text: string;
   html?: string;
+  /** Blind copies (announcements go out in batches). */
+  bcc?: string[];
+  replyTo?: string;
 }

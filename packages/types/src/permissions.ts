@@ -16,6 +16,7 @@ export const PERMISSIONS = [
   'material.manage', // share study materials with students and see who opened them
   'lab.marks', // create offline lab / project assessments and enter marks
   'lab.view', // see lab marks (read-only)
+  'announcement.send', // email / post announcements and exam reminders to students
   'exam.results.view', // exam list, results, analytics, CSV (read-only)
   'member.view', // people list and departments (read-only)
   'program.manage',
@@ -54,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'material.manage',
     'lab.marks',
     'lab.view',
+    'announcement.send',
     'program.manage',
     'program.view',
     'batch.manage',
@@ -81,6 +83,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'material.manage',
     'lab.marks',
     'lab.view',
+    'announcement.send',
     'program.view',
     'batch.view',
     'assignment.manage',
@@ -94,6 +97,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'material.manage',
     'lab.marks',
     'lab.view',
+    'announcement.send',
     'program.view',
     'batch.view',
     'enrollment.manage',

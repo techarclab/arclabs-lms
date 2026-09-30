@@ -2,8 +2,10 @@ import { Body, Controller, Get, HttpCode, Param, Post, Put } from '@nestjs/commo
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import {
   joinOrganizationSchema,
+  setCollegeEmailSchema,
   setJoinSettingsSchema,
   type JoinOrganizationParsed,
+  type SetCollegeEmailInput,
 } from '@arc/validation';
 import type { FirebaseIdentityInfo, OrgContextInfo } from '../auth/auth.types';
 import {
@@ -44,6 +46,22 @@ export class JoinController {
   }
 }
 
+/** Students add or correct their college email (for announcements). */
+@ApiTags('join')
+@ApiBearerAuth()
+@Controller('my/college-email')
+export class MyCollegeEmailController {
+  constructor(private readonly join: JoinService) {}
+
+  @Put()
+  set(
+    @CurrentUser() u: User,
+    @Body(new ZodValidationPipe(setCollegeEmailSchema)) body: SetCollegeEmailInput,
+  ) {
+    return this.join.setCollegeEmail(u, body);
+  }
+}
+
 /** College admins manage their organization's join link. */
 @ApiTags('join')
 @ApiBearerAuth()
@@ -62,9 +80,18 @@ export class JoinSettingsController {
   set(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
-    @Body(new ZodValidationPipe(setJoinSettingsSchema)) body: { enabled: boolean },
+    @Body(new ZodValidationPipe(setJoinSettingsSchema))
+    body: { enabled?: boolean; collegeEmailDomains?: string[] },
   ) {
-    return this.join.setEnabled(u, org.organizationId, body.enabled);
+    if (body.collegeEmailDomains)
+      return this.join
+        .setDomains(u, org.organizationId, body.collegeEmailDomains)
+        .then((s) =>
+          body.enabled === undefined
+            ? s
+            : this.join.setEnabled(u, org.organizationId, body.enabled),
+        );
+    return this.join.setEnabled(u, org.organizationId, body.enabled ?? false);
   }
 
   @Post('regenerate')

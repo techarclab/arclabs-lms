@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
+  Megaphone,
   Library,
   Layers,
   ScrollText,
@@ -65,6 +66,13 @@ export const NAV: NavSection[] = [
       { label: 'Study materials', href: '/my-materials', icon: Library, learnerOnly: true },
       { label: 'Lab marks', href: '/labs', icon: NotebookPen, permission: 'lab.view' },
       { label: 'Lab marks', href: '/my-labs', icon: NotebookPen, learnerOnly: true },
+      {
+        label: 'Announcements',
+        href: '/announcements',
+        icon: Megaphone,
+        permission: 'announcement.send',
+      },
+      { label: 'Announcements', href: '/my-announcements', icon: Megaphone, learnerOnly: true },
     ],
   },
   {

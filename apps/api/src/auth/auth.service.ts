@@ -68,7 +68,9 @@ export class AuthService {
       include: {
         memberships: {
           where: { status: 'ACTIVE' },
-          include: { organization: { select: { id: true, name: true } } },
+          include: {
+            organization: { select: { id: true, name: true, collegeEmailDomains: true } },
+          },
         },
       },
     });
@@ -81,6 +83,8 @@ export class AuthService {
         organizationId: m.organization.id,
         organizationName: m.organization.name,
         roles: m.roles,
+        collegeEmail: m.collegeEmail,
+        collegeEmailDomains: m.organization.collegeEmailDomains,
       })),
     };
   }

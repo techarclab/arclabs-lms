@@ -25,7 +25,14 @@ export interface MeResponse {
   email: string;
   fullName: string;
   isSuperAdmin: boolean;
-  memberships: { organizationId: string; organizationName: string; roles: string[] }[];
+  memberships: {
+    organizationId: string;
+    organizationName: string;
+    roles: string[];
+    /** Institution email for announcements (students). */
+    collegeEmail?: string | null;
+    collegeEmailDomains?: string[];
+  }[];
   /** True when signed in with a college access code (read-only, no personal account). */
   accessCode?: boolean;
 }

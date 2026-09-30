@@ -237,9 +237,8 @@ function Sheet({ id, orgId }: { id: string; orgId: string }) {
         description={
           <>
             {data.heldOn && <>{formatDate(data.heldOn)} · </>}
-            {data.assignToAll
-              ? 'All students'
-              : data.departments.map((d) => d.name).join(', ')} · out of {data.maxTotal}
+            {data.assignToAll ? 'All students' : data.departments.map((d) => d.name).join(', ')} ·
+            out of {data.maxTotal}
             {data.description && <span className="mt-1 block">{data.description}</span>}
           </>
         }

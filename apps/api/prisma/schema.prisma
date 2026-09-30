@@ -189,6 +189,8 @@ model Organization {
   accessCodeHash      String?   @unique
   accessCodeHint      String?
   accessCodeCreatedAt DateTime?
+  /// Students register with an email on one of these domains (e.g. mrec.edu.in). Empty = any.
+  collegeEmailDomains String[]  @default([])
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -216,6 +218,7 @@ model Organization {
   materialFolders      MaterialFolder[]
   materials            Material[]
   labAssessments       LabAssessment[]
+  announcements        Announcement[]
 
   @@map("organizations")
 }
@@ -290,6 +293,8 @@ model User {
   labsCreated        LabAssessment[]      @relation("LabCreator")
   labMarks           LabMark[]            @relation("LabMarkStudent")
   labMarksGiven      LabMark[]            @relation("LabMarkGrader")
+  announcementsSent  Announcement[]       @relation("AnnouncementSender")
+  announcementsGot   AnnouncementRecipient[]
 
   @@map("users")
 }
@@ -303,6 +308,8 @@ model OrganizationMember {
   roles          OrgRole[]
   status         RecordStatus @default(ACTIVE)
   externalId     String? // roll number / employee id
+  /// Institution email (announcements go here; the login email is the fallback)
+  collegeEmail   String?
   joinedAt       DateTime     @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1124,4 +1131,50 @@ model LabMark {
   @@id([assessmentId, userId])
   @@index([userId])
   @@map("lab_marks")
+}
+
+// ───────── Announcements: one message to many students (email + portal) ─────────
+
+model Announcement {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  subject        String
+  body           String
+  /// Optional button in the email / portal (e.g. the exam link)
+  linkUrl        String?
+  linkLabel      String?
+  /// GENERAL | EXAM_REMINDER
+  kind           String   @default("GENERAL")
+  examId         String?  @db.Uuid
+  /// { type: 'all' | 'departments' | 'exam', departmentIds?, examId?, pendingOnly? }
+  audience       Json
+  recipients     Int      @default(0)
+  emailed        Int      @default(0)
+  collegeEmails  Int      @default(0)
+  personalEmails Int      @default(0)
+  /// sent | partial | not_configured | skipped
+  emailStatus    String   @default("sent")
+  sentById       String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sentBy       User?                   @relation("AnnouncementSender", fields: [sentById], references: [id], onDelete: SetNull)
+  targets      AnnouncementRecipient[]
+
+  @@index([organizationId, createdAt])
+  @@map("announcements")
+}
+
+model AnnouncementRecipient {
+  announcementId String    @db.Uuid
+  userId         String    @db.Uuid
+  email          String?
+  readAt         DateTime?
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_recipients")
 }

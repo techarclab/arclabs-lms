@@ -19,11 +19,13 @@ import {
   ShieldCheck,
   Trash2,
   Undo2,
+  BellRing,
   Users,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ExamDetail, QuestionItem } from '@arc/types';
+import { hasPermission, type ExamDetail, type OrgRole, type QuestionItem } from '@arc/types';
+import { useOrg } from '@/components/providers/OrgProvider';
 import {
   Button,
   Card,
@@ -62,6 +64,9 @@ export default function ExamBuilderPage({ params }: { params: Promise<{ id: stri
 }
 
 function Builder({ id, orgId }: { id: string; orgId: string }) {
+  const { current, isSuperAdmin } = useOrg();
+  const canRemind =
+    isSuperAdmin || hasPermission((current?.roles ?? []) as OrgRole[], 'announcement.send');
   const router = useRouter();
   const mutate = useApiMutation();
   const { data: exam, mutate: setExam, error } = useApi<ExamDetail>(`/exams/${id}`, { orgId });
@@ -182,6 +187,13 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
             <Button variant="secondary" asChild>
               <Link href={`/exams/${id}/results`}>
                 <BarChart3 /> {exam.state === 'LIVE' ? 'Live monitor' : 'Results'}
+              </Link>
+            </Button>
+          )}
+          {(exam.state === 'SCHEDULED' || exam.state === 'LIVE') && canRemind && (
+            <Button variant="secondary" asChild>
+              <Link href={`/announcements?exam=${id}`}>
+                <BellRing /> Send reminder
               </Link>
             </Button>
           )}
