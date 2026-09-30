@@ -1,6 +1,11 @@
 import { Body, Controller, Delete, Get, HttpCode, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { accessLoginSchema, type AccessLoginInput } from '@arc/validation';
+import {
+  accessCodeEmailSchema,
+  accessLoginSchema,
+  type AccessCodeEmailInput,
+  type AccessLoginInput,
+} from '@arc/validation';
 import type { AuthedRequest, OrgContextInfo } from '../auth/auth.types';
 import {
   AccessCodeOnly,
@@ -66,6 +71,16 @@ export class AccessCodeController {
   @HttpCode(200)
   generate(@CurrentUser() u: User, @OrgContext() org: OrgContextInfo) {
     return this.access.generate(u, org.organizationId);
+  }
+
+  @Post('email')
+  @HttpCode(200)
+  email(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(accessCodeEmailSchema)) body: AccessCodeEmailInput,
+  ) {
+    return this.access.emailCode(u, org.organizationId, body);
   }
 
   @Delete()

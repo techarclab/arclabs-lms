@@ -1,5 +1,12 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto';
-import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type {
   AccessCodeGenerated,
   AccessCodeStatus,
@@ -8,6 +15,10 @@ import type {
 } from '@arc/types';
 import { normalizeAccessCode } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
+import { ENV } from '../config/config.module';
+import type { Env } from '../config/env';
+import { MailService } from '../mail/mail.service';
+import { accessCodeEmail } from '../mail/templates';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -45,7 +56,46 @@ export class AccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
+
+  /**
+   * Emails the code to faculty. The code is only known right after it is created (the database
+   * keeps a hash), so the admin's browser sends it back and we check it matches before mailing.
+   */
+  async emailCode(
+    actor: User,
+    orgId: string,
+    input: { code: string; emails: string[]; note?: string | null },
+  ) {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    if (!org.accessCodeHash || org.accessCodeHash !== sha256(normalizeAccessCode(input.code)))
+      throw new BadRequestException('That isn’t the current access code — create a new one first');
+    if (this.env.EMAIL_DELIVERY === 'log') return { mailConfigured: false, sent: [], failed: input.emails };
+    const link = `${this.env.WEB_ORIGIN.split(',')[0]}/login?mode=faculty`;
+    const msg = accessCodeEmail({
+      orgName: org.name,
+      code: input.code.trim().toUpperCase(),
+      link,
+      senderName: actor.fullName,
+      note: input.note,
+    });
+    const sent: string[] = [];
+    const failed: string[] = [];
+    for (const to of [...new Set(input.emails.map((e) => e.toLowerCase()))]) {
+      (await this.mail.send({ to, ...msg }, 'access-code')) ? sent.push(to) : failed.push(to);
+    }
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'access_code.emailed',
+      entityType: 'organization',
+      entityId: orgId,
+      meta: { recipients: sent }, // the code itself is never logged
+    });
+    return { mailConfigured: true, sent, failed };
+  }
 
   // ───────── Admin ─────────
 

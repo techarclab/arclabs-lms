@@ -213,6 +213,8 @@ model Organization {
   notifications        Notification[]
   auditLogs            AuditLog[]
   accessSessions       OrgAccessSession[]
+  materialFolders      MaterialFolder[]
+  materials            Material[]
 
   @@map("organizations")
 }
@@ -243,6 +245,7 @@ model Department {
   organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members       OrganizationMember[]
   examAudiences ExamAudience[]
+  materialAudiences MaterialAudience[]
 
   @@unique([organizationId, name])
   @@map("departments")
@@ -280,6 +283,8 @@ model User {
   certificatesIssued Certificate[]        @relation("CertificateIssuer")
   notifications      Notification[]
   auditLogs          AuditLog[]
+  materialsShared    Material[]           @relation("MaterialCreator")
+  materialActivity   MaterialActivity[]
 
   @@map("users")
 }
@@ -972,4 +977,81 @@ model ProctorSnapshot {
 
   @@index([attemptId])
   @@map("proctor_snapshots")
+}
+
+// ───────────── Learning materials (shared links: Drive, YouTube, websites…) ─────────────
+
+/// A subject or unit that groups materials. Two levels: subject → unit.
+model MaterialFolder {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  parentId       String?  @db.Uuid
+  name           String
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       MaterialFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     MaterialFolder[] @relation("FolderTree")
+  materials    Material[]
+
+  @@index([organizationId, parentId])
+  @@map("material_folders")
+}
+
+model Material {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  folderId       String?  @db.Uuid
+  title          String
+  description    String?
+  url            String
+  /// pdf | slides | doc | sheet | video | image | code | zip | folder | link — null: guess from the link
+  fileType       String?
+  allowDownload  Boolean  @default(true)
+  published      Boolean  @default(true)
+  assignToAll    Boolean  @default(true)
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  folder       MaterialFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdBy    User?              @relation("MaterialCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  audiences    MaterialAudience[]
+  activity     MaterialActivity[]
+
+  @@index([organizationId, folderId])
+  @@map("materials")
+}
+
+/// Departments a material is shared with (when assignToAll is false).
+model MaterialAudience {
+  id           String @id @default(uuid()) @db.Uuid
+  materialId   String @db.Uuid
+  departmentId String @db.Uuid
+
+  material   Material   @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, departmentId])
+  @@map("material_audiences")
+}
+
+/// Who opened / downloaded a material, and how often.
+model MaterialActivity {
+  materialId String   @db.Uuid
+  userId     String   @db.Uuid
+  views      Int      @default(0)
+  downloads  Int      @default(0)
+  firstAt    DateTime @default(now())
+  lastAt     DateTime @default(now())
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, userId])
+  @@index([userId])
+  @@map("material_activity")
 }

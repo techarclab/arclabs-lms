@@ -55,3 +55,50 @@ export function inviteEmail(o: {
   const text = `Welcome, ${o.name}!\n\n${o.inviterName} has added you to ${o.orgName} on the ARC LABS Learning Platform as ${o.roles}.\n\n${next}\n\n${o.link}\n`;
   return { subject, html, text };
 }
+
+/** Faculty access code, sent by a college admin. Subject and body are generated. */
+export function accessCodeEmail(o: {
+  orgName: string;
+  code: string;
+  link: string;
+  senderName: string;
+  note?: string | null;
+}) {
+  const subject = `Faculty access to ${o.orgName} exam results — ARC LABS`;
+  const steps = [
+    `Open <a href="${escText(o.link)}" style="color:#2f45ef">${escText(o.link)}</a>`,
+    'Click <b>College faculty? Use access code</b>',
+    'Type the access code below',
+  ];
+  const html = layout({
+    preheader: `Your view-only access code for ${o.orgName}`,
+    heading: `Faculty access for ${o.orgName}`,
+    body:
+      p(
+        `${escText(o.senderName)} has given you view-only access to <b>${escText(o.orgName)}</b>’s exams, results and students on the ARC LABS Learning Platform. No account is needed.`,
+      ) +
+      (o.note ? p(`<i>“${escText(o.note)}”</i>`) : '') +
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0"><tr><td align="center" style="background:#f0f4ff;border:1px solid #c2d1ff;border-radius:12px;padding:16px;font-family:Consolas,Menlo,monospace;font-size:20px;font-weight:700;letter-spacing:2px;color:#151925">${escText(o.code)}</td></tr></table>` +
+      p(`<b>How to sign in</b><br>${steps.map((s, i) => `${i + 1}. ${s}`).join('<br>')}`) +
+      p('Please keep this code private and don’t share it with students.'),
+    ctaLabel: 'Open faculty sign-in',
+    ctaUrl: o.link,
+    footer: `Sent by ${o.senderName} from ARC LABS. If you weren’t expecting this, you can ignore it.`,
+  });
+  const text = [
+    `Faculty access for ${o.orgName}`,
+    '',
+    `${o.senderName} has given you view-only access to ${o.orgName}'s exams, results and students on the ARC LABS Learning Platform. No account is needed.`,
+    ...(o.note ? ['', `"${o.note}"`] : []),
+    '',
+    `Access code: ${o.code}`,
+    '',
+    'How to sign in:',
+    `1. Open ${o.link}`,
+    '2. Click "College faculty? Use access code"',
+    '3. Type the access code above',
+    '',
+    "Please keep this code private and don't share it with students.",
+  ].join('\n');
+  return { subject, html, text };
+}

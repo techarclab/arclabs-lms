@@ -6,3 +6,4 @@ export * from './member';
 export * from './exam';
 export * from './join';
 export * from './access';
+export * from './material';

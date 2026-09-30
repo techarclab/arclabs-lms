@@ -13,6 +13,7 @@ export const PERMISSIONS = [
   'course.publish',
   'course.view',
   'quiz.author',
+  'material.manage', // share study materials with students and see who opened them
   'exam.results.view', // exam list, results, analytics, CSV (read-only)
   'member.view', // people list and departments (read-only)
   'program.manage',
@@ -48,6 +49,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'course.publish',
     'course.view',
     'quiz.author',
+    'material.manage',
     'program.manage',
     'program.view',
     'batch.manage',
@@ -72,6 +74,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'course.publish',
     'course.view',
     'quiz.author',
+    'material.manage',
     'program.view',
     'batch.view',
     'assignment.manage',
@@ -82,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'exam.results.view',
     'course.view',
     'quiz.author',
+    'material.manage',
     'program.view',
     'batch.view',
     'enrollment.manage',

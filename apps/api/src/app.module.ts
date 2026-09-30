@@ -10,6 +10,7 @@ import { ExamsModule } from './exams/exams.module';
 import { HealthModule } from './health/health.module';
 import { JoinModule } from './join/join.module';
 import { QueueModule } from './mail/queue.module';
+import { MaterialsModule } from './materials/materials.module';
 import { MembersModule } from './members/members.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -32,6 +33,7 @@ import { StorageModule } from './storage/storage.module';
     DepartmentsModule,
     ExamsModule,
     JoinModule,
+    MaterialsModule,
   ],
 })
 export class AppModule {}

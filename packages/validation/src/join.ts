@@ -31,3 +31,19 @@ export type AccessLoginInput = z.input<typeof accessLoginSchema>;
 export function normalizeAccessCode(code: string) {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
+
+/** Email the faculty access code (sent right after it's created, while the admin can see it). */
+export const accessCodeEmailSchema = z.object({
+  code: z.string().trim().min(8).max(64),
+  emails: z
+    .array(z.email('Enter valid email addresses').trim())
+    .min(1, 'Add at least one email')
+    .max(50, 'Up to 50 emails at a time'),
+  note: z
+    .string()
+    .trim()
+    .max(500)
+    .nullish()
+    .transform((v) => v || null),
+});
+export type AccessCodeEmailInput = z.infer<typeof accessCodeEmailSchema>;

@@ -115,4 +115,26 @@ describe('College access code (faculty, read-only)', () => {
     expect((await api(app, r2.body.token).get('/access/me')).status).toBe(401);
     expect((await api(app).post('/access/login', { code: g.body.code })).status).toBe(401);
   });
+
+  it('emails the new code to faculty (only the current code, only admins)', async () => {
+    const g = await orgApi(app, admin, orgId).post('/access-code');
+    const code = g.body.code as string;
+    const r = await orgApi(app, admin, orgId).post('/access-code/email', {
+      code: code.toLowerCase(),
+      emails: ['hod.ece@college.edu', 'HOD.ECE@college.edu', 'dean@college.edu'],
+      note: 'Please check the mid-term results',
+    });
+    expect(r.status).toBe(200);
+    if (r.body.mailConfigured) expect(r.body.sent).toEqual(['hod.ece@college.edu', 'dean@college.edu']);
+    else expect(r.body.sent).toEqual([]);
+    const wrong = await orgApi(app, admin, orgId).post('/access-code/email', {
+      code: 'ARC-AAAA-BBBB-CCCC-DDDD-EEEE',
+      emails: ['x@college.edu'],
+    });
+    expect(wrong.status).toBe(400);
+    expect((await orgApi(app, admin, orgId).post('/access-code/email', { code, emails: ['not-an-email'] })).status).toBe(422);
+    expect((await orgApi(app, learner, orgId).post('/access-code/email', { code, emails: ['x@college.edu'] })).status).toBe(403);
+    const log = await prisma.auditLog.findFirst({ where: { action: 'access_code.emailed' } });
+    expect(JSON.stringify(log?.meta)).not.toContain(code);
+  });
 });

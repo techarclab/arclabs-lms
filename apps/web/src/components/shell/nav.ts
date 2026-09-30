@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
+  Library,
   Layers,
   ScrollText,
   Settings,
@@ -49,6 +50,13 @@ export const NAV: NavSection[] = [
       { label: 'Exams', href: '/exams', icon: ClipboardList, permission: 'exam.results.view' },
       { label: 'Question bank', href: '/questions', icon: FileQuestion, permission: 'quiz.author' },
       { label: 'My exams', href: '/my-exams', icon: ClipboardCheck, learnerOnly: true },
+    ],
+  },
+  {
+    title: 'Learning',
+    items: [
+      { label: 'Study materials', href: '/materials', icon: Library, permission: 'material.manage' },
+      { label: 'Study materials', href: '/my-materials', icon: Library, learnerOnly: true },
     ],
   },
   {

@@ -248,6 +248,24 @@ Exam page or Results page → **Stop exam** (only while it's live). The window c
 still writing is submitted with their saved answers, and nobody else can start. Coding answers are
 then marked on the Results page.
 
+## 12. Study materials
+
+Nothing to set up — materials are shared as links, so no file storage is needed.
+
+1. **Study materials → Share material**, paste a link, pick the subject/unit and who can see it.
+2. Supported links: Google Drive files and folders, Google Docs / Slides / Sheets, YouTube (videos
+   and playlists), Dropbox, OneDrive, and any website or direct file link (`…/notes.pdf`).
+3. **Google files must be shared as “Anyone with the link” (Viewer)**, otherwise students get a
+   Google sign-in page. The form warns you when a file looks private.
+4. Students see them under **Study materials**: view inside the portal (PDFs, slides, videos),
+   open in a new tab, or download (Drive/Docs/Dropbox/direct links). Turn **Allow download** off
+   for view-only items.
+5. Click the numbers on a material (or ⋯ → **Who opened it**) to see who opened / downloaded it and
+   who hasn't yet; export as CSV.
+
+Later, uploading files directly (instead of links) can be added with Supabase Storage or
+Cloudflare R2 — the API already has S3-compatible storage support.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

@@ -55,3 +55,6 @@ export function DialogContent({
     </D.Portal>
   );
 }
+
+/** Radix Dialog parts, for custom layouts (e.g. a full-width viewer). */
+export { D as DialogPrimitive };

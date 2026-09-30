@@ -5,3 +5,4 @@ export * from './course';
 export * from './member';
 export * from './exam';
 export * from './join';
+export * from './material';

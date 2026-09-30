@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Copy, KeyRound, MessageCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Copy, KeyRound, Mail, MessageCircle, RefreshCw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AccessCodeGenerated, AccessCodeStatus } from '@arc/types';
 import {
@@ -15,6 +15,7 @@ import {
   DialogContent,
 } from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
+import { EmailCodePanel } from './EmailCodePanel';
 
 /**
  * Admin card for the college's faculty access code: one shared, high-entropy code that gives
@@ -26,6 +27,7 @@ export function AccessCodeCard({ orgId, orgName }: { orgId: string; orgName: str
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'regenerate' | 'disable' | null>(null);
   const [shown, setShown] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [origin, setOrigin] = useState('');
   useEffect(() => setOrigin(window.location.origin), []);
   const loginLink = `${origin}/login?mode=faculty`;
@@ -37,6 +39,7 @@ export function AccessCodeCard({ orgId, orgName }: { orgId: string; orgName: str
       const { code, ...status } = r;
       void set(status, { revalidate: false });
       setShown(code);
+      setEmailOpen(false);
       setConfirm(null);
     } catch (e) {
       toast.error((e as Error).message);
@@ -177,7 +180,7 @@ export function AccessCodeCard({ orgId, orgName }: { orgId: string; orgName: str
                 {shown}
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Button variant="secondary" size="sm" onClick={() => copy(shown ?? '', 'Code')}>
                 <Copy /> Code
               </Button>
@@ -193,7 +196,17 @@ export function AccessCodeCard({ orgId, orgName }: { orgId: string; orgName: str
                   <MessageCircle /> WhatsApp
                 </a>
               </Button>
+              <Button
+                variant={emailOpen ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => setEmailOpen((v) => !v)}
+              >
+                <Mail /> Email
+              </Button>
             </div>
+            {emailOpen && shown && (
+              <EmailCodePanel orgId={orgId} orgName={orgName} code={shown} loginLink={loginLink} />
+            )}
             <p className="text-xs text-ink-500">
               Faculty open <b className="font-medium text-ink-700">{loginLink}</b>, choose “College
               faculty?”, and type the code (it stays hidden while typing).
