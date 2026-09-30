@@ -7,3 +7,4 @@ export * from './exam';
 export * from './join';
 export * from './access';
 export * from './material';
+export * from './lab';

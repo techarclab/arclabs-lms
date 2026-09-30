@@ -4,6 +4,7 @@ import {
   BookOpen,
   Building2,
   ClipboardList,
+  NotebookPen,
   FileQuestion,
   CalendarRange,
   ClipboardCheck,
@@ -62,6 +63,8 @@ export const NAV: NavSection[] = [
         permission: 'material.manage',
       },
       { label: 'Study materials', href: '/my-materials', icon: Library, learnerOnly: true },
+      { label: 'Lab marks', href: '/labs', icon: NotebookPen, permission: 'lab.view' },
+      { label: 'Lab marks', href: '/my-labs', icon: NotebookPen, learnerOnly: true },
     ],
   },
   {

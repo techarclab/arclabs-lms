@@ -298,6 +298,16 @@ faculty emails; the subject and message (code, sign-in link, steps) are written 
 The code is shown (and can be emailed) only right after it is created; the database keeps only a
 hash of it.
 
+## 14. Lab marks (offline labs and project reviews)
+
+Nothing to set up. **Lab marks → New lab**: title, date, the criteria with their marks (e.g.
+Presentation /5, Contribution in project /5, Viva /5) and which students (all, or chosen
+departments). Then type marks on the sheet — it saves each row automatically, **Enter** moves to
+the next student, tick **Absent** where needed, add remarks. The class average, highest, lowest and
+per-criterion averages update live; **Export CSV** downloads the sheet. Students see their marks,
+remarks and the class average under **Lab marks** as soon as they are saved. Criteria can be
+changed later (⋯ → Edit lab); totals are recalculated.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

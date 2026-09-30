@@ -14,6 +14,8 @@ export const PERMISSIONS = [
   'course.view',
   'quiz.author',
   'material.manage', // share study materials with students and see who opened them
+  'lab.marks', // create offline lab / project assessments and enter marks
+  'lab.view', // see lab marks (read-only)
   'exam.results.view', // exam list, results, analytics, CSV (read-only)
   'member.view', // people list and departments (read-only)
   'program.manage',
@@ -50,6 +52,8 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'course.view',
     'quiz.author',
     'material.manage',
+    'lab.marks',
+    'lab.view',
     'program.manage',
     'program.view',
     'batch.manage',
@@ -75,6 +79,8 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'course.view',
     'quiz.author',
     'material.manage',
+    'lab.marks',
+    'lab.view',
     'program.view',
     'batch.view',
     'assignment.manage',
@@ -86,6 +92,8 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'course.view',
     'quiz.author',
     'material.manage',
+    'lab.marks',
+    'lab.view',
     'program.view',
     'batch.view',
     'enrollment.manage',
@@ -99,7 +107,14 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'certificate.view',
     'analytics.view',
   ],
-  EVALUATOR: ['course.view', 'batch.view', 'submission.grade', 'project.evaluate'],
+  EVALUATOR: [
+    'lab.marks',
+    'lab.view',
+    'course.view',
+    'batch.view',
+    'submission.grade',
+    'project.evaluate',
+  ],
   LEARNER: [
     'course.view',
     'batch.view',
@@ -109,7 +124,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, readonly Permission[]> = {
     'analytics.view',
   ],
   /** College coordinator: sees everything about their organization's exams, changes nothing. */
-  ORG_VIEWER: ['exam.results.view', 'member.view', 'analytics.view'],
+  ORG_VIEWER: ['exam.results.view', 'member.view', 'analytics.view', 'lab.view'],
 };
 
 export function permissionsFor(roles: readonly OrgRole[]): Set<Permission> {

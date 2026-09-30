@@ -215,6 +215,7 @@ model Organization {
   accessSessions       OrgAccessSession[]
   materialFolders      MaterialFolder[]
   materials            Material[]
+  labAssessments       LabAssessment[]
 
   @@map("organizations")
 }
@@ -246,6 +247,7 @@ model Department {
   members       OrganizationMember[]
   examAudiences ExamAudience[]
   materialAudiences MaterialAudience[]
+  labAudiences      LabAssessmentAudience[]
 
   @@unique([organizationId, name])
   @@map("departments")
@@ -285,6 +287,9 @@ model User {
   auditLogs          AuditLog[]
   materialsShared    Material[]           @relation("MaterialCreator")
   materialActivity   MaterialActivity[]
+  labsCreated        LabAssessment[]      @relation("LabCreator")
+  labMarks           LabMark[]            @relation("LabMarkStudent")
+  labMarksGiven      LabMark[]            @relation("LabMarkGrader")
 
   @@map("users")
 }
@@ -1060,4 +1065,63 @@ model MaterialActivity {
   @@id([materialId, userId])
   @@index([userId])
   @@map("material_activity")
+}
+
+// ───────── Offline labs / project reviews: faculty give marks against criteria ─────────
+
+model LabAssessment {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  title          String
+  description    String?
+  heldOn         DateTime?
+  /// [{ id, text, max }] e.g. Presentation /5, Contribution /5
+  criteria       Json
+  assignToAll    Boolean   @default(true)
+  createdById    String?   @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?                   @relation("LabCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  audiences    LabAssessmentAudience[]
+  marks        LabMark[]
+
+  @@index([organizationId, createdAt])
+  @@map("lab_assessments")
+}
+
+model LabAssessmentAudience {
+  id           String @id @default(uuid()) @db.Uuid
+  assessmentId String @db.Uuid
+  departmentId String @db.Uuid
+
+  assessment LabAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  department Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, departmentId])
+  @@map("lab_assessment_audiences")
+}
+
+/// One student's marks in one lab. Students see them as soon as they are saved.
+model LabMark {
+  assessmentId String   @db.Uuid
+  userId       String   @db.Uuid
+  /// { criterionId: marks }
+  scores       Json     @default("{}")
+  absent       Boolean  @default(false)
+  remarks      String?
+  /// Sum of scores (null when nothing is entered or absent)
+  total        Float?
+  gradedById   String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assessment LabAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user       User          @relation("LabMarkStudent", fields: [userId], references: [id], onDelete: Cascade)
+  gradedBy   User?         @relation("LabMarkGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@id([assessmentId, userId])
+  @@index([userId])
+  @@map("lab_marks")
 }
