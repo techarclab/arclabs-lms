@@ -10,6 +10,12 @@ import type {
 import type { CreateLabInput, SaveLabMarksInput, UpdateLabInput } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { LabMark, Prisma, User } from '../generated/prisma/client';
+import type { OrgContextInfo } from '../auth/auth.types';
+import {
+  assertAudienceInDepartment,
+  assertVisibleInDepartment,
+  assertWritableInDepartment,
+} from '../common/department-scope';
 import { PrismaService } from '../prisma/prisma.service';
 
 const labInclude = {
@@ -70,20 +76,26 @@ export class LabsService {
   ) {}
 
   /** Learners this lab is for. */
-  private learners(lab: {
-    organizationId: string;
-    assignToAll: boolean;
-    audiences: { departmentId: string }[];
-  }) {
+  private learners(
+    lab: {
+      organizationId: string;
+      assignToAll: boolean;
+      audiences: { departmentId: string }[];
+    },
+    departmentId?: string | null,
+  ) {
     return this.prisma.organizationMember.findMany({
       where: {
         organizationId: lab.organizationId,
         status: 'ACTIVE',
         roles: { has: 'LEARNER' },
         user: { status: 'ACTIVE' },
-        ...(lab.assignToAll
-          ? {}
-          : { departmentId: { in: lab.audiences.map((a) => a.departmentId) } }),
+        // Department faculty see only their department's students.
+        ...(departmentId
+          ? { departmentId }
+          : lab.assignToAll
+            ? {}
+            : { departmentId: { in: lab.audiences.map((a) => a.departmentId) } }),
       },
       include: {
         user: { select: { id: true, fullName: true } },
@@ -128,9 +140,21 @@ export class LabsService {
 
   // ───────── Faculty ─────────
 
-  async list(orgId: string): Promise<LabSummary[]> {
+  /** Department faculty: may they see / change this lab? */
+  async assertScope(org: OrgContextInfo, userId: string, id: string, write: boolean) {
+    if (!org.departmentId) return;
+    const lab = await this.find(org.organizationId, id);
+    assertVisibleInDepartment(org, userId, lab);
+    if (write) assertWritableInDepartment(org, userId, lab);
+  }
+
+  assertAudience(org: OrgContextInfo, input: { assignToAll?: boolean; departmentIds?: string[] }) {
+    assertAudienceInDepartment(org, input);
+  }
+
+  async list(orgId: string, scope: Prisma.LabAssessmentWhereInput = {}): Promise<LabSummary[]> {
     const labs = await this.prisma.labAssessment.findMany({
-      where: { organizationId: orgId },
+      where: { organizationId: orgId, ...scope },
       include: { ...labInclude, marks: { select: { scores: true, absent: true, total: true } } },
       orderBy: [{ heldOn: 'desc' }, { createdAt: 'desc' }],
     });
@@ -260,13 +284,18 @@ export class LabsService {
   }
 
   /** Mark sheet: every student the lab is for (and anyone already marked), with their marks. */
-  async sheet(orgId: string, id: string): Promise<LabSheet> {
+  async sheet(orgId: string, id: string, departmentId?: string | null): Promise<LabSheet> {
     const lab = await this.find(orgId, id);
     const criteria = criteriaOf(lab);
     const [learners, marks] = await Promise.all([
-      this.learners(lab),
+      this.learners(lab, departmentId),
       this.prisma.labMark.findMany({
-        where: { assessmentId: id },
+        where: {
+          assessmentId: id,
+          ...(departmentId
+            ? { user: { memberships: { some: { organizationId: orgId, departmentId } } } }
+            : {}),
+        },
         include: {
           user: {
             select: {
@@ -325,12 +354,19 @@ export class LabsService {
   }
 
   /** Saves one or more students' marks (the sheet autosaves row by row). */
-  async saveMarks(actor: User, orgId: string, id: string, input: SaveLabMarksInput) {
+  async saveMarks(
+    actor: User,
+    orgId: string,
+    id: string,
+    input: SaveLabMarksInput,
+    departmentId?: string | null,
+  ) {
     const lab = await this.find(orgId, id);
     const criteria = criteriaOf(lab);
     const max = new Map(criteria.map((c) => [c.id, c.max]));
-    const allowed = new Set((await this.learners(lab)).map((l) => l.userId));
-    const already = new Set(
+    const allowed = new Set((await this.learners(lab, departmentId)).map((l) => l.userId));
+    // (Department faculty can't mark other departments' students, even ones marked before.)
+    const already = departmentId ? new Set<string>() : new Set(
       (
         await this.prisma.labMark.findMany({
           where: { assessmentId: id },
@@ -363,7 +399,12 @@ export class LabsService {
       }),
     );
     const marks = await this.prisma.labMark.findMany({
-      where: { assessmentId: id },
+      where: {
+        assessmentId: id,
+        ...(departmentId
+          ? { user: { memberships: { some: { organizationId: orgId, departmentId } } } }
+          : {}),
+      },
       select: { scores: true, absent: true, total: true },
     });
     return {
@@ -372,8 +413,8 @@ export class LabsService {
     };
   }
 
-  async csv(orgId: string, id: string) {
-    const s = await this.sheet(orgId, id);
+  async csv(orgId: string, id: string, departmentId?: string | null) {
+    const s = await this.sheet(orgId, id, departmentId);
     const q = (v: string | number | null | undefined) => {
       const t = String(v ?? '');
       return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;

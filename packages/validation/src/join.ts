@@ -9,7 +9,8 @@ export const joinOrganizationSchema = z.object({
     .min(1, 'Enter your roll number')
     .max(60)
     .transform((v) => v.toUpperCase()),
-  departmentId: z.uuid({ message: 'Choose your department' }),
+  /** Not needed on a department's own link (the department is fixed). */
+  departmentId: z.uuid({ message: 'Choose your department' }).optional(),
   /** The email the institution gave the student (announcements go here). */
   collegeEmail: z
     .email('Enter your college email')

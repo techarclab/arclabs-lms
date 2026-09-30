@@ -40,6 +40,7 @@ import {
 } from '@arc/ui';
 import { ApiError } from '@/lib/api';
 import { useApi, useApiMutation } from '@/lib/use-api';
+import { useDepartmentScope } from '@/lib/use-department-scope';
 import { folderTree, PROVIDER_LABEL, TYPE_META, TypeIcon } from './shared';
 
 type Check =
@@ -97,6 +98,8 @@ export function MaterialForm({
   onSaved: () => void;
 }) {
   const mutate = useApiMutation();
+  const scope = useDepartmentScope();
+  const scopeId = scope?.id ?? null;
   const mutateRef = useRef(mutate);
   mutateRef.current = mutate;
   const { data: departments = [] } = useApi<DepartmentSummary[]>(open ? '/departments' : null, {
@@ -140,13 +143,13 @@ export function MaterialForm({
     setDescription(editing?.description ?? '');
     setFileType(editing && editing.type !== editing.link.type ? editing.type : '');
     setFolderId(editing ? (editing.folderId ?? '') : (defaultFolderId ?? ''));
-    setAll(editing?.assignToAll ?? true);
-    setDepts(editing?.departments.map((d) => d.id) ?? []);
+    setAll(editing?.assignToAll ?? !scopeId);
+    setDepts(editing?.departments.map((d) => d.id) ?? (scopeId ? [scopeId] : []));
     setAllowDownload(editing?.allowDownload ?? true);
     setPublished(editing?.published ?? true);
     setCheck(null);
     setErrors({});
-  }, [open, editing, defaultFolderId]);
+  }, [open, editing, defaultFolderId, scopeId]);
 
   // New materials start on "Upload file" when uploads are switched on.
   const uploadsOn = Boolean(storage?.uploads);
@@ -538,10 +541,13 @@ export function MaterialForm({
           <div className="space-y-2.5">
             <p className="text-sm font-medium text-ink-800">Who can see it</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {[
-                { v: true, label: 'All students', icon: Users },
-                { v: false, label: 'Chosen departments', icon: Building },
-              ].map((o) => (
+              {(scope
+                ? [{ v: false, label: `${scope.name} students`, icon: Building }]
+                : [
+                    { v: true, label: 'All students', icon: Users },
+                    { v: false, label: 'Chosen departments', icon: Building },
+                  ]
+              ).map((o) => (
                 <button
                   key={o.label}
                   type="button"

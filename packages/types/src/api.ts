@@ -32,6 +32,9 @@ export interface MeResponse {
     /** Institution email for announcements (students). */
     collegeEmail?: string | null;
     collegeEmailDomains?: string[];
+    department?: { id: string; name: string } | null;
+    /** Set for faculty who only work with their own department. */
+    scopedDepartmentId?: string | null;
   }[];
   /** True when signed in with a college access code (read-only, no personal account). */
   accessCode?: boolean;

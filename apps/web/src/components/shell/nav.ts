@@ -2,6 +2,7 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  Building,
   Building2,
   ClipboardList,
   NotebookPen,
@@ -78,6 +79,7 @@ export const NAV: NavSection[] = [
   {
     title: 'People & insights',
     items: [
+      { label: 'Departments', href: '/departments', icon: Building, permission: 'department.view' },
       { label: 'People', href: '/users', icon: Users, permission: 'member.view' },
       {
         label: 'Analytics',

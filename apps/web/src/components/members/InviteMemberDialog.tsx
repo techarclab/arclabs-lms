@@ -165,7 +165,17 @@ export function InviteMemberDialog({
                 {errors.roles && <p className="text-[13px] text-rose-600">{errors.roles}</p>}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Department" htmlFor="inv-dept" optional>
+                <Field
+                  label="Department"
+                  htmlFor="inv-dept"
+                  optional
+                  hint={
+                    roles.some((r) => ['INSTRUCTOR', 'CONTENT_MANAGER', 'EVALUATOR'].includes(r)) &&
+                    !roles.includes('ORG_ADMIN')
+                      ? 'Faculty with a department only see and manage that department.'
+                      : undefined
+                  }
+                >
                   <Select
                     id="inv-dept"
                     value={departmentId}

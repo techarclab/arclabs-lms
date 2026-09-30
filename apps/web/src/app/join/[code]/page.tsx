@@ -82,7 +82,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const r = await api<JoinResult>(`/join/${encodeURIComponent(code)}`, {
       method: 'POST',
       token,
-      body: { fullName: name, externalId: rollNo, departmentId, collegeEmail },
+      body: {
+        fullName: name,
+        externalId: rollNo,
+        departmentId: info?.department?.id ?? departmentId,
+        collegeEmail,
+      },
     });
     try {
       localStorage.setItem('arc.currentOrgId', r.organizationId);
@@ -100,9 +105,13 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const details = joinOrganizationSchema.safeParse({
       fullName,
       externalId: rollNo,
-      departmentId,
+      departmentId: info?.department?.id ?? departmentId,
       collegeEmail,
     });
+    if (!info?.department && !departmentId) {
+      setError('Choose your department');
+      return;
+    }
     if (!details.success) {
       setError(details.error.issues[0]?.message ?? 'Check your details');
       return;
@@ -188,7 +197,9 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
               className="ring-1 ring-white/25"
             />
             <p className="mt-6 text-sm font-medium text-white/70">
-              {ORG_TYPE_LABEL[info.organizationType] ?? 'Organization'} · student registration
+              {info.department
+                ? `${info.department.name} department · student registration`
+                : `${ORG_TYPE_LABEL[info.organizationType] ?? 'Organization'} · student registration`}
             </p>
             <h1 className="mt-1 text-3xl leading-tight font-semibold tracking-tight">
               {info.organizationName}
@@ -300,21 +311,32 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                     className="font-mono uppercase"
                   />
                 </Field>
-                <Field label="Department" htmlFor="j-dept" required>
-                  <Select
-                    id="j-dept"
-                    required
-                    value={departmentId}
-                    onChange={(e) => setDepartmentId(e.target.value)}
-                  >
-                    <option value="">Choose your department…</option>
-                    {info.departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                {info.department ? (
+                  <Field label="Department" htmlFor="j-dept">
+                    <div
+                      id="j-dept"
+                      className="flex h-10 items-center rounded-lg border border-ink-200 bg-ink-50 px-3 text-sm font-medium text-ink-900"
+                    >
+                      {info.department.name}
+                    </div>
+                  </Field>
+                ) : (
+                  <Field label="Department" htmlFor="j-dept" required>
+                    <Select
+                      id="j-dept"
+                      required
+                      value={departmentId}
+                      onChange={(e) => setDepartmentId(e.target.value)}
+                    >
+                      <option value="">Choose your department…</option>
+                      {info.departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
               </div>
 
               <Field

@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
 import type { FirebaseIdentityInfo } from '../auth/auth.types';
 import type { User } from '../generated/prisma/client';
+import { joinCodeFree } from '../departments/departments.controller';
 import { PrismaService } from '../prisma/prisma.service';
 
 // No 0/O/1/I/L so codes are easy to read aloud and type from a projector.
@@ -120,13 +121,7 @@ export class JoinService {
     for (let i = 0; i < 10; i++) {
       const suffix = Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
       const code = `${prefix}-${suffix}`;
-      if (
-        !(await this.prisma.organization.findUnique({
-          where: { joinCode: code },
-          select: { id: true },
-        }))
-      )
-        return code;
+      if (await joinCodeFree(this.prisma, code)) return code;
     }
     throw new Error('Could not generate a unique join code');
   }
@@ -134,20 +129,21 @@ export class JoinService {
   // ───────── Public / students ─────────
 
   async info(rawCode: string): Promise<JoinInfo> {
-    const org = await this.openOrg(rawCode);
+    const { org, dept } = await this.openOrg(rawCode);
     const departments = await this.prisma.department.findMany({
       where: { organizationId: org.id },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
     return {
-      code: org.joinCode!,
+      code: dept?.joinCode ?? org.joinCode!,
       organizationId: org.id,
       organizationName: org.name,
       organizationType: org.type,
       primaryColor: org.primaryColor,
       departments,
       collegeEmailDomains: org.collegeEmailDomains,
+      department: dept ? { id: dept.id, name: dept.name } : null,
     };
   }
 
@@ -181,10 +177,14 @@ export class JoinService {
     rawCode: string,
     input: JoinOrganizationParsed,
   ): Promise<JoinResult> {
-    const org = await this.openOrg(rawCode);
-    const dept = await this.prisma.department.findFirst({
-      where: { id: input.departmentId, organizationId: org.id },
-    });
+    const { org, dept: locked } = await this.openOrg(rawCode);
+    // A department's own link puts the student in that department.
+    const departmentId = locked?.id ?? input.departmentId;
+    const dept = departmentId
+      ? await this.prisma.department.findFirst({
+          where: { id: departmentId, organizationId: org.id },
+        })
+      : null;
     if (!dept)
       throw new BadRequestException({
         code: 'INVALID_DEPARTMENT',
@@ -222,7 +222,7 @@ export class JoinService {
           organizationId: org.id,
           userId: user.id,
           roles: ['LEARNER'],
-          departmentId: input.departmentId,
+          departmentId: dept.id,
           externalId: input.externalId,
           collegeEmail: input.collegeEmail,
         },
@@ -244,9 +244,18 @@ export class JoinService {
     return { organizationId: org.id, organizationName: org.name, alreadyMember: false };
   }
 
+  /** The college (and department, for a department link) a join code belongs to. */
   private async openOrg(rawCode: string) {
     const code = normalizeJoinCode(rawCode);
-    const org = await this.prisma.organization.findUnique({ where: { joinCode: code } });
+    const deptRow = await this.prisma.department.findUnique({
+      where: { joinCode: code },
+      include: { organization: true },
+    });
+    if (deptRow && deptRow.joinEnabled && deptRow.organization.status === 'ACTIVE') {
+      const { organization, ...dept } = deptRow;
+      return { org: organization, dept };
+    }
+    const org = deptRow ? null : await this.prisma.organization.findUnique({ where: { joinCode: code } });
     if (!org || !org.joinEnabled || org.status !== 'ACTIVE') {
       throw new NotFoundException({
         code: 'JOIN_CODE_INVALID',
@@ -254,6 +263,6 @@ export class JoinService {
           'This join link is invalid or registration is closed. Ask your college for a new link.',
       });
     }
-    return org;
+    return { org, dept: null };
   }
 }

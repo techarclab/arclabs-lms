@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type {
   AnnouncementAudience,
   AnnouncementItem,
@@ -41,7 +47,24 @@ export class AnnouncementsService {
   }
 
   /** Students the message goes to, each with the email to use (college email first). */
-  private async targets(orgId: string, audience: AnnouncementAudience): Promise<Target[]> {
+  /** Department faculty may message only their own department (whole dept or an exam's students in it). */
+  private assertScope(departmentId: string | null | undefined, audience: AnnouncementAudience) {
+    if (!departmentId) return;
+    if (
+      audience.type === 'all' ||
+      (audience.type === 'departments' && audience.departmentIds.some((d) => d !== departmentId))
+    )
+      throw new ForbiddenException({
+        code: 'OTHER_DEPARTMENTS',
+        message: 'You can send announcements only to students of your department.',
+      });
+  }
+
+  private async targets(
+    orgId: string,
+    audience: AnnouncementAudience,
+    departmentId?: string | null,
+  ): Promise<Target[]> {
     const org = await this.prisma.organization.findUniqueOrThrow({
       where: { id: orgId },
       select: { collegeEmailDomains: true },
@@ -75,6 +98,7 @@ export class AnnouncementsService {
           quizAttempts: { none: { quizId: exam.id, status: { in: ['SUBMITTED', 'GRADED'] } } },
         };
     }
+    if (departmentId) where = { ...where, departmentId };
     const members = await this.prisma.organizationMember.findMany({
       where,
       include: { user: { select: { id: true, fullName: true, email: true } } },
@@ -98,8 +122,13 @@ export class AnnouncementsService {
     return this.env.EMAIL_DELIVERY !== 'log';
   }
 
-  async preview(orgId: string, audience: AnnouncementAudience): Promise<AudiencePreview> {
-    const t = await this.targets(orgId, audience);
+  async preview(
+    orgId: string,
+    audience: AnnouncementAudience,
+    departmentId?: string | null,
+  ): Promise<AudiencePreview> {
+    this.assertScope(departmentId, audience);
+    const t = await this.targets(orgId, audience, departmentId);
     return {
       recipients: t.length,
       collegeEmails: t.filter((x) => x.college).length,
@@ -130,10 +159,16 @@ export class AnnouncementsService {
   }
 
   /** Posts to the students' portal and emails everyone in Bcc batches. */
-  async send(actor: User, orgId: string, input: AnnouncementInput): Promise<AnnouncementItem> {
+  async send(
+    actor: User,
+    orgId: string,
+    input: AnnouncementInput,
+    departmentId?: string | null,
+  ): Promise<AnnouncementItem> {
+    this.assertScope(departmentId, input.audience);
     const [org, targets] = await Promise.all([
       this.prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } }),
-      this.targets(orgId, input.audience),
+      this.targets(orgId, input.audience, departmentId),
     ]);
     const a = await this.prisma.announcement.create({
       data: {
@@ -229,9 +264,22 @@ export class AnnouncementsService {
     };
   }
 
-  async list(orgId: string): Promise<AnnouncementItem[]> {
+  async list(
+    orgId: string,
+    scope?: { departmentId: string; userId: string },
+  ): Promise<AnnouncementItem[]> {
     const rows = await this.prisma.announcement.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...(scope
+          ? {
+              OR: [
+                { sentById: scope.userId },
+                { audience: { path: ['departmentIds'], array_contains: [scope.departmentId] } },
+              ],
+            }
+          : {}),
+      },
       include: { sentBy: { select: { fullName: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -245,9 +293,11 @@ export class AnnouncementsService {
     return rows.map((r) => this.item(r, byId.get(r.id) ?? 0));
   }
 
-  async remove(actor: User, orgId: string, id: string) {
+  async remove(actor: User, orgId: string, id: string, departmentId?: string | null) {
     const a = await this.prisma.announcement.findFirst({ where: { id, organizationId: orgId } });
     if (!a) throw new NotFoundException();
+    if (departmentId && a.sentById !== actor.id)
+      throw new ForbiddenException('You can remove only announcements you sent.');
     await this.prisma.announcement.delete({ where: { id } });
     await this.audit.log({
       actorId: actor.id,

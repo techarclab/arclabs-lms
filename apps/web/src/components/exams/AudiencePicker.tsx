@@ -24,6 +24,7 @@ import {
   Input,
 } from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
+import { useDepartmentScope } from '@/lib/use-department-scope';
 
 export function AudiencePicker({
   exam,
@@ -35,6 +36,7 @@ export function AudiencePicker({
   onSaved: (e: ExamDetail) => void;
 }) {
   const mutate = useApiMutation();
+  const scope = useDepartmentScope();
   // Only admins can read member counts; for others this stays undefined and no hint is shown.
   const { data: counts } = useApi<MemberCounts>('/members/summary', {
     orgId,
@@ -94,16 +96,22 @@ export function AudiencePicker({
       <CardContent className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2">
           {[
-            {
-              v: true,
-              title: 'All learners',
-              text: 'Everyone with the Learner role in this organization',
-              icon: Users,
-            },
+            ...(scope
+              ? []
+              : [
+                  {
+                    v: true,
+                    title: 'All learners',
+                    text: 'Everyone with the Learner role in this organization',
+                    icon: Users,
+                  },
+                ]),
             {
               v: false,
-              title: 'Selected groups',
-              text: 'Specific departments and/or individual people',
+              title: scope ? `${scope.name} students` : 'Selected groups',
+              text: scope
+                ? 'Your department, or chosen students from it'
+                : 'Specific departments and/or individual people',
               icon: Building,
             },
           ].map(({ v, title, text, icon: Icon }) => (

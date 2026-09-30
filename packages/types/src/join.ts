@@ -7,6 +7,8 @@ export interface JoinInfo {
   departments: { id: string; name: string }[];
   /** Students must register with a college email on one of these domains (empty = any). */
   collegeEmailDomains: string[];
+  /** Set when this is a department's own link: the student joins this department. */
+  department: { id: string; name: string } | null;
 }
 
 export interface JoinSettings {

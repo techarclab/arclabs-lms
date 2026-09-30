@@ -19,8 +19,11 @@ export class AnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}
 
   @Get()
-  list(@OrgContext() org: OrgContextInfo) {
-    return this.announcements.list(org.organizationId);
+  list(@CurrentUser() u: User, @OrgContext() org: OrgContextInfo) {
+    return this.announcements.list(
+      org.organizationId,
+      org.departmentId ? { departmentId: org.departmentId, userId: u.id } : undefined,
+    );
   }
 
   /** How many students it will reach, and how many have a college email. */
@@ -30,7 +33,7 @@ export class AnnouncementsController {
     @OrgContext() org: OrgContextInfo,
     @Body(new ZodValidationPipe(audiencePreviewSchema)) body: { audience: AnnouncementAudience },
   ) {
-    return this.announcements.preview(org.organizationId, body.audience);
+    return this.announcements.preview(org.organizationId, body.audience, org.departmentId);
   }
 
   @Post()
@@ -39,7 +42,7 @@ export class AnnouncementsController {
     @OrgContext() org: OrgContextInfo,
     @Body(new ZodValidationPipe(announcementSchema)) body: AnnouncementInput,
   ) {
-    return this.announcements.send(u, org.organizationId, body);
+    return this.announcements.send(u, org.organizationId, body, org.departmentId);
   }
 
   @Delete(':id')
@@ -49,7 +52,7 @@ export class AnnouncementsController {
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
-    await this.announcements.remove(u, org.organizationId, id);
+    await this.announcements.remove(u, org.organizationId, id, org.departmentId);
   }
 }
 

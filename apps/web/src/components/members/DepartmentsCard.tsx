@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Building, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DepartmentSummary } from '@arc/types';
@@ -54,7 +55,12 @@ export function DepartmentsCard({ orgId, canManage }: { orgId: string; canManage
       <CardHeader>
         <div>
           <CardTitle>Departments</CardTitle>
-          <CardDescription>Branches, classes or teams</CardDescription>
+          <CardDescription>
+            Each has its own page and link —{' '}
+            <Link href="/departments" className="text-brand-700 hover:underline">
+              open Departments
+            </Link>
+          </CardDescription>
         </div>
         <span className="flex size-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-100">
           <Building className="size-[18px]" />
@@ -87,7 +93,12 @@ export function DepartmentsCard({ orgId, canManage }: { orgId: string; canManage
             {data.map((d) => (
               <li key={d.id} className="group">
                 <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="truncate text-ink-700">{d.name}</span>
+                  <Link
+                    href={`/departments/${d.id}`}
+                    className="truncate text-ink-700 hover:text-brand-700 hover:underline"
+                  >
+                    {d.name}
+                  </Link>
                   <span className="flex items-center gap-2">
                     <span className="tabular text-ink-500">{d.memberCount}</span>
                     {canManage && (

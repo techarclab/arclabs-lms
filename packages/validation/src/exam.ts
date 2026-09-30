@@ -281,6 +281,8 @@ export type SetExamAudienceInput = z.input<typeof setExamAudienceSchema>;
 
 export const listExamsQuery = paginationQuery.extend({
   state: z.enum(['DRAFT', 'SCHEDULED', 'LIVE', 'ENDED']).optional(),
+  /** Exams this department takes (college-wide ones included). */
+  departmentId: z.uuid().optional(),
 });
 export type ListExamsQuery = z.infer<typeof listExamsQuery>;
 

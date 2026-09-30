@@ -37,7 +37,7 @@ export class ExamAnalyticsService {
   async analytics(
     orgId: string,
     examId: string,
-    opts: { viewOnly?: boolean } = {},
+    opts: { viewOnly?: boolean; departmentId?: string | null } = {},
   ): Promise<ExamAnalytics> {
     await this.engine.finalizeExpired({ quizId: examId });
     const exam = await this.prisma.quiz.findFirst({
@@ -47,9 +47,25 @@ export class ExamAnalyticsService {
     if (!exam) throw new NotFoundException();
     const [summary, assigned, attempts, questions] = await Promise.all([
       this.exams.get(orgId, examId),
-      this.engine.assignedCandidates(exam),
+      this.engine
+        .assignedCandidates(exam)
+        // A department's faculty see only their department's students.
+        .then((list) =>
+          opts.departmentId ? list.filter((m) => m.departmentId === opts.departmentId) : list,
+        ),
       this.prisma.quizAttempt.findMany({
-        where: { quizId: examId },
+        where: {
+          quizId: examId,
+          ...(opts.departmentId
+            ? {
+                user: {
+                  memberships: {
+                    some: { organizationId: orgId, departmentId: opts.departmentId },
+                  },
+                },
+              }
+            : {}),
+        },
         include: {
           user: {
             select: {
@@ -233,6 +249,19 @@ export class ExamAnalyticsService {
   }
 
   /** Camera evidence photos for one attempt (taken when the camera AI reported a violation). */
+  /** A department's faculty may only open attempts of their department's students. */
+  async assertAttemptInDepartment(orgId: string, attemptId: string, departmentId?: string | null) {
+    if (!departmentId) return;
+    const ok = await this.prisma.quizAttempt.count({
+      where: {
+        id: attemptId,
+        organizationId: orgId,
+        user: { memberships: { some: { organizationId: orgId, departmentId } } },
+      },
+    });
+    if (!ok) throw new NotFoundException();
+  }
+
   async snapshots(orgId: string, examId: string, attemptId: string) {
     const a = await this.prisma.quizAttempt.findFirst({
       where: { id: attemptId, quizId: examId, organizationId: orgId },
@@ -478,8 +507,8 @@ export class ExamAnalyticsService {
     return { evaluated, remaining };
   }
 
-  async csv(orgId: string, examId: string) {
-    const a = await this.analytics(orgId, examId);
+  async csv(orgId: string, examId: string, departmentId?: string | null) {
+    const a = await this.analytics(orgId, examId, { departmentId });
     const esc = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;

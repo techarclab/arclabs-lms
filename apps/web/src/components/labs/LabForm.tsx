@@ -7,6 +7,7 @@ import type { DepartmentSummary, LabCriterion, LabSummary } from '@arc/types';
 import { Button, cn, Dialog, DialogContent, Field, Input, Textarea } from '@arc/ui';
 import type { ApiError } from '@/lib/api';
 import { useApi, useApiMutation } from '@/lib/use-api';
+import { useDepartmentScope } from '@/lib/use-department-scope';
 
 const PRESETS: { text: string; max: number }[] = [
   { text: 'Presentation', max: 5 },
@@ -39,6 +40,8 @@ export function LabForm({
   onSaved: (id: string) => void;
 }) {
   const mutate = useApiMutation();
+  const scope = useDepartmentScope();
+  const scopeId = scope?.id ?? null;
   const { data: departments = [] } = useApi<DepartmentSummary[]>(open ? '/departments' : null, {
     orgId,
   });
@@ -64,10 +67,10 @@ export function LabForm({
             { id: newId(), text: 'Contribution in project', max: '5' },
           ],
     );
-    setAll(editing?.assignToAll ?? true);
-    setDepts(editing?.departments.map((d) => d.id) ?? []);
+    setAll(editing?.assignToAll ?? !scopeId);
+    setDepts(editing?.departments.map((d) => d.id) ?? (scopeId ? [scopeId] : []));
     setError(null);
-  }, [open, editing]);
+  }, [open, editing, scopeId]);
 
   const total = rows.reduce((s, r) => s + (Number(r.max) || 0), 0);
   const unused = PRESETS.filter(
@@ -231,10 +234,13 @@ export function LabForm({
           <div className="space-y-2.5">
             <p className="text-sm font-medium text-ink-800">Students</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {[
-                { v: true, label: 'All students', icon: Users },
-                { v: false, label: 'Chosen departments', icon: Building },
-              ].map((o) => (
+              {(scope
+                ? [{ v: false, label: `${scope.name} students`, icon: Building }]
+                : [
+                    { v: true, label: 'All students', icon: Users },
+                    { v: false, label: 'Chosen departments', icon: Building },
+                  ]
+              ).map((o) => (
                 <button
                   key={o.label}
                   type="button"

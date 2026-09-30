@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import {
@@ -20,6 +30,7 @@ import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
 import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
+import { visibleToDepartment } from '../common/department-scope';
 import { MaterialsService } from './materials.service';
 
 const checkLinkSchema = z.object({ url: z.string().trim().min(1).max(2000) });
@@ -34,8 +45,8 @@ export class MaterialsController {
   constructor(private readonly materials: MaterialsService) {}
 
   @Get()
-  library(@OrgContext() org: OrgContextInfo) {
-    return this.materials.library(org.organizationId);
+  library(@CurrentUser() user: User, @OrgContext() org: OrgContextInfo) {
+    return this.materials.library(org.organizationId, visibleToDepartment(org, user.id));
   }
 
   /** Whether file uploads are set up (Firebase Storage). */
@@ -67,6 +78,7 @@ export class MaterialsController {
     @OrgContext() org: OrgContextInfo,
     @Body(new ZodValidationPipe(createMaterialSchema)) body: CreateMaterialInput,
   ) {
+    this.materials.assertAudience(org, body);
     return this.materials.create(user, org.organizationId, body);
   }
 
@@ -95,21 +107,30 @@ export class MaterialsController {
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    if (org.departmentId)
+      throw new ForbiddenException('Only the college admin can delete subjects (they may hold other departments’ materials).');
     await this.materials.deleteFolder(user, org.organizationId, id);
   }
 
   @Get(':id/activity')
-  activity(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
-    return this.materials.activity(org.organizationId, id);
+  async activity(
+    @CurrentUser() user: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.materials.assertScope(org, user.id, id, false);
+    return this.materials.activity(org.organizationId, id, org.departmentId);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @CurrentUser() user: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(updateMaterialSchema)) body: UpdateMaterialInput,
   ) {
+    await this.materials.assertScope(org, user.id, id, true);
+    this.materials.assertAudience(org, body);
     return this.materials.update(user, org.organizationId, id, body);
   }
 
@@ -120,6 +141,7 @@ export class MaterialsController {
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.materials.assertScope(org, user.id, id, true);
     await this.materials.remove(user, org.organizationId, id);
   }
 }

@@ -25,6 +25,7 @@ import { CurrentUser, OrgContext, RequirePermission } from '../auth/decorators';
 import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
+import { visibleToDepartment } from '../common/department-scope';
 import { LabsService } from './labs.service';
 
 /** Offline labs / project reviews: criteria-based marks entered by faculty. */
@@ -38,8 +39,8 @@ export class LabsController {
 
   @Get()
   @RequirePermission('lab.view')
-  list(@OrgContext() org: OrgContextInfo) {
-    return this.labs.list(org.organizationId);
+  list(@CurrentUser() u: User, @OrgContext() org: OrgContextInfo) {
+    return this.labs.list(org.organizationId, visibleToDepartment(org, u.id));
   }
 
   @Post()
@@ -48,46 +49,59 @@ export class LabsController {
     @OrgContext() org: OrgContextInfo,
     @Body(new ZodValidationPipe(createLabSchema)) body: CreateLabInput,
   ) {
+    this.labs.assertAudience(org, body);
     return this.labs.create(u, org.organizationId, body);
   }
 
   @Get(':id')
   @RequirePermission('lab.view')
-  sheet(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
-    return this.labs.sheet(org.organizationId, id);
+  async sheet(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.labs.assertScope(org, u.id, id, false);
+    return this.labs.sheet(org.organizationId, id, org.departmentId);
   }
 
   @Get(':id/marks.csv')
   @RequirePermission('lab.view')
   async csv(
+    @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Res() res: Response,
   ) {
-    const { filename, body } = await this.labs.csv(org.organizationId, id);
+    await this.labs.assertScope(org, u.id, id, false);
+    const { filename, body } = await this.labs.csv(org.organizationId, id, org.departmentId);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(body);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(updateLabSchema)) body: UpdateLabInput,
   ) {
-    return this.labs.update(u, org.organizationId, id, body);
+    await this.labs.assertScope(org, u.id, id, true);
+    this.labs.assertAudience(org, body);
+    const r = await this.labs.update(u, org.organizationId, id, body);
+    return org.departmentId ? this.labs.sheet(org.organizationId, id, org.departmentId) : r;
   }
 
   @Put(':id/marks')
-  saveMarks(
+  async saveMarks(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(saveLabMarksSchema)) body: SaveLabMarksInput,
   ) {
-    return this.labs.saveMarks(u, org.organizationId, id, body);
+    // Marking a college-wide lab for your own students is fine; the sheet only has them.
+    await this.labs.assertScope(org, u.id, id, false);
+    return this.labs.saveMarks(u, org.organizationId, id, body, org.departmentId);
   }
 
   @Delete(':id')
@@ -97,6 +111,7 @@ export class LabsController {
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.labs.assertScope(org, u.id, id, true);
     await this.labs.remove(u, org.organizationId, id);
   }
 }

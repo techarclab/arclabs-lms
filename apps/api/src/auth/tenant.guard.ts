@@ -11,6 +11,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ACCESS_CODE_ONLY, REQUIRED_PERMISSION, SUPER_ADMIN_ONLY } from './decorators';
 import type { AuthedRequest } from './auth.types';
 
+const STAFF_ROLES: OrgRole[] = ['INSTRUCTOR', 'CONTENT_MANAGER', 'EVALUATOR'];
+
+/** Faculty with a department (and no admin role) work only within that department. */
+export function departmentScope(roles: OrgRole[], departmentId: string | null): string | null {
+  if (!departmentId || roles.includes('ORG_ADMIN')) return null;
+  return roles.some((r) => STAFF_ROLES.includes(r)) ? departmentId : null;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -80,7 +88,7 @@ export class TenantGuard implements CanActivate {
     if (!hasPermission(roles, permission)) {
       throw new ForbiddenException({ message: `Missing permission: ${permission}` });
     }
-    req.org = { organizationId: orgId, roles };
+    req.org = { organizationId: orgId, roles, departmentId: departmentScope(roles, membership.departmentId) };
     return true;
   }
 

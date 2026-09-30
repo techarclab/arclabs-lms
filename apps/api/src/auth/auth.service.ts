@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { MeResponse } from '@arc/types';
+import type { MeResponse, OrgRole } from '@arc/types';
+import { departmentScope } from './tenant.guard';
 import type { SyncUserInput } from '@arc/validation';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
@@ -70,6 +71,7 @@ export class AuthService {
           where: { status: 'ACTIVE' },
           include: {
             organization: { select: { id: true, name: true, collegeEmailDomains: true } },
+            department: { select: { id: true, name: true } },
           },
         },
       },
@@ -85,6 +87,9 @@ export class AuthService {
         roles: m.roles,
         collegeEmail: m.collegeEmail,
         collegeEmailDomains: m.organization.collegeEmailDomains,
+        department: m.department,
+        /** Faculty limited to their department. */
+        scopedDepartmentId: departmentScope(m.roles as OrgRole[], m.departmentId),
       })),
     };
   }

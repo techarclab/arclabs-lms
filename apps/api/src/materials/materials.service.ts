@@ -30,6 +30,13 @@ import type {
 import { AuditService } from '../audit/audit.service';
 import type { Material, Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { OrgContextInfo } from '../auth/auth.types';
+import {
+  assertAudienceInDepartment,
+  assertVisibleInDepartment,
+  assertWritableInDepartment,
+  visibleToDepartment,
+} from '../common/department-scope';
 import { MATERIAL_FILES, type MaterialFiles } from './file-storage';
 
 export type LinkAccess = 'public' | 'private' | 'not-found' | 'unknown';
@@ -208,11 +215,30 @@ export class MaterialsService {
 
   // ───────── Admin: materials ─────────
 
-  async library(orgId: string): Promise<MaterialLibrary<MaterialAdminItem>> {
+  /** Department faculty: may they see / change this material? */
+  async assertScope(org: OrgContextInfo, userId: string, id: string, write: boolean) {
+    if (!org.departmentId) return;
+    const m = await this.prisma.material.findFirst({
+      where: { id, organizationId: org.organizationId },
+      include: { audiences: true },
+    });
+    if (!m) throw new NotFoundException();
+    assertVisibleInDepartment(org, userId, m);
+    if (write) assertWritableInDepartment(org, userId, m);
+  }
+
+  assertAudience(org: OrgContextInfo, input: { assignToAll?: boolean; departmentIds?: string[] }) {
+    assertAudienceInDepartment(org, input);
+  }
+
+  async library(
+    orgId: string,
+    scope: Prisma.MaterialWhereInput = {},
+  ): Promise<MaterialLibrary<MaterialAdminItem>> {
     const [folders, rows, stats] = await Promise.all([
       this.folders(orgId),
       this.prisma.material.findMany({
-        where: { organizationId: orgId },
+        where: { organizationId: orgId, ...scope },
         include: adminInclude,
         orderBy: { createdAt: 'desc' },
       }),
@@ -408,7 +434,11 @@ export class MaterialsService {
   }
 
   /** Who the material is shared with, who opened it and who hasn't yet. */
-  async activity(orgId: string, id: string): Promise<MaterialActivityReport> {
+  async activity(
+    orgId: string,
+    id: string,
+    departmentId?: string | null,
+  ): Promise<MaterialActivityReport> {
     const m = await this.prisma.material.findFirst({
       where: { id, organizationId: orgId },
       include: { audiences: true, activity: true },
@@ -421,7 +451,11 @@ export class MaterialsService {
         status: 'ACTIVE',
         roles: { has: 'LEARNER' },
         user: { status: 'ACTIVE' },
-        ...(m.assignToAll ? {} : { departmentId: { in: deptIds } }),
+        ...(departmentId
+          ? { departmentId }
+          : m.assignToAll
+            ? {}
+            : { departmentId: { in: deptIds } }),
       },
       include: {
         user: { select: { id: true, fullName: true, email: true } },

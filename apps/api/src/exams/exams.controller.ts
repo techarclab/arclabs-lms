@@ -194,10 +194,11 @@ export class ExamsController {
   @Get()
   @RequirePermission('exam.results.view')
   list(
+    @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Query(new ZodValidationPipe(listExamsQuery)) q: ListExamsQuery,
   ) {
-    return this.exams.list(org.organizationId, q);
+    return this.exams.list(org.organizationId, q, this.exams.scopeWhere(org, u.id));
   }
 
   @Post()
@@ -206,71 +207,82 @@ export class ExamsController {
     @OrgContext() org: OrgContextInfo,
     @Body(new ZodValidationPipe(createExamSchema)) body: CreateExamParsed,
   ) {
-    return this.exams.create(u, org.organizationId, body);
+    return this.exams.create(u, org.organizationId, body, org.departmentId);
   }
 
   @Get(':id')
-  get(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
+  async get(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.exams.assertAccess(org, u.id, id);
     return this.exams.get(org.organizationId, id);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(updateExamSchema)) body: UpdateExamInput,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.update(u, org.organizationId, id, body);
   }
 
   @Put(':id/questions')
-  setQuestions(
+  async setQuestions(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(setExamQuestionsSchema)) body: { questionIds: string[] },
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.setQuestions(u, org.organizationId, id, body.questionIds);
   }
 
   @Put(':id/audience')
-  setAudience(
+  async setAudience(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Body(new ZodValidationPipe(setExamAudienceSchema)) body: SetExamAudienceInput,
   ) {
-    return this.exams.setAudience(u, org.organizationId, id, body);
+    await this.exams.assertAccess(org, u.id, id, true);
+    return this.exams.setAudience(u, org.organizationId, id, body, org.departmentId);
   }
 
   @Post(':id/publish')
   @HttpCode(200)
-  publish(
+  async publish(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.publish(u, org.organizationId, id);
   }
 
   @Post(':id/unpublish')
   @HttpCode(200)
-  unpublish(
+  async unpublish(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.unpublish(u, org.organizationId, id);
   }
 
   @Post(':id/release-results')
   @HttpCode(200)
-  release(
+  async release(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.releaseResults(u, org.organizationId, id);
   }
 
@@ -281,23 +293,34 @@ export class ExamsController {
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     await this.exams.remove(u, org.organizationId, id);
   }
 
   @Get(':id/analytics')
   @RequirePermission('exam.results.view')
-  examAnalytics(@OrgContext() org: OrgContextInfo, @Param('id', UuidPipe) id: string) {
-    return this.analytics.analytics(org.organizationId, id, { viewOnly: viewOnly(org) });
+  async examAnalytics(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    await this.exams.assertAccess(org, u.id, id);
+    return this.analytics.analytics(org.organizationId, id, {
+      viewOnly: viewOnly(org),
+      departmentId: org.departmentId,
+    });
   }
 
   @Get(':id/results.csv')
   @RequirePermission('exam.results.view')
   async csv(
+    @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Res() res: Response,
   ) {
-    const { filename, body } = await this.analytics.csv(org.organizationId, id);
+    await this.exams.assertAccess(org, u.id, id);
+    const { filename, body } = await this.analytics.csv(org.organizationId, id, org.departmentId);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(body);
@@ -305,21 +328,27 @@ export class ExamsController {
 
   @Get(':id/attempts/:attemptId/snapshots')
   @RequirePermission('exam.results.view')
-  snapshots(
+  async snapshots(
+    @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Param('attemptId', UuidPipe) attemptId: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.snapshots(org.organizationId, id, attemptId);
   }
 
   @Get(':id/attempts/:attemptId')
   @RequirePermission('exam.results.view')
-  attempt(
+  async attempt(
+    @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Param('attemptId', UuidPipe) attemptId: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.attemptDetail(org.organizationId, id, attemptId, {
       viewOnly: viewOnly(org),
     });
@@ -327,45 +356,51 @@ export class ExamsController {
 
   @Post(':id/evaluate-coding')
   @HttpCode(200)
-  evaluateCoding(
+  async evaluateCoding(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.analytics.evaluateCoding(u, org.organizationId, id);
   }
 
   /** Stop a live exam now: everyone still writing is submitted. */
   @Post(':id/end')
   @HttpCode(200)
-  endNow(
+  async endNow(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id, true);
     return this.analytics.endNow(u, org.organizationId, id);
   }
 
   /** Faculty changes (or clears) the marks for one question of a submitted attempt. */
   @Put(':id/attempts/:attemptId/marks')
-  setMarks(
+  async setMarks(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Param('attemptId', UuidPipe) attemptId: string,
     @Body(new ZodValidationPipe(setMarksSchema)) body: SetMarksInput,
   ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.setMarks(u, org.organizationId, id, attemptId, body);
   }
 
   @Post(':id/attempts/:attemptId/force-submit')
   @HttpCode(200)
-  forceSubmit(
+  async forceSubmit(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
     @Param('attemptId', UuidPipe) attemptId: string,
   ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.forceSubmit(u, org.organizationId, id, attemptId);
   }
 }

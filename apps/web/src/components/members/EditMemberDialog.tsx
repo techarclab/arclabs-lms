@@ -88,7 +88,17 @@ export function EditMemberDialog({
             )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Department" htmlFor="ed-dept" optional>
+            <Field
+              label="Department"
+              htmlFor="ed-dept"
+              optional
+              hint={
+                roles.some((r) => ['INSTRUCTOR', 'CONTENT_MANAGER', 'EVALUATOR'].includes(r)) &&
+                !roles.includes('ORG_ADMIN')
+                  ? 'Faculty with a department only see and manage that department.'
+                  : undefined
+              }
+            >
               <Select
                 id="ed-dept"
                 value={departmentId}

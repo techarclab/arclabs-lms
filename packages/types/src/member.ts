@@ -26,6 +26,25 @@ export interface DepartmentSummary {
   id: string;
   name: string;
   memberCount: number;
+  learnerCount: number;
+  staffCount: number;
+  /** The department's own registration link code (null until created). */
+  joinCode: string | null;
+  joinEnabled: boolean;
+}
+
+export interface DepartmentStudent {
+  userId: string;
+  fullName: string;
+  email: string;
+  collegeEmail: string | null;
+  externalId: string | null;
+  joinedAt: string;
+}
+
+export interface DepartmentDetail extends DepartmentSummary {
+  staff: { userId: string; fullName: string; email: string; roles: string[] }[];
+  counts: { exams: number; materials: number; labs: number; announcements: number };
 }
 
 export interface InviteResult {

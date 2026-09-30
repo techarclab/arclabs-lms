@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import type {
   UpdateExamInput,
 } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
+import type { OrgContextInfo } from '../auth/auth.types';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamEngine, examState, type ExamRow } from './exam-engine.service';
@@ -27,9 +29,67 @@ export class ExamsService {
     private readonly engine: ExamEngine,
   ) {}
 
+  // ───────── Department scope (faculty assigned to one department) ─────────
+
+  /** Exams a department's faculty can see: theirs, college-wide ones, and ones for their dept. */
+  scopeWhere(org: OrgContextInfo, userId: string): Prisma.QuizWhereInput {
+    if (!org.departmentId) return {};
+    return {
+      OR: [
+        { createdById: userId },
+        { assignToAll: true },
+        { audiences: { some: { departmentId: org.departmentId } } },
+        {
+          audiences: {
+            some: {
+              user: {
+                memberships: {
+                  some: { organizationId: org.organizationId, departmentId: org.departmentId },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  /**
+   * 404 when a department's faculty can't see the exam; 403 when they may see but not change it
+   * (they can change exams they created or that are only for their department).
+   */
+  async assertAccess(org: OrgContextInfo, userId: string, id: string, write = false) {
+    if (!org.departmentId) return;
+    const exam = await this.prisma.quiz.findFirst({
+      where: { id, organizationId: org.organizationId, ...this.scopeWhere(org, userId) },
+      include: { audiences: { include: { user: { select: { memberships: true } } } } },
+    });
+    if (!exam) throw new NotFoundException();
+    if (!write || exam.createdById === userId) return;
+    const onlyMine =
+      !exam.assignToAll &&
+      exam.audiences.length > 0 &&
+      exam.audiences.every((a) =>
+        a.departmentId
+          ? a.departmentId === org.departmentId
+          : a.user?.memberships.some(
+              (m) => m.organizationId === org.organizationId && m.departmentId === org.departmentId,
+            ),
+      );
+    if (!onlyMine)
+      throw new ForbiddenException({
+        code: 'OTHER_DEPARTMENTS',
+        message: 'This exam is shared with other departments — ask the college admin to change it.',
+      });
+  }
+
   // ───────── Read ─────────
 
-  async list(orgId: string, q: ListExamsQuery): Promise<Paginated<ExamSummary>> {
+  async list(
+    orgId: string,
+    q: ListExamsQuery,
+    scope: Prisma.QuizWhereInput = {},
+  ): Promise<Paginated<ExamSummary>> {
     const now = new Date();
     const stateWhere: Record<ExamState, Prisma.QuizWhereInput> = {
       DRAFT: { status: 'DRAFT' },
@@ -43,6 +103,19 @@ export class ExamsService {
       status: { not: 'ARCHIVED' },
       ...(q.state ? stateWhere[q.state] : {}),
       ...(q.search ? { title: { contains: q.search, mode: 'insensitive' } } : {}),
+      ...scope,
+      ...(q.departmentId
+        ? {
+            AND: [
+              {
+                OR: [
+                  { assignToAll: true },
+                  { audiences: { some: { departmentId: q.departmentId } } },
+                ],
+              },
+            ],
+          }
+        : {}),
     };
     await this.engine.finalizeExpired({ organizationId: orgId });
     const [total, rows] = await this.prisma.$transaction([
@@ -159,10 +232,14 @@ export class ExamsService {
 
   // ───────── Write ─────────
 
-  async create(actor: User, orgId: string, input: CreateExamParsed) {
+  async create(actor: User, orgId: string, input: CreateExamParsed, departmentId?: string | null) {
     const exam = await this.prisma.quiz.create({
       data: {
         organizationId: orgId,
+        // A department's faculty create exams for their department.
+        ...(departmentId
+          ? { assignToAll: false, audiences: { create: [{ departmentId }] } }
+          : {}),
         createdById: actor.id,
         title: input.title,
         instructions: input.instructions ?? DEFAULT_INSTRUCTIONS,
@@ -270,10 +347,30 @@ export class ExamsService {
     return this.get(orgId, id);
   }
 
-  async setAudience(actor: User, orgId: string, id: string, input: SetExamAudienceInput) {
+  async setAudience(
+    actor: User,
+    orgId: string,
+    id: string,
+    input: SetExamAudienceInput,
+    departmentId?: string | null,
+  ) {
     await this.row(orgId, id); // audience may be widened after publishing (e.g. late admissions)
     const deptIds = [...new Set(input.departmentIds ?? [])];
     const userIds = [...new Set(input.userIds ?? [])];
+    if (departmentId) {
+      const outside =
+        input.assignToAll ||
+        deptIds.some((d) => d !== departmentId) ||
+        (userIds.length &&
+          (await this.prisma.organizationMember.count({
+            where: { organizationId: orgId, userId: { in: userIds }, departmentId },
+          })) !== userIds.length);
+      if (outside)
+        throw new ForbiddenException({
+          code: 'OTHER_DEPARTMENTS',
+          message: 'You can assign exams only to students of your department.',
+        });
+    }
     const [depts, members] = await Promise.all([
       this.prisma.department.count({ where: { id: { in: deptIds }, organizationId: orgId } }),
       this.prisma.organizationMember.count({

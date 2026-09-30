@@ -42,6 +42,7 @@ import { OrgRequired } from '@/components/shell/OrgRequired';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { formatDateTime, timeAgo } from '@/lib/format';
 import { useApi, useApiMutation } from '@/lib/use-api';
+import { useDepartmentScope } from '@/lib/use-department-scope';
 
 export default function AnnouncementsPage() {
   return (
@@ -109,6 +110,8 @@ function examReminder(e: ExamSummary, orgName: string) {
 
 function Announcements({ orgId, orgName }: { orgId: string; orgName: string }) {
   const params = useSearchParams();
+  const scope = useDepartmentScope();
+  const scopeId = scope?.id ?? null;
   const mutate = useApiMutation();
   const mutateRef = useRef(mutate);
   mutateRef.current = mutate;
@@ -137,6 +140,15 @@ function Announcements({ orgId, orgName }: { orgId: string; orgName: string }) {
   const [missingOpen, setMissingOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Department faculty send to their department; /announcements?dept=ID preselects one (from a department page).
+  const deptParam = params.get('dept');
+  useEffect(() => {
+    const d = scopeId ?? deptParam;
+    if (!d) return;
+    setAudType('departments');
+    setDepts([d]);
+  }, [scopeId, deptParam]);
 
   // /announcements?exam=ID opens an exam reminder (from the exam page).
   const examParam = params.get('exam');
@@ -206,7 +218,8 @@ function Announcements({ orgId, orgName }: { orgId: string; orgName: string }) {
     setBody('');
     setLinkUrl(null);
     setLinkLabel(null);
-    setAudType('all');
+    setAudType(scopeId ? 'departments' : 'all');
+    if (scopeId) setDepts([scopeId]);
     setExamId('');
   }
 
@@ -293,24 +306,26 @@ function Announcements({ orgId, orgName }: { orgId: string; orgName: string }) {
                 {(
                   [
                     ['all', 'All students', Users],
-                    ['departments', 'Departments', Building],
+                    ['departments', scope ? `${scope.name} students` : 'Departments', Building],
                     ['exam', 'Students of an exam', ClipboardList],
                   ] as const
-                ).map(([k, label, Icon]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setAudType(k)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-left text-sm font-medium transition',
-                      audType === k
-                        ? 'border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-500'
-                        : 'border-ink-200 text-ink-700 hover:border-ink-300',
-                    )}
-                  >
-                    <Icon className="size-4" /> {label}
-                  </button>
-                ))}
+                )
+                  .filter(([k]) => !(scope && k === 'all'))
+                  .map(([k, label, Icon]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setAudType(k)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-left text-sm font-medium transition',
+                        audType === k
+                          ? 'border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-500'
+                          : 'border-ink-200 text-ink-700 hover:border-ink-300',
+                      )}
+                    >
+                      <Icon className="size-4" /> {label}
+                    </button>
+                  ))}
               </div>
               {audType === 'departments' && (
                 <div className="mt-3 flex flex-wrap gap-2">

@@ -12,6 +12,11 @@ export interface FirebaseIdentityInfo {
 export interface OrgContextInfo {
   organizationId: string;
   roles: OrgRole[];
+  /**
+   * Set for faculty assigned to a department (not college admins): they only see and act on
+   * that department's students, exams, materials, lab marks and announcements.
+   */
+  departmentId?: string | null;
 }
 
 export interface AuthedRequest extends Request {

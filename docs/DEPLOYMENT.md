@@ -334,6 +334,16 @@ the student portal.
 Workspace ≈ 2,000/day, Brevo free 300/day. For more students use a paid SMTP (Brevo, Resend, SES).
 Without SMTP, announcements still appear in the student portal.
 
+## 17. Departments: own pages, own links, department-only faculty
+
+**How it fits together:** one college = one admin panel. Inside it, each department (ECE, CSE…) has its own page, students, faculty and registration link.
+
+- **Departments** (sidebar) lists every department with student/faculty counts and its registration link. **Open** shows the department page: stats, the link, and tabs for students (with CSV), faculty, exams, study materials and labs. **Message ECE** opens Announcements with that department already chosen.
+- **Two kinds of registration link — both work:**
+  - *College link* (People page): students choose their department from a list.
+  - *Department link* (Departments page, e.g. `…/join/CMRIT-ECE-7K2Q`): the department is fixed, so students can't pick the wrong one. Turn it on/off per department; **New code** stops the old link.
+- **Department-only faculty:** on People, edit a faculty member (Instructor / Content manager / Evaluator) and set their department. They then only see that department — its students, exam results, materials, lab marks and announcements — and anything they create goes to that department automatically. College-wide items stay visible to them but only admins can edit them. **Org admins are never limited**, even with a department set.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API
