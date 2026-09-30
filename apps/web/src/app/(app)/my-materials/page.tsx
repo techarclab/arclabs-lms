@@ -14,10 +14,11 @@ const NEW_DAYS = 7;
 
 export default function MyMaterialsPage() {
   const mutate = useApiMutation();
-  const { data, isLoading, mutate: setData } = useApi<MaterialLibrary<MaterialStudentItem>>(
-    '/my/materials',
-    { refreshInterval: 60_000 },
-  );
+  const {
+    data,
+    isLoading,
+    mutate: setData,
+  } = useApi<MaterialLibrary<MaterialStudentItem>>('/my/materials', { refreshInterval: 60_000 });
   const folders = data?.folders ?? [];
   const materials = data?.materials ?? [];
   const [subject, setSubject] = useState<string>(''); // '' = all
@@ -45,7 +46,8 @@ export default function MyMaterialsPage() {
 
   // Group: subject → unit (units in folder order), loose items last.
   const groups = useMemo(() => {
-    const out: { key: string; title: string; subtitle?: string; items: MaterialStudentItem[] }[] = [];
+    const out: { key: string; title: string; subtitle?: string; items: MaterialStudentItem[] }[] =
+      [];
     for (const s of tree) {
       const direct = filtered.filter((m) => m.folderId === s.id);
       if (direct.length) out.push({ key: s.id, title: s.name, items: direct });
@@ -55,7 +57,12 @@ export default function MyMaterialsPage() {
       }
     }
     const loose = filtered.filter((m) => !m.folderId || !folders.some((f) => f.id === m.folderId));
-    if (loose.length) out.push({ key: 'none', title: tree.length ? 'Other materials' : 'All materials', items: loose });
+    if (loose.length)
+      out.push({
+        key: 'none',
+        title: tree.length ? 'Other materials' : 'All materials',
+        items: loose,
+      });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, folders]);
@@ -69,7 +76,11 @@ export default function MyMaterialsPage() {
           ...d,
           materials: d.materials.map((x) =>
             x.id === m.id
-              ? { ...x, viewed: x.viewed || action === 'view', downloaded: x.downloaded || action === 'download' }
+              ? {
+                  ...x,
+                  viewed: x.viewed || action === 'view',
+                  downloaded: x.downloaded || action === 'download',
+                }
               : x,
           ),
         },
@@ -79,7 +90,8 @@ export default function MyMaterialsPage() {
 
   function view(m: MaterialStudentItem) {
     track(m, 'view');
-    if (m.link.embedUrl) setViewing({ ...m, subtitle: folderPath(folders, m.folderId) ?? m.organizationName });
+    if (m.link.embedUrl)
+      setViewing({ ...m, subtitle: folderPath(folders, m.folderId) ?? m.organizationName });
     else window.open(m.link.openUrl, '_blank', 'noopener,noreferrer');
   }
 
@@ -249,7 +261,9 @@ function MaterialCard({
         ) : null}
       </div>
       {m.description && (
-        <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-ink-600">{m.description}</p>
+        <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-ink-600">
+          {m.description}
+        </p>
       )}
       <div className="mt-auto flex gap-2 pt-4">
         <Button variant="secondary" size="sm" className="flex-1" onClick={onView}>
@@ -258,7 +272,12 @@ function MaterialCard({
         </Button>
         {canDownload && (
           <Button asChild size="sm" className="flex-1">
-            <a href={m.link.downloadUrl!} target="_blank" rel="noopener noreferrer" onClick={onDownload}>
+            <a
+              href={m.link.downloadUrl!}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onDownload}
+            >
               <Download /> Download
             </a>
           </Button>

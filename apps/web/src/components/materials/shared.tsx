@@ -22,14 +22,19 @@ import type {
 } from '@arc/types';
 import { cn } from '@arc/ui';
 
-export const TYPE_META: Record<
-  MaterialType,
-  { label: string; icon: LucideIcon; tone: string }
-> = {
+export const TYPE_META: Record<MaterialType, { label: string; icon: LucideIcon; tone: string }> = {
   pdf: { label: 'PDF', icon: FileText, tone: 'bg-rose-50 text-rose-600 ring-rose-100' },
-  slides: { label: 'Slides', icon: Presentation, tone: 'bg-orange-50 text-orange-600 ring-orange-100' },
+  slides: {
+    label: 'Slides',
+    icon: Presentation,
+    tone: 'bg-orange-50 text-orange-600 ring-orange-100',
+  },
   doc: { label: 'Document', icon: File, tone: 'bg-sky-50 text-sky-600 ring-sky-100' },
-  sheet: { label: 'Spreadsheet', icon: FileSpreadsheet, tone: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
+  sheet: {
+    label: 'Spreadsheet',
+    icon: FileSpreadsheet,
+    tone: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
+  },
   video: { label: 'Video', icon: PlayCircle, tone: 'bg-red-50 text-red-600 ring-red-100' },
   image: { label: 'Image', icon: ImageIcon, tone: 'bg-violet-50 text-violet-600 ring-violet-100' },
   code: { label: 'Code', icon: Code2, tone: 'bg-slate-100 text-slate-700 ring-slate-200' },
@@ -45,6 +50,7 @@ export const PROVIDER_LABEL: Record<MaterialProvider, string> = {
   dropbox: 'Dropbox',
   onedrive: 'OneDrive',
   web: 'Website',
+  upload: 'Uploaded file',
 };
 
 export function TypeIcon({ type, className }: { type: MaterialType; className?: string }) {
@@ -90,12 +96,20 @@ export function MaterialFrame({ link, title }: { link: MaterialLinkInfo; title: 
       </div>
     );
   }
-  if (link.type === 'image' && link.provider === 'web') {
+  if (link.type === 'image' && (link.provider === 'web' || link.provider === 'upload')) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={link.embedUrl} alt={title} className="max-h-[72vh] w-full rounded-xl object-contain" />;
+    return (
+      <img
+        src={link.embedUrl}
+        alt={title}
+        className="max-h-[72vh] w-full rounded-xl object-contain"
+      />
+    );
   }
-  if (link.type === 'video' && link.provider === 'web') {
-    return <video src={link.embedUrl} controls className="max-h-[72vh] w-full rounded-xl bg-black" />;
+  if (link.type === 'video' && (link.provider === 'web' || link.provider === 'upload')) {
+    return (
+      <video src={link.embedUrl} controls className="max-h-[72vh] w-full rounded-xl bg-black" />
+    );
   }
   return (
     <iframe

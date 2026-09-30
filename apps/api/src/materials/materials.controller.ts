@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import {
@@ -16,6 +7,8 @@ import {
   materialOpenSchema,
   renameFolderSchema,
   updateMaterialSchema,
+  uploadUrlSchema,
+  type UploadUrlInput,
   type CreateMaterialInput,
   type MaterialFolderInput,
   type MaterialOpenInput,
@@ -43,6 +36,21 @@ export class MaterialsController {
   @Get()
   library(@OrgContext() org: OrgContextInfo) {
     return this.materials.library(org.organizationId);
+  }
+
+  /** Whether file uploads are set up (Firebase Storage). */
+  @Get('storage')
+  storage() {
+    return this.materials.storageStatus();
+  }
+
+  @Post('upload-url')
+  @HttpCode(200)
+  uploadUrl(
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(uploadUrlSchema)) body: UploadUrlInput,
+  ) {
+    return this.materials.uploadUrl(org.organizationId, body);
   }
 
   @Post('check-link')

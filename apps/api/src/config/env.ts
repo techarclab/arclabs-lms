@@ -45,6 +45,11 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_AUTH_EMULATOR_HOST: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  /**
+   * Firebase Storage bucket for uploaded study materials, e.g. arc-labs-lms.firebasestorage.app.
+   * Needs the Blaze plan. Without it, materials can still be shared as links.
+   */
+  FIREBASE_STORAGE_BUCKET: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('auto'),
   S3_BUCKET: z.string().default('arc-lms'),

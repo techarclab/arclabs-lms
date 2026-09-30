@@ -9,7 +9,12 @@ import { useApiMutation } from '@/lib/use-api';
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 /** Subject and body are generated — the admin only adds the faculty email addresses. */
-export function accessCodeMail(o: { orgName: string; code: string; loginLink: string; note?: string }) {
+export function accessCodeMail(o: {
+  orgName: string;
+  code: string;
+  loginLink: string;
+  note?: string;
+}) {
   const subject = `Faculty access to ${o.orgName} exam results — ARC LABS`;
   const body = [
     'Dear Faculty,',
@@ -45,7 +50,11 @@ export function EmailCodePanel({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ sent: string[]; failed: string[]; mailConfigured: boolean } | null>(null);
+  const [result, setResult] = useState<{
+    sent: string[];
+    failed: string[];
+    mailConfigured: boolean;
+  } | null>(null);
 
   const emails = raw
     .split(/[\s,;]+/)
@@ -68,9 +77,13 @@ export function EmailCodePanel({
         orgId,
       );
       setResult(r);
-      if (!r.mailConfigured) toast.message('Email isn’t set up on the server — use your email app instead');
+      if (!r.mailConfigured)
+        toast.message('Email isn’t set up on the server — use your email app instead');
       else if (r.failed.length) toast.error(`Couldn’t send to ${r.failed.join(', ')}`);
-      else toast.success(`Code emailed to ${r.sent.length} ${r.sent.length === 1 ? 'person' : 'people'}`);
+      else
+        toast.success(
+          `Code emailed to ${r.sent.length} ${r.sent.length === 1 ? 'person' : 'people'}`,
+        );
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -122,8 +135,8 @@ export function EmailCodePanel({
       )}
       {result && !result.mailConfigured && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 ring-1 ring-amber-200">
-          Automatic email isn’t set up yet (SMTP settings on the API). Click <b>Open in email app</b>{' '}
-          — the subject and message are filled in for you.
+          Automatic email isn’t set up yet (SMTP settings on the API). Click{' '}
+          <b>Open in email app</b> — the subject and message are filled in for you.
         </p>
       )}
       <div className="flex flex-wrap justify-end gap-2">

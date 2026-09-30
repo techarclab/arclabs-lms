@@ -174,7 +174,7 @@ export function AccessCodeCard({ orgId, orgName }: { orgId: string; orgName: str
           description="Copy it now — for security it won’t be shown again."
           icon={<KeyRound />}
         >
-          <div className="space-y-4 px-6 pt-4 pb-6">
+          <div className="max-h-[78vh] space-y-4 overflow-y-auto px-6 pt-4 pb-6">
             <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-4 text-center">
               <p className="font-mono text-[19px] font-semibold tracking-[0.08em] break-all text-ink-900 select-all">
                 {shown}

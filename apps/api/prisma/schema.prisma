@@ -1006,7 +1006,13 @@ model Material {
   folderId       String?  @db.Uuid
   title          String
   description    String?
-  url            String
+  /// Shared link (Drive, YouTube…). Null when the material is an uploaded file.
+  url            String?
+  /// Uploaded file in Firebase Storage (private; students get short-lived signed links)
+  storagePath    String?
+  fileName       String?
+  mimeType       String?
+  sizeBytes      Int?
   /// pdf | slides | doc | sheet | video | image | code | zip | folder | link — null: guess from the link
   fileType       String?
   allowDownload  Boolean  @default(true)

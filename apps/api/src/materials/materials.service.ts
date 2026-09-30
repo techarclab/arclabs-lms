@@ -1,11 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  MATERIAL_MAX_UPLOAD_MB,
   materialLink,
+  typeFromFileName,
+  uploadedLink,
   type MaterialActivityReport,
   type MaterialActivityRow,
   type MaterialAdminItem,
@@ -19,10 +25,12 @@ import type {
   CreateMaterialInput,
   MaterialFolderInput,
   UpdateMaterialInput,
+  UploadUrlInput,
 } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { Material, Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MATERIAL_FILES, type MaterialFiles } from './file-storage';
 
 export type LinkAccess = 'public' | 'private' | 'not-found' | 'unknown';
 
@@ -36,12 +44,73 @@ function typeOf(m: Pick<Material, 'fileType'>, link: MaterialLinkInfo): Material
   return (m.fileType as MaterialType | null) ?? link.type;
 }
 
+function fileOf(m: Material) {
+  return m.storagePath && m.fileName
+    ? { name: m.fileName, size: m.sizeBytes, mimeType: m.mimeType }
+    : null;
+}
+
 @Injectable()
 export class MaterialsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Inject(MATERIAL_FILES) private readonly files: MaterialFiles,
   ) {}
+
+  // ───────── Uploaded files ─────────
+
+  storageStatus() {
+    return { uploads: this.files.configured, maxMb: MATERIAL_MAX_UPLOAD_MB };
+  }
+
+  /** Where the browser uploads a new file (the file is private; only the API hands out links). */
+  async uploadUrl(orgId: string, input: UploadUrlInput) {
+    if (!this.files.configured)
+      throw new ServiceUnavailableException(
+        'File uploads aren’t set up yet — share a Google Drive link instead (see docs/DEPLOYMENT.md §12)',
+      );
+    const safe = input.fileName
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^-+/, '')
+      .slice(-100);
+    const storagePath = `materials/${orgId}/${randomUUID()}-${safe}`;
+    const contentType = input.contentType || 'application/octet-stream';
+    return {
+      storagePath,
+      contentType,
+      uploadUrl: await this.files.uploadUrl(storagePath, contentType),
+    };
+  }
+
+  /** Checks an uploaded file belongs to this org and is really there; returns what we store. */
+  private async acceptFile(orgId: string, file: { storagePath: string; fileName: string }) {
+    if (!this.files.configured) throw new ServiceUnavailableException('File uploads aren’t set up');
+    if (!file.storagePath.startsWith(`materials/${orgId}/`) || file.storagePath.includes('..'))
+      throw new BadRequestException('Invalid upload');
+    const st = await this.files.stat(file.storagePath);
+    if (!st) throw new BadRequestException('The upload didn’t finish — try again');
+    return {
+      storagePath: file.storagePath,
+      fileName: file.fileName,
+      mimeType: st.contentType,
+      sizeBytes: st.size,
+    };
+  }
+
+  /** How students (and admins) open a material. Uploaded files get fresh signed links. */
+  private async linkFor(m: Material): Promise<MaterialLinkInfo> {
+    if (m.storagePath && m.fileName) {
+      const type = (m.fileType as MaterialType | null) ?? typeFromFileName(m.fileName) ?? 'link';
+      const [view, download] = await Promise.all([
+        this.files.readUrl(m.storagePath, { download: false, fileName: m.fileName }),
+        this.files.readUrl(m.storagePath, { download: true, fileName: m.fileName }),
+      ]);
+      return uploadedLink(type, view, download);
+    }
+    return materialLink(m.url ?? '');
+  }
 
   // ───────── Link check (Google links must be shared "Anyone with the link") ─────────
 
@@ -76,7 +145,12 @@ export class MaterialsService {
       where: { organizationId: orgId },
       orderBy: [{ position: 'asc' }, { name: 'asc' }],
     });
-    return rows.map((f) => ({ id: f.id, name: f.name, parentId: f.parentId, position: f.position }));
+    return rows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      parentId: f.parentId,
+      position: f.position,
+    }));
   }
 
   async createFolder(actor: User, orgId: string, input: MaterialFolderInput) {
@@ -152,19 +226,24 @@ export class MaterialsService {
     const byId = new Map(stats.map((s) => [s.materialId, s]));
     return {
       folders,
-      materials: rows.map((m) => {
-        const s = byId.get(m.id);
-        return this.adminItem(m, {
-          viewers: s?._count.userId ?? 0,
-          views: s?._sum.views ?? 0,
-          downloads: s?._sum.downloads ?? 0,
-        });
-      }),
+      materials: await Promise.all(
+        rows.map((m) => {
+          const s = byId.get(m.id);
+          return this.adminItem(m, {
+            viewers: s?._count.userId ?? 0,
+            views: s?._sum.views ?? 0,
+            downloads: s?._sum.downloads ?? 0,
+          });
+        }),
+      ),
     };
   }
 
-  private adminItem(m: AdminRow, stats: MaterialAdminItem['stats']): MaterialAdminItem {
-    const link = materialLink(m.url);
+  private async adminItem(
+    m: AdminRow,
+    stats: MaterialAdminItem['stats'],
+  ): Promise<MaterialAdminItem> {
+    const link = await this.linkFor(m);
     return {
       id: m.id,
       title: m.title,
@@ -173,6 +252,7 @@ export class MaterialsService {
       type: typeOf(m, link),
       link,
       url: m.url,
+      file: fileOf(m),
       allowDownload: m.allowDownload,
       published: m.published,
       assignToAll: m.assignToAll,
@@ -186,7 +266,9 @@ export class MaterialsService {
 
   private async checkRefs(orgId: string, folderId?: string | null, departmentIds?: string[]) {
     if (folderId) {
-      const f = await this.prisma.materialFolder.count({ where: { id: folderId, organizationId: orgId } });
+      const f = await this.prisma.materialFolder.count({
+        where: { id: folderId, organizationId: orgId },
+      });
       if (!f) throw new BadRequestException('That folder doesn’t exist');
     }
     if (departmentIds?.length) {
@@ -200,13 +282,15 @@ export class MaterialsService {
 
   async create(actor: User, orgId: string, input: CreateMaterialInput) {
     await this.checkRefs(orgId, input.folderId, input.departmentIds);
+    const file = input.file ? await this.acceptFile(orgId, input.file) : null;
     const m = await this.prisma.material.create({
       data: {
         organizationId: orgId,
         folderId: input.folderId ?? null,
         title: input.title,
         description: input.description,
-        url: input.url,
+        url: file ? null : input.url,
+        ...(file ?? {}),
         fileType: input.fileType ?? null,
         allowDownload: input.allowDownload,
         published: input.published,
@@ -226,11 +310,8 @@ export class MaterialsService {
       entityId: m.id,
       meta: { title: m.title },
     });
-    const link = materialLink(m.url);
-    return {
-      ...this.adminItem(m, { viewers: 0, views: 0, downloads: 0 }),
-      access: await this.access(link),
-    };
+    const item = await this.adminItem(m, { viewers: 0, views: 0, downloads: 0 });
+    return { ...item, access: file ? ('unknown' as LinkAccess) : await this.access(item.link) };
   }
 
   async update(actor: User, orgId: string, id: string, input: UpdateMaterialInput) {
@@ -249,13 +330,24 @@ export class MaterialsService {
       if (!deptIds.length)
         throw new BadRequestException('Choose at least one department, or share with all students');
     }
+    // Switching to a new file or to a link replaces the old uploaded file.
+    const file = input.file ? await this.acceptFile(orgId, input.file) : null;
+    const source = file
+      ? { ...file, url: null }
+      : input.url
+        ? { url: input.url, storagePath: null, fileName: null, mimeType: null, sizeBytes: null }
+        : {};
+    const oldFile =
+      cur.storagePath && (file || input.url) && cur.storagePath !== file?.storagePath
+        ? cur.storagePath
+        : null;
     await this.prisma.$transaction(async (tx) => {
       await tx.material.update({
         where: { id },
         data: {
           title: input.title,
           description: input.description,
-          url: input.url,
+          ...source,
           fileType: input.fileType,
           folderId: input.folderId,
           allowDownload: input.allowDownload,
@@ -271,6 +363,7 @@ export class MaterialsService {
           });
       }
     });
+    if (oldFile) await this.files.remove(oldFile);
     await this.audit.log({
       actorId: actor.id,
       organizationId: orgId,
@@ -279,19 +372,23 @@ export class MaterialsService {
       entityId: id,
       meta: { fields: Object.keys(input) },
     });
-    const m = await this.prisma.material.findUniqueOrThrow({ where: { id }, include: adminInclude });
+    const m = await this.prisma.material.findUniqueOrThrow({
+      where: { id },
+      include: adminInclude,
+    });
     const s = await this.prisma.materialActivity.aggregate({
       where: { materialId: id },
       _count: { userId: true },
       _sum: { views: true, downloads: true },
     });
+    const item = await this.adminItem(m, {
+      viewers: s._count.userId,
+      views: s._sum.views ?? 0,
+      downloads: s._sum.downloads ?? 0,
+    });
     return {
-      ...this.adminItem(m, {
-        viewers: s._count.userId,
-        views: s._sum.views ?? 0,
-        downloads: s._sum.downloads ?? 0,
-      }),
-      access: input.url ? await this.access(materialLink(m.url)) : ('unknown' as LinkAccess),
+      ...item,
+      access: input.url ? await this.access(item.link) : ('unknown' as LinkAccess),
     };
   }
 
@@ -299,6 +396,7 @@ export class MaterialsService {
     const m = await this.prisma.material.findFirst({ where: { id, organizationId: orgId } });
     if (!m) throw new NotFoundException();
     await this.prisma.material.delete({ where: { id } });
+    if (m.storagePath) await this.files.remove(m.storagePath);
     await this.audit.log({
       actorId: actor.id,
       organizationId: orgId,
@@ -369,7 +467,11 @@ export class MaterialsService {
         roles: { has: 'LEARNER' },
         organization: { status: 'ACTIVE' },
       },
-      select: { organizationId: true, departmentId: true, organization: { select: { name: true } } },
+      select: {
+        organizationId: true,
+        departmentId: true,
+        organization: { select: { name: true } },
+      },
     });
   }
 
@@ -412,24 +514,27 @@ export class MaterialsService {
       folders: all
         .filter((f) => used.has(f.id))
         .map((f) => ({ id: f.id, name: f.name, parentId: f.parentId, position: f.position })),
-      materials: rows.map((m) => {
-        const link = materialLink(m.url);
-        const a = m.activity[0];
-        return {
-          id: m.id,
-          title: m.title,
-          description: m.description,
-          folderId: m.folderId,
-          type: typeOf(m, link),
-          link: m.allowDownload ? link : { ...link, downloadUrl: null },
-          allowDownload: m.allowDownload,
-          organizationName: orgName.get(m.organizationId) ?? '',
-          viewed: (a?.views ?? 0) > 0,
-          downloaded: (a?.downloads ?? 0) > 0,
-          createdAt: m.createdAt.toISOString(),
-          updatedAt: m.updatedAt.toISOString(),
-        };
-      }),
+      materials: await Promise.all(
+        rows.map(async (m): Promise<MaterialStudentItem> => {
+          const link = await this.linkFor(m);
+          const a = m.activity[0];
+          return {
+            id: m.id,
+            title: m.title,
+            description: m.description,
+            folderId: m.folderId,
+            type: typeOf(m, link),
+            link: m.allowDownload ? link : { ...link, downloadUrl: null },
+            allowDownload: m.allowDownload,
+            file: fileOf(m),
+            organizationName: orgName.get(m.organizationId) ?? '',
+            viewed: (a?.views ?? 0) > 0,
+            downloaded: (a?.downloads ?? 0) > 0,
+            createdAt: m.createdAt.toISOString(),
+            updatedAt: m.updatedAt.toISOString(),
+          };
+        }),
+      ),
     };
   }
 
@@ -442,7 +547,7 @@ export class MaterialsService {
         })
       : null;
     if (!m) throw new NotFoundException('This material isn’t shared with you');
-    const link = materialLink(m.url);
+    const link = await this.linkFor(m);
     if (action === 'download' && (!m.allowDownload || !link.downloadUrl))
       throw new ForbiddenException('Downloading this material isn’t allowed');
     const now = new Date();

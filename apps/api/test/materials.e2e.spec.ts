@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { api, createTestApp, makeUser, orgApi, resetDb } from './helpers';
+import { api, createTestApp, fakeFiles, makeUser, orgApi, resetDb } from './helpers';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Learning materials', () => {
@@ -186,5 +186,67 @@ describe('Learning materials', () => {
     });
     expect(r.body).toMatchObject({ valid: true, link: { provider: 'google-docs', type: 'slides' } });
     expect((await orgApi(app, staff, orgId).post('/materials/check-link', { url: 'not a link' })).body).toEqual({ valid: false });
+  });
+
+  it('uploads a PDF to storage and gives students private, signed links', async () => {
+    const st = await orgApi(app, staff, orgId).get('/materials/storage');
+    expect(st.body).toEqual({ uploads: true, maxMb: 100 });
+    // wrong type / too big
+    expect((await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'virus.exe', size: 10 })).status).toBe(422);
+    expect((await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'a.pdf', size: 200 * 1024 * 1024 })).status).toBe(422);
+
+    const u = await orgApi(app, staff, orgId).post('/materials/upload-url', {
+      fileName: 'Unit 2 Notes.PDF',
+      contentType: 'application/pdf',
+      size: 5000,
+    });
+    expect(u.status).toBe(200);
+    expect(u.body.storagePath).toMatch(new RegExp(`^materials/${orgId}/.+-unit-2-notes\\.pdf$`));
+    const file = { storagePath: u.body.storagePath, fileName: 'Unit 2 Notes.PDF' };
+
+    // not uploaded yet
+    expect((await orgApi(app, staff, orgId).post('/materials', { title: 'Unit 2 notes', file })).status).toBe(400);
+    fakeFiles.put(u.body.storagePath, 5000, 'application/pdf');
+    // another college's path is refused
+    expect(
+      (await orgApi(app, staff, orgId).post('/materials', {
+        title: 'Sneaky',
+        file: { storagePath: `materials/${otherOrgId}/x-a.pdf`, fileName: 'a.pdf' },
+      })).status,
+    ).toBe(400);
+    // link and file together is refused
+    expect((await orgApi(app, staff, orgId).post('/materials', { title: 'Both', file, url: 'https://a.com' })).status).toBe(422);
+
+    const c = await orgApi(app, staff, orgId).post('/materials', { title: 'Unit 2 notes', file });
+    expect(c.status).toBe(201);
+    expect(c.body).toMatchObject({
+      url: null,
+      type: 'pdf',
+      file: { name: 'Unit 2 Notes.PDF', size: 5000, mimeType: 'application/pdf' },
+      link: { provider: 'upload' },
+    });
+    const id = c.body.id;
+
+    const mine = (await api(app, cseStudent).get('/my/materials')).body.materials.find(
+      (m: { id: string }) => m.id === id,
+    );
+    expect(mine.link.embedUrl).toBe(`https://storage.test/${u.body.storagePath}?view`);
+    expect(mine.link.downloadUrl).toBe(`https://storage.test/${u.body.storagePath}?download`);
+    const d = await api(app, cseStudent).post(`/my/materials/${id}/open`, { action: 'download' });
+    expect(d.body.url).toContain('?download');
+
+    // replacing the file with a link removes the old file
+    await orgApi(app, staff, orgId).patch(`/materials/${id}`, { url: 'https://youtu.be/dQw4w9WgXcQ' });
+    expect(fakeFiles.removed).toContain(u.body.storagePath);
+    const after = (await orgApi(app, staff, orgId).get('/materials')).body.materials.find(
+      (m: { id: string }) => m.id === id,
+    );
+    expect(after).toMatchObject({ file: null, type: 'video', link: { provider: 'youtube' } });
+
+    // uploads switched off → clear message
+    fakeFiles.configured = false;
+    const off = await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'a.pdf', size: 10 });
+    expect(off.status).toBe(503);
+    fakeFiles.configured = true;
   });
 });

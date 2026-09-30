@@ -44,7 +44,12 @@ export function MaterialViewer({
                 </div>
                 <div className="flex items-center gap-2">
                   <Button asChild variant="secondary" size="sm">
-                    <a href={item.link.openUrl} target="_blank" rel="noopener noreferrer" onClick={onOpenTab}>
+                    <a
+                      href={item.link.openUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={onOpenTab}
+                    >
                       <ExternalLink /> <span className="hidden sm:inline">Open in new tab</span>
                     </a>
                   </Button>
@@ -69,7 +74,9 @@ export function MaterialViewer({
               <div className="overflow-y-auto p-4 sm:p-5">
                 <MaterialFrame link={item.link} title={item.title} />
                 {item.description && (
-                  <p className="mt-4 text-sm whitespace-pre-line text-ink-700">{item.description}</p>
+                  <p className="mt-4 text-sm whitespace-pre-line text-ink-700">
+                    {item.description}
+                  </p>
                 )}
               </div>
             </>

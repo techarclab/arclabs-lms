@@ -4,24 +4,10 @@
  */
 
 export type MaterialType =
-  | 'pdf'
-  | 'slides'
-  | 'doc'
-  | 'sheet'
-  | 'video'
-  | 'image'
-  | 'code'
-  | 'zip'
-  | 'folder'
-  | 'link';
+  'pdf' | 'slides' | 'doc' | 'sheet' | 'video' | 'image' | 'code' | 'zip' | 'folder' | 'link';
 
 export type MaterialProvider =
-  | 'youtube'
-  | 'google-drive'
-  | 'google-docs'
-  | 'dropbox'
-  | 'onedrive'
-  | 'web';
+  'youtube' | 'google-drive' | 'google-docs' | 'dropbox' | 'onedrive' | 'web' | 'upload';
 
 export interface MaterialLinkInfo {
   provider: MaterialProvider;
@@ -75,6 +61,58 @@ const EXT_TYPE: Record<string, MaterialType> = {
   ts: 'code',
   html: 'code',
 };
+
+/** File type from a file name or URL path ("notes.PDF" → pdf). */
+export function typeFromFileName(name: string): MaterialType | null {
+  return typeFromPath(name);
+}
+
+// ───────── Uploads (Firebase Storage) ─────────
+
+export const MATERIAL_MAX_UPLOAD_MB = 100;
+/** Extensions faculty may upload. */
+export const MATERIAL_UPLOAD_EXTENSIONS = [
+  'pdf',
+  'ppt',
+  'pptx',
+  'odp',
+  'doc',
+  'docx',
+  'odt',
+  'rtf',
+  'txt',
+  'md',
+  'xls',
+  'xlsx',
+  'csv',
+  'ods',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'mp4',
+  'webm',
+  'mov',
+  'zip',
+  'rar',
+  '7z',
+  'c',
+  'h',
+  'cpp',
+  'ino',
+  'py',
+  'java',
+  'js',
+  'ts',
+  'html',
+] as const;
+
+export function uploadExtension(name: string): string | null {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(name.trim());
+  const ext = m?.[1]?.toLowerCase();
+  return ext && (MATERIAL_UPLOAD_EXTENSIONS as readonly string[]).includes(ext) ? ext : null;
+}
 
 function typeFromPath(pathname: string): MaterialType | null {
   const m = /\.([a-z0-9]{1,5})$/i.exec(decodeURIComponent(pathname));
@@ -230,6 +268,26 @@ export function materialLink(url: string): MaterialLinkInfo {
   };
 }
 
+/** Link info for an uploaded file, given short-lived signed URLs to view it and to download it. */
+export function uploadedLink(
+  type: MaterialType,
+  viewUrl: string,
+  downloadUrl: string,
+): MaterialLinkInfo {
+  return {
+    provider: 'upload',
+    type,
+    openUrl: viewUrl,
+    embedUrl:
+      type === 'pdf' || type === 'image' || type === 'video'
+        ? viewUrl
+        : type === 'slides' || type === 'doc' || type === 'sheet'
+          ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(viewUrl)}`
+          : null,
+    downloadUrl,
+  };
+}
+
 // ───────── API shapes ─────────
 
 export interface MaterialFolderItem {
@@ -248,12 +306,15 @@ interface MaterialBase {
   type: MaterialType;
   link: MaterialLinkInfo;
   allowDownload: boolean;
+  /** Set when the material is an uploaded file. */
+  file: { name: string; size: number | null; mimeType: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface MaterialAdminItem extends MaterialBase {
-  url: string;
+  /** Null for uploaded files. */
+  url: string | null;
   published: boolean;
   assignToAll: boolean;
   departments: { id: string; name: string }[];

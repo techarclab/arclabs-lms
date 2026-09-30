@@ -250,21 +250,53 @@ then marked on the Results page.
 
 ## 12. Study materials
 
-Nothing to set up — materials are shared as links, so no file storage is needed.
+Admins and faculty share materials from **Study materials → Share material**; students see them
+under **Study materials** (view inside the portal, open in a new tab, or download). Each material
+is either a **link** or an **uploaded file**, and goes to all students or chosen departments.
 
-1. **Study materials → Share material**, paste a link, pick the subject/unit and who can see it.
-2. Supported links: Google Drive files and folders, Google Docs / Slides / Sheets, YouTube (videos
-   and playlists), Dropbox, OneDrive, and any website or direct file link (`…/notes.pdf`).
-3. **Google files must be shared as “Anyone with the link” (Viewer)**, otherwise students get a
-   Google sign-in page. The form warns you when a file looks private.
-4. Students see them under **Study materials**: view inside the portal (PDFs, slides, videos),
-   open in a new tab, or download (Drive/Docs/Dropbox/direct links). Turn **Allow download** off
-   for view-only items.
-5. Click the numbers on a material (or ⋯ → **Who opened it**) to see who opened / downloaded it and
-   who hasn't yet; export as CSV.
+**Links (no setup):** Google Drive files/folders, Google Docs/Slides/Sheets, YouTube videos and
+playlists, Dropbox, OneDrive, or any website / direct file link. Google files must be shared as
+**“Anyone with the link” (Viewer)** — the form warns you when a file looks private.
 
-Later, uploading files directly (instead of links) can be added with Supabase Storage or
-Cloudflare R2 — the API already has S3-compatible storage support.
+**File uploads (Firebase Storage)** — PDF, PPT, Word, Excel, images, videos, ZIP and code files up
+to 100 MB each. Files stay private; students get links that expire after 3 hours.
+
+1. Firebase console → project **arc-labs-lms** → ⚙ **Usage and billing** → **Modify plan** →
+   **Blaze**. Google requires this (and a card) for Storage since Sept 2024, but usage inside the
+   no-cost tier (5 GB stored in a US bucket) isn’t charged. Set a **budget alert** (e.g. ₹100)
+   under Google Cloud → Billing → Budgets so you are warned before any charge.
+2. **Build → Storage → Get started** → location **US-CENTRAL1** (the no-cost region) →
+   **production mode**. Leave the default rules (deny all) — the API hands out signed links.
+3. Copy the bucket name shown at the top of the Files tab (e.g. `arc-labs-lms.firebasestorage.app`).
+4. Vercel → **arclabs-api** → Settings → Environment Variables → add
+   `FIREBASE_STORAGE_BUCKET` = that bucket name → **Redeploy**. (`FIREBASE_SERVICE_ACCOUNT_JSON`
+   is already set; it is used to sign the links.)
+5. Open **Share material** — the **Upload file** tab is now active. The API sets the bucket’s
+   CORS for your website automatically on the first upload. If uploads fail with a CORS error,
+   run this once in Google Cloud Shell:
+
+   ```bash
+   echo '[{"origin":["https://arclabs-web.vercel.app"],"method":["GET","HEAD","PUT"],"responseHeader":["Content-Type","Content-Disposition"],"maxAgeSeconds":3600}]' > cors.json
+   gcloud storage buckets update gs://arc-labs-lms.firebasestorage.app --cors-file=cors.json
+   ```
+
+Click the numbers on a material (or ⋯ → **Who opened it**) to see who opened / downloaded it and
+who hasn’t yet; export as CSV.
+
+## 13. Emailing the faculty access code
+
+People → **Faculty access code** → **Create access code** (or **New code**) → **Email**. Type the
+faculty emails; the subject and message (code, sign-in link, steps) are written for you.
+
+- **Send email** sends it from the server. This needs SMTP on the API project:
+  `EMAIL_DELIVERY=direct`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`
+  (e.g. Gmail: `smtp.gmail.com`, port `587`, your Gmail address and an
+  [app password](https://myaccount.google.com/apppasswords)). The same settings send invite emails.
+- **Open in email app** works without any setup — it opens Outlook/Gmail with the recipients,
+  subject and message filled in.
+
+The code is shown (and can be emailed) only right after it is created; the database keeps only a
+hash of it.
 
 ## Updating the live site
 

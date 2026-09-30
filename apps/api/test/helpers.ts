@@ -10,6 +10,29 @@ import type { OrgRole } from '@arc/types';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CODE_RUNNER_IMPL, type CodeRunnerImpl } from '../src/exams/code-runner';
 import { AiGrader, AiGraderUnavailableError, type AiGradeInput } from '../src/exams/ai-grader';
+import { MATERIAL_FILES, type MaterialFiles } from '../src/materials/file-storage';
+
+/** In-memory stand-in for Firebase Storage. Call `fakeFiles.put(path)` to "upload" a file. */
+export const fakeFiles = {
+  configured: true,
+  objects: new Map<string, { size: number; contentType: string }>(),
+  removed: [] as string[],
+  put(path: string, size = 1234, contentType = 'application/pdf') {
+    this.objects.set(path, { size, contentType });
+  },
+};
+const fakeFilesImpl: MaterialFiles = {
+  get configured() {
+    return fakeFiles.configured;
+  },
+  uploadUrl: async (path) => `https://storage.test/upload/${path}`,
+  readUrl: async (path, o) => `https://storage.test/${path}?${o.download ? 'download' : 'view'}`,
+  stat: async (path) => fakeFiles.objects.get(path) ?? null,
+  remove: async (path) => {
+    fakeFiles.removed.push(path);
+    fakeFiles.objects.delete(path);
+  },
+};
 
 /** Test env: real Postgres (test DB) + Redis, fake Firebase. */
 export function applyTestEnv() {
@@ -114,6 +137,8 @@ export async function createTestApp() {
     .useValue(fakeRunnerImpl)
     .overrideProvider(AiGrader)
     .useValue(fakeAiGrader)
+    .overrideProvider(MATERIAL_FILES)
+    .useValue(fakeFilesImpl)
     .compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, loadEnv());

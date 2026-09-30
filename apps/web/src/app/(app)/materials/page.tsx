@@ -64,10 +64,11 @@ type Filter = string;
 
 function Materials({ orgId }: { orgId: string }) {
   const mutate = useApiMutation();
-  const { data, isLoading, mutate: reload } = useApi<MaterialLibrary<MaterialAdminItem>>(
-    '/materials',
-    { orgId },
-  );
+  const {
+    data,
+    isLoading,
+    mutate: reload,
+  } = useApi<MaterialLibrary<MaterialAdminItem>>('/materials', { orgId });
   const folders = data?.folders ?? [];
   const materials = data?.materials ?? [];
   const [filter, setFilter] = useState<Filter>('');
@@ -80,7 +81,9 @@ function Materials({ orgId }: { orgId: string }) {
     { mode: 'new'; parentId: string | null } | { mode: 'rename'; folder: MaterialFolderItem } | null
   >(null);
   const [confirm, setConfirm] = useState<
-    { kind: 'material'; item: MaterialAdminItem } | { kind: 'folder'; folder: MaterialFolderItem } | null
+    | { kind: 'material'; item: MaterialAdminItem }
+    | { kind: 'folder'; folder: MaterialFolderItem }
+    | null
   >(null);
 
   const tree = folderTree(folders);
@@ -99,7 +102,10 @@ function Materials({ orgId }: { orgId: string }) {
     let list = materials;
     if (filter === 'none') list = list.filter((m) => !m.folderId);
     else if (filter) {
-      const ids = new Set([filter, ...folders.filter((f) => f.parentId === filter).map((f) => f.id)]);
+      const ids = new Set([
+        filter,
+        ...folders.filter((f) => f.parentId === filter).map((f) => f.id),
+      ]);
       list = list.filter((m) => m.folderId && ids.has(m.folderId));
     }
     const q = search.trim().toLowerCase();
@@ -321,7 +327,9 @@ function Materials({ orgId }: { orgId: string }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => setPreview({ ...m, subtitle: folderPath(folders, m.folderId) })}
+                      onClick={() =>
+                        setPreview({ ...m, subtitle: folderPath(folders, m.folderId) })
+                      }
                       className="truncate text-left font-semibold text-ink-900 hover:text-brand-700"
                     >
                       {m.title}
@@ -380,7 +388,9 @@ function Materials({ orgId }: { orgId: string }) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      onSelect={() => setPreview({ ...m, subtitle: folderPath(folders, m.folderId) })}
+                      onSelect={() =>
+                        setPreview({ ...m, subtitle: folderPath(folders, m.folderId) })
+                      }
                     >
                       <Eye /> Preview
                     </DropdownMenuItem>
@@ -399,17 +409,25 @@ function Materials({ orgId }: { orgId: string }) {
                     <DropdownMenuItem onSelect={() => setActivityId(m.id)}>
                       <BarChart3 /> Who opened it
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        void navigator.clipboard.writeText(m.url);
-                        toast.success('Link copied');
-                      }}
-                    >
-                      <Copy /> Copy link
-                    </DropdownMenuItem>
+                    {m.url ? (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void navigator.clipboard.writeText(m.url!);
+                          toast.success('Link copied');
+                        }}
+                      >
+                        <Copy /> Copy link
+                      </DropdownMenuItem>
+                    ) : m.link.downloadUrl ? (
+                      <DropdownMenuItem asChild>
+                        <a href={m.link.downloadUrl} target="_blank" rel="noopener noreferrer">
+                          <Download /> Download file
+                        </a>
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      className="text-rose-600"
+                      danger
                       onSelect={() => setConfirm({ kind: 'material', item: m })}
                     >
                       <Trash2 /> Delete
@@ -504,7 +522,9 @@ function FolderButton({
       className={cn(
         'group flex items-center rounded-xl transition',
         indent && 'ml-5',
-        active ? 'bg-brand-50 text-brand-800 ring-1 ring-brand-100' : 'text-ink-700 hover:bg-ink-100',
+        active
+          ? 'bg-brand-50 text-brand-800 ring-1 ring-brand-100'
+          : 'text-ink-700 hover:bg-ink-100',
       )}
     >
       <button
@@ -549,7 +569,7 @@ function FolderMenu({
           <Pencil /> Rename
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-rose-600" onSelect={onDelete}>
+        <DropdownMenuItem danger onSelect={onDelete}>
           <Trash2 /> Delete
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -564,7 +584,10 @@ function FolderDialog({
   onClose,
   onSaved,
 }: {
-  state: { mode: 'new'; parentId: string | null } | { mode: 'rename'; folder: MaterialFolderItem } | null;
+  state:
+    | { mode: 'new'; parentId: string | null }
+    | { mode: 'rename'; folder: MaterialFolderItem }
+    | null;
   folders: MaterialFolderItem[];
   orgId: string;
   onClose: () => void;
@@ -612,9 +635,15 @@ function FolderDialog({
     <Dialog open={Boolean(state)} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         title={
-          state?.mode === 'rename' ? 'Rename' : isUnit ? `New unit in ${parent?.name ?? ''}` : 'New subject'
+          state?.mode === 'rename'
+            ? 'Rename'
+            : isUnit
+              ? `New unit in ${parent?.name ?? ''}`
+              : 'New subject'
         }
-        description={isUnit ? 'e.g. “Unit 1 — Microcontrollers”' : 'e.g. “Embedded Systems” or “Python Lab”'}
+        description={
+          isUnit ? 'e.g. “Unit 1 — Microcontrollers”' : 'e.g. “Embedded Systems” or “Python Lab”'
+        }
         icon={<FolderPlus />}
       >
         <form
@@ -625,7 +654,13 @@ function FolderDialog({
           className="space-y-5 px-6 pt-3 pb-6"
         >
           <Field label="Name" htmlFor="f-name">
-            <Input id="f-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={120} />
+            <Input
+              id="f-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              maxLength={120}
+            />
           </Field>
           <div className="flex justify-end gap-2.5">
             <Button type="button" variant="secondary" onClick={onClose}>

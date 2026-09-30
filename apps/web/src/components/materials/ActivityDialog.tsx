@@ -31,7 +31,9 @@ export function ActivityDialog({
     const all = [...r.opened, ...r.notOpened];
     const q = (v: string | number | null) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = [
-      ['Name', 'Roll no.', 'Department', 'Email', 'Views', 'Downloads', 'Last opened'].map(q).join(','),
+      ['Name', 'Roll no.', 'Department', 'Email', 'Views', 'Downloads', 'Last opened']
+        .map(q)
+        .join(','),
       ...all.map((x) =>
         [x.fullName, x.externalId, x.department, x.email, x.views, x.downloads, x.lastAt ?? '']
           .map(q)
@@ -78,7 +80,9 @@ export function ActivityDialog({
                       onClick={() => setTab(k)}
                       className={cn(
                         'rounded-md px-3 py-1.5 transition',
-                        tab === k ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800',
+                        tab === k
+                          ? 'bg-white text-ink-900 shadow-sm'
+                          : 'text-ink-500 hover:text-ink-800',
                       )}
                     >
                       {label}
