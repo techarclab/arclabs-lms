@@ -71,6 +71,21 @@ export class AiGrader {
       .filter(Boolean)
       .join('\n\n');
 
+    return this.ask(SYSTEM, user, deadline, 3000, (text) => this.parse(text, input, max));
+  }
+
+  /**
+   * One chat request with retries (rate limits, models without JSON mode, unreadable replies).
+   * `read` turns the reply into a result, or null to ask again.
+   */
+  async ask<T>(
+    system: string,
+    user: string,
+    deadline: number,
+    maxTokens: number,
+    read: (text: string) => T | null,
+  ): Promise<T> {
+    if (!this.configured) throw new AiGraderUnavailableError('AI isn’t set up');
     let lastError = 'no response';
     let jsonMode = true;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -92,15 +107,15 @@ export class AiGrader {
               model: this.env.AI_GRADER_MODEL,
               temperature: 0,
               // Reasoning models (gpt-oss, qwen…) spend tokens thinking before they answer.
-              max_tokens: 3000,
+              max_tokens: maxTokens,
               ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
               ...(/gpt-oss/.test(this.env.AI_GRADER_MODEL) ? { reasoning_effort: 'low' } : {}),
               messages: [
-                { role: 'system', content: SYSTEM },
+                { role: 'system', content: system },
                 { role: 'user', content: user },
               ],
             }),
-            signal: AbortSignal.timeout(Math.min(left, 20_000)),
+            signal: AbortSignal.timeout(Math.min(left, 25_000)),
           },
         );
         if (res.status === 429 || res.status >= 500) {
@@ -122,15 +137,15 @@ export class AiGrader {
           break;
         }
         const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-        const review = this.parse(body.choices?.[0]?.message?.content ?? '', input, max);
-        if (review) return review;
+        const out = read(body.choices?.[0]?.message?.content ?? '');
+        if (out !== null) return out;
         lastError = 'unreadable reply';
       } catch (e) {
         lastError = (e as Error).message;
       }
     }
-    this.logger.warn(`AI marking failed: ${lastError}`);
-    throw new AiGraderUnavailableError(`AI marking failed (${lastError})`);
+    this.logger.warn(`AI request failed: ${lastError}`);
+    throw new AiGraderUnavailableError(`AI failed (${lastError})`);
   }
 
   private parse(text: string, input: AiGradeInput, max: number): AiReview | null {

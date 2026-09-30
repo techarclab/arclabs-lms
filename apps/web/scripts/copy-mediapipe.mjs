@@ -20,3 +20,13 @@ for (const f of [
   if (existsSync(src)) cpSync(src, join(out, f));
 }
 console.log('mediapipe wasm → public/mediapipe/wasm');
+
+// pdf.js worker for "Import questions from PDF" (text is read in the browser).
+{
+  let pdf = dirname(require.resolve('pdfjs-dist'));
+  while (!existsSync(join(pdf, 'build', 'pdf.worker.min.mjs')) && dirname(pdf) !== pdf) pdf = dirname(pdf);
+  const dest = join(process.cwd(), 'public', 'pdfjs');
+  mkdirSync(dest, { recursive: true });
+  cpSync(join(pdf, 'build', 'pdf.worker.min.mjs'), join(dest, 'pdf.worker.min.mjs'));
+  console.log('pdf.js worker → public/pdfjs');
+}

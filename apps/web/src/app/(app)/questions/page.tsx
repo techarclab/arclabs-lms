@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
+  FileUp,
   Archive,
   ArchiveRestore,
   ChevronLeft,
@@ -115,14 +117,21 @@ function Bank({ orgId }: { orgId: string }) {
         title="Question bank"
         description="Build a reusable pool of auto-graded questions. Questions used in a published exam are locked so scores can never change afterwards."
         actions={
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setEditorOpen(true);
-            }}
-          >
-            <Plus /> New question
-          </Button>
+          <>
+            <Button variant="secondary" asChild>
+              <Link href="/questions/import">
+                <FileUp /> Import from PDF / Word
+              </Link>
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setEditorOpen(true);
+              }}
+            >
+              <Plus /> New question
+            </Button>
+          </>
         }
       />
 

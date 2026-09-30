@@ -30,6 +30,10 @@ import {
   proctorEventSchema,
   questionInputSchema,
   saveAnswerSchema,
+  bulkQuestionsSchema,
+  importParseSchema,
+  type BulkQuestionsInput,
+  type ImportParseInput,
   setExamAudienceSchema,
   setExamQuestionsSchema,
   updateExamSchema,
@@ -79,6 +83,26 @@ export class QuestionsController {
   @Get('topics')
   topics(@OrgContext() org: OrgContextInfo) {
     return this.questions.topics(org.organizationId);
+  }
+
+  /** Reads questions from the text of an uploaded PDF / Word file (nothing is saved). */
+  @Post('import/parse')
+  @HttpCode(200)
+  parseImport(
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(importParseSchema)) body: ImportParseInput,
+  ) {
+    return this.questions.parseImport(org.organizationId, body);
+  }
+
+  /** Saves many reviewed questions at once. */
+  @Post('bulk')
+  bulk(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(bulkQuestionsSchema)) body: BulkQuestionsInput,
+  ) {
+    return this.questions.bulkCreate(u, org.organizationId, body);
   }
 
   /** Try AI marking on some code against a rubric (nothing is saved). */

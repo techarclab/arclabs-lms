@@ -308,6 +308,14 @@ per-criterion averages update live; **Export CSV** downloads the sheet. Students
 remarks and the class average under **Lab marks** as soon as they are saved. Criteria can be
 changed later (⋯ → Edit lab); totals are recalculated.
 
+## 15. Importing questions from a PDF / Word paper
+
+Question bank → **Import from PDF / Word**. Drop in the paper (text PDF or .docx — it is read in the
+browser, nothing is uploaded), check the questions it found, then **Import**. With AI marking set up
+(§10) AI reads any layout and can suggest missing answers (flagged for checking); without it the
+paper must use the usual layout: `1. question`, `A) option`, `Answer: B` or an answer key at the end.
+Scanned (photo) PDFs have no text — paste the questions instead.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

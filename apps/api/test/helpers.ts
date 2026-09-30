@@ -102,6 +102,30 @@ const fakeAiGrader = {
   get configured() {
     return true;
   },
+  /** Question import: returns one question read "by AI" (or fails when fakeAi.down). */
+  async ask<T>(_s: string, user: string, _d: number, _m: number, read: (t: string) => T | null) {
+    fakeAi.calls++;
+    if (fakeAi.down) throw new AiGraderUnavailableError('AI offline');
+    const prompt = /TEXT:\n<<<\n\s*\d+[.)]\s*([^\n]+)/.exec(user)?.[1] ?? 'AI question';
+    const out = read(
+      JSON.stringify({
+        questions: [
+          {
+            type: 'SINGLE_CHOICE',
+            prompt,
+            options: [
+              { text: 'Yes', correct: true },
+              { text: 'No', correct: false },
+            ],
+            difficulty: 'EASY',
+            topic: 'Fake topic',
+          },
+        ],
+      }),
+    );
+    if (out === null) throw new AiGraderUnavailableError('unreadable');
+    return out;
+  },
   async grade(input: AiGradeInput) {
     fakeAi.calls++;
     if (fakeAi.down) throw new AiGraderUnavailableError('AI offline');

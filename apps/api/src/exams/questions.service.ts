@@ -1,8 +1,24 @@
 import { randomBytes } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AiReview, CodingConfig, Paginated, QuestionItem, RunCodeResponse } from '@arc/types';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import type {
+  AiReview,
+  CodingConfig,
+  ImportParseResult,
+  Paginated,
+  QuestionItem,
+  RunCodeResponse,
+} from '@arc/types';
 import {
   outputsMatch,
+  questionInputSchema,
+  questionKey,
+  type BulkQuestionsInput,
+  type ImportParseInput,
   type AiCheckInput,
   type CheckCodingInput,
   type ListQuestionsQuery,
@@ -14,6 +30,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiGrader, AiGraderUnavailableError } from './ai-grader';
 import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
+import { QuestionImporter } from './question-import';
 
 const optionId = () => randomBytes(4).toString('hex');
 
@@ -130,7 +147,73 @@ export class QuestionsService {
     private readonly runner: CodeRunner,
     private readonly expected: ExpectedOutputs,
     private readonly ai: AiGrader,
+    private readonly importer: QuestionImporter,
   ) {}
+
+  // ───────── Import from PDF / Word ─────────
+
+  private async existingKeys(orgId: string) {
+    const rows = await this.prisma.question.findMany({
+      where: { organizationId: orgId },
+      select: { prompt: true },
+    });
+    return new Set(rows.map((r) => questionKey(r.prompt)));
+  }
+
+  /** Reads one part of an uploaded file into draft questions (nothing is saved). */
+  async parseImport(orgId: string, input: ImportParseInput): Promise<ImportParseResult> {
+    const [r, keys] = await Promise.all([this.importer.parse(input), this.existingKeys(orgId)]);
+    return {
+      ...r,
+      questions: r.questions.map((q) => ({ ...q, duplicate: keys.has(questionKey(q.prompt)) })),
+    };
+  }
+
+  /** Saves reviewed questions in one go. Questions already in the bank are skipped. */
+  async bulkCreate(actor: User, orgId: string, input: BulkQuestionsInput) {
+    const parsed: QuestionInputParsed[] = [];
+    const errors: { index: number; message: string }[] = [];
+    input.questions.forEach((q, index) => {
+      const r = questionInputSchema.safeParse(q);
+      if (r.success) parsed.push(r.data);
+      else errors.push({ index, message: r.error.issues[0]?.message ?? 'Invalid question' });
+    });
+    if (errors.length)
+      throw new UnprocessableEntityException({
+        code: 'VALIDATION_FAILED',
+        message: `${errors.length} question${errors.length === 1 ? '' : 's'} need fixing`,
+        details: errors.map((e) => ({ path: String(e.index), message: e.message })),
+      });
+    const keys = input.skipDuplicates ? await this.existingKeys(orgId) : new Set<string>();
+    const toCreate: QuestionInputParsed[] = [];
+    let skipped = 0;
+    for (const q of parsed) {
+      const k = questionKey(q.prompt);
+      if (input.skipDuplicates && keys.has(k)) {
+        skipped++;
+        continue;
+      }
+      keys.add(k);
+      toCreate.push(q);
+    }
+    if (toCreate.length)
+      await this.prisma.question.createMany({
+        data: toCreate.map((q) => ({
+          organizationId: orgId,
+          createdById: actor.id,
+          ...toColumns(q),
+        })) as Prisma.QuestionCreateManyInput[],
+      });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'question.imported',
+      entityType: 'question',
+      entityId: orgId,
+      meta: { created: toCreate.length, skipped },
+    });
+    return { created: toCreate.length, skipped };
+  }
 
   /** Coding questions: fill empty expected outputs from the reference solution right away. */
   private async fillExpected<T extends { id: string; coding: unknown }>(q: T): Promise<T> {

@@ -14,6 +14,7 @@ import {
 } from './exams.controller';
 import { ExamsService } from './exams.service';
 import { ExpectedOutputs } from './expected-outputs';
+import { QuestionImporter } from './question-import';
 import { QuestionsService } from './questions.service';
 
 @Module({
@@ -24,6 +25,7 @@ import { QuestionsService } from './questions.service';
     AiGrader,
     ExpectedOutputs,
     ExamEngine,
+    QuestionImporter,
     QuestionsService,
     ExamsService,
     AttemptsService,
