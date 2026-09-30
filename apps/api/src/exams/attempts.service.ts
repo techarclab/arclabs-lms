@@ -59,10 +59,10 @@ const COUNTED = new Set([
   // Signs of AI help
   'MULTIPLE_SCREENS',
   'AI_EXTENSION',
-  // Camera AI (only reported after an on-screen warning, see proctor-ai.ts)
-  'FACE_MISSING',
+  // Camera AI (only reported after an on-screen warning, see proctor-ai.ts). A phone, or another
+  // person staying in view ~8 s, counts. Face missing / looking away are saved with a photo for
+  // faculty to review but never submit an exam on their own (too many innocent causes).
   'MULTIPLE_FACES',
-  'LOOKING_AWAY',
   'PHONE_DETECTED',
 ]);
 const CAMERA_EVENTS = new Set(['FACE_MISSING', 'MULTIPLE_FACES', 'LOOKING_AWAY', 'PHONE_DETECTED']);

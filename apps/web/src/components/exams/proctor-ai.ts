@@ -78,7 +78,10 @@ export function loadProctorModels(): Promise<Models | null> {
 // ───────── What one frame shows ─────────
 
 export interface FrameObservation {
+  /** Faces near the camera (the student, or someone sitting with them). */
   faces: number;
+  /** Every face detected, including people far behind. */
+  allFaces?: number;
   /** Head rotation in degrees (only with exactly one face). */
   yaw?: number;
   pitch?: number;
@@ -92,7 +95,20 @@ export interface FrameObservation {
 
 function observe(models: Models, video: HTMLVideoElement, t: number, withPhone: boolean) {
   const r = models.face.detectForVideo(video, t);
-  const obs: FrameObservation = { faces: r.faceLandmarks.length };
+  // Only count faces close to the camera: a face much smaller than the largest one is someone
+  // further back in the hall (e.g. faculty walking around), not someone helping the student.
+  const widths = r.faceLandmarks.map((pts) => {
+    let lo = 1;
+    let hi = 0;
+    for (const p of pts) {
+      if (p.x < lo) lo = p.x;
+      if (p.x > hi) hi = p.x;
+    }
+    return Math.max(0, hi - lo);
+  });
+  const biggest = Math.max(0, ...widths);
+  const near = widths.filter((w) => w >= biggest * NEAR_FACE_RATIO).length;
+  const obs: FrameObservation = { faces: near, allFaces: widths.length };
   if (obs.faces === 1) {
     const m = r.facialTransformationMatrixes?.[0]?.data;
     if (m && m.length >= 16) {
@@ -137,9 +153,24 @@ const WARN_AFTER: Record<CameraIssue, number> = {
 const VIOLATE_AFTER: Record<CameraIssue, number> = {
   FACE_MISSING: 6000,
   LOOKING_AWAY: 4000,
-  MULTIPLE_FACES: 2000,
+  // Someone must STAY in view this long: faculty walking past takes a few seconds at most.
+  MULTIPLE_FACES: 8000,
   PHONE_DETECTED: 1500,
 };
+/**
+ * A second face must be at least this big (relative to the largest face) to count. Someone
+ * standing 2–3 m behind the student shows up at well under half the size.
+ */
+export const NEAR_FACE_RATIO = 0.45;
+/**
+ * Which issues count towards auto-submit (the server decides; this is for on-screen text).
+ * Face missing / looking away are only flagged with a photo for faculty to review — they have
+ * too many innocent causes (bad light, thinking, looking at rough paper).
+ */
+export const COUNTED_ISSUES: ReadonlySet<CameraIssue> = new Set([
+  'MULTIPLE_FACES',
+  'PHONE_DETECTED',
+]);
 /** Head turned this many degrees from the student's normal pose counts as looking away. */
 export const YAW_LIMIT = 25;
 const PITCH_LIMIT = 20;
@@ -254,7 +285,8 @@ export class CameraMonitor {
           const list = (this.warned.get(k) ?? []).filter((t) => now - t < REPEAT_WINDOW_MS);
           list.push(now);
           this.warned.set(k, list);
-          if (list.length >= REPEAT_LIMIT && !cooling && !violation) {
+          // (Not for a second person: faculty passing by several times is normal in a hall.)
+          if (list.length >= REPEAT_LIMIT && k !== 'MULTIPLE_FACES' && !cooling && !violation) {
             violation = k;
             continue;
           }
@@ -376,6 +408,7 @@ export function useProctorAi({
             setWarning(out.warning);
             if (out.violation) {
               const meta: Record<string, string> = { faces: String(o.faces) };
+              if (o.allFaces !== undefined) meta.allFaces = String(o.allFaces);
               if (o.yaw !== undefined) meta.yaw = String(Math.round(o.yaw));
               if (o.pitch !== undefined) meta.pitch = String(Math.round(o.pitch));
               if (o.phoneScore) meta.phoneScore = String(o.phoneScore);

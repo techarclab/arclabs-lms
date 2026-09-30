@@ -33,7 +33,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
 import { PromptText } from './AnswerView';
 import { CameraView, stopCamera, useCamera } from './camera';
-import { ISSUE_MESSAGE, useProctorAi, type CameraIssue } from './proctor-ai';
+import { COUNTED_ISSUES, ISSUE_MESSAGE, useProctorAi, type CameraIssue } from './proctor-ai';
 import { CameraAiNumbers, CameraAiStatus, cameraCheckEnabled } from './CameraAiStatus';
 import { CodingAnswer } from './code/CodingAnswer';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
@@ -701,7 +701,9 @@ export function ExamRunner({
             <div>
               <p className="text-[15px] font-semibold">{ISSUE_MESSAGE[cameraAi.warning]}</p>
               <p className="text-xs text-rose-100">
-                If this continues it counts as a violation and a photo is saved.
+                {COUNTED_ISSUES.has(cameraAi.warning)
+                  ? 'If this continues it counts as a violation and a photo is saved.'
+                  : 'If this continues a photo is saved for your instructor.'}
               </p>
             </div>
           </div>

@@ -89,4 +89,24 @@ describe('Camera AI events and evidence photos', () => {
       ).status,
     ).toBe(403);
   });
+
+  it('face missing / looking away are flagged with a photo but never auto-submit', async () => {
+    const other = (await makeUser(prisma, { memberOf: [{ orgId, roles: ['LEARNER'] }] })).token;
+    const s = await api(app, other).post(`/my/exams/${examId}/start`);
+    const ev = (body: object) =>
+      api(app, other)
+        .post(`/my/attempts/${s.body.attemptId}/events`, body)
+        .set('X-Attempt-Session', s.body.sessionId);
+    for (const type of ['LOOKING_AWAY', 'FACE_MISSING', 'LOOKING_AWAY', 'FACE_MISSING']) {
+      const r = await ev({ type, snapshot: JPEG });
+      expect(r.body).toMatchObject({ violationCount: 0, autoSubmitted: false });
+    }
+    const shots = await orgApi(app, staff, orgId).get(
+      `/exams/${examId}/attempts/${s.body.attemptId}/snapshots`,
+    );
+    expect(shots.body).toHaveLength(4);
+    // another person staying in view still counts
+    const person = await ev({ type: 'MULTIPLE_FACES', snapshot: JPEG });
+    expect(person.body).toMatchObject({ violationCount: 1, remaining: 2 });
+  });
 });

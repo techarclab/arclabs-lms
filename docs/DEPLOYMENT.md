@@ -344,6 +344,21 @@ Without SMTP, announcements still appear in the student portal.
   - _Department link_ (Departments page, e.g. `…/join/CMRIT-ECE-7K2Q`): the department is fixed, so students can't pick the wrong one. Turn it on/off per department; **New code** stops the old link.
 - **Department-only faculty:** on People, edit a faculty member (Instructor / Content manager / Evaluator) and set their department. They then only see that department — its students, exam results, materials, lab marks and announcements — and anything they create goes to that department automatically. College-wide items stay visible to them but only admins can edit them. **Org admins are never limited**, even with a department set.
 
+## 18. Camera AI: what counts and what is only flagged
+
+Runs in the student's browser; video is never recorded. A small photo is saved as evidence
+whenever a rule is broken. The student always sees an on-screen warning first.
+
+| What the camera sees                                   | Result                                         |
+| ------------------------------------------------------ | ---------------------------------------------- |
+| A phone in view ~1.5 s (e.g. held up to click a photo) | **Violation** (counts towards auto-submit)     |
+| Another person **staying** in view ~8 s                | **Violation** (counts towards auto-submit)     |
+| Faculty walking past / someone far behind the student  | Ignored (only faces close to the camera count) |
+| Face missing, looking away                             | Photo saved for review; **never** auto-submits |
+
+Review photos on the exam's Results page → a student → camera photos. Test a laptop's camera with
+`/exam/<id>?camcheck=1`.
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

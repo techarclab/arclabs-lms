@@ -303,7 +303,7 @@ export function ExamSettingsForm({
           <SwitchRow
             icon={<Camera />}
             label="Camera on during the exam"
-            description="Students see their own camera while writing. Nothing is recorded, stored or sent anywhere."
+            description="Camera AI warns about a phone, another person, the face missing or looking away. Video is never recorded — a small photo is saved only when a rule is broken. Only a phone or another person staying in view counts towards auto-submit."
             checked={s.requireCamera}
             onCheckedChange={(v) => set('requireCamera', v)}
             disabled={locked}
