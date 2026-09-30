@@ -284,33 +284,40 @@ export function MaterialForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={editing ? 'Edit material' : 'Share a material'}
-        description="Upload a file, or share a Google Drive, Docs/Slides, YouTube or website link."
+        description={
+          uploadsOn
+            ? 'Upload a file, or share a Google Drive, Docs/Slides, YouTube or website link.'
+            : 'Share a Google Drive (PDFs, notes), Docs/Slides, YouTube or website link.'
+        }
         icon={<Link2 />}
         className="max-w-2xl"
       >
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 pt-3 pb-2">
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1 text-sm font-medium">
-            {(
-              [
-                ['file', 'Upload file', FileUp],
-                ['link', 'Paste link', Link2],
-              ] as const
-            ).map(([k, label, Icon]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setSource(k)}
-                className={cn(
-                  'flex items-center justify-center gap-2 rounded-lg py-2 transition',
-                  source === k
-                    ? 'bg-white text-ink-900 shadow-sm'
-                    : 'text-ink-500 hover:text-ink-800',
-                )}
-              >
-                <Icon className="size-4" /> {label}
-              </button>
-            ))}
-          </div>
+          {/* The Upload tab appears only once Firebase Storage is set up (or for an uploaded file). */}
+          {(uploadsOn || editing?.file) && (
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-ink-100 p-1 text-sm font-medium">
+              {(
+                [
+                  ['file', 'Upload file', FileUp],
+                  ['link', 'Paste link', Link2],
+                ] as const
+              ).map(([k, label, Icon]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setSource(k)}
+                  className={cn(
+                    'flex items-center justify-center gap-2 rounded-lg py-2 transition',
+                    source === k
+                      ? 'bg-white text-ink-900 shadow-sm'
+                      : 'text-ink-500 hover:text-ink-800',
+                  )}
+                >
+                  <Icon className="size-4" /> {label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {source === 'link' && (
             <Field label="Link" htmlFor="m-url" required error={errors.url}>
