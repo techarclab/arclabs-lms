@@ -55,7 +55,12 @@ export const NAV: NavSection[] = [
   {
     title: 'Learning',
     items: [
-      { label: 'Study materials', href: '/materials', icon: Library, permission: 'material.manage' },
+      {
+        label: 'Study materials',
+        href: '/materials',
+        icon: Library,
+        permission: 'material.manage',
+      },
       { label: 'Study materials', href: '/my-materials', icon: Library, learnerOnly: true },
     ],
   },

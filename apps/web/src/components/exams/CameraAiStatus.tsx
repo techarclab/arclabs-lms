@@ -11,13 +11,7 @@ export function cameraCheckEnabled() {
 }
 
 /** One line under the camera preview so everyone can see the camera AI is actually working. */
-export function CameraAiStatus({
-  status,
-  running,
-}: {
-  status: ProctorAiStatus;
-  running: boolean;
-}) {
+export function CameraAiStatus({ status, running }: { status: ProctorAiStatus; running: boolean }) {
   const [text, tone] =
     status === 'loading'
       ? ['Camera AI starting…', 'muted']
@@ -57,9 +51,7 @@ export function CameraAiNumbers({ info }: { info: (FrameObservation & { at: numb
       <span>faces</span>
       <b>{info.faces}</b>
       <span>head left/right</span>
-      <b className={Math.abs(info.yaw ?? 0) > YAW_LIMIT ? 'text-rose-600' : ''}>
-        {n(info.yaw)}°
-      </b>
+      <b className={Math.abs(info.yaw ?? 0) > YAW_LIMIT ? 'text-rose-600' : ''}>{n(info.yaw)}°</b>
       <span>head up/down</span>
       <b>{n(info.pitch)}°</b>
       <span>eyes sideways</span>

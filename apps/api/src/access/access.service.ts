@@ -72,7 +72,8 @@ export class AccessService {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     if (!org.accessCodeHash || org.accessCodeHash !== sha256(normalizeAccessCode(input.code)))
       throw new BadRequestException('That isn’t the current access code — create a new one first');
-    if (this.env.EMAIL_DELIVERY === 'log') return { mailConfigured: false, sent: [], failed: input.emails };
+    if (this.env.EMAIL_DELIVERY === 'log')
+      return { mailConfigured: false, sent: [], failed: input.emails };
     const link = `${this.env.WEB_ORIGIN.split(',')[0]}/login?mode=faculty`;
     const msg = accessCodeEmail({
       orgName: org.name,

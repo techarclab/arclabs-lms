@@ -26,8 +26,14 @@ describe('Learning materials', () => {
     viewer = (await makeUser(prisma, { memberOf: [{ orgId, roles: ['ORG_VIEWER'] }] })).token;
     const e = await makeUser(prisma, { memberOf: [{ orgId, roles: ['LEARNER'] }] });
     const c = await makeUser(prisma, { memberOf: [{ orgId, roles: ['LEARNER'] }] });
-    await prisma.organizationMember.updateMany({ where: { userId: e.user.id }, data: { departmentId: ece } });
-    await prisma.organizationMember.updateMany({ where: { userId: c.user.id }, data: { departmentId: cse } });
+    await prisma.organizationMember.updateMany({
+      where: { userId: e.user.id },
+      data: { departmentId: ece },
+    });
+    await prisma.organizationMember.updateMany({
+      where: { userId: c.user.id },
+      data: { departmentId: cse },
+    });
     eceStudent = e.token;
     cseStudent = c.token;
     outsider = (await makeUser(prisma, { memberOf: [{ orgId: otherOrgId, roles: ['LEARNER'] }] }))
@@ -43,7 +49,9 @@ describe('Learning materials', () => {
   let videoId: string;
 
   it('faculty create subjects and units (two levels only)', async () => {
-    const s = await orgApi(app, staff, orgId).post('/materials/folders', { name: 'Embedded Systems' });
+    const s = await orgApi(app, staff, orgId).post('/materials/folders', {
+      name: 'Embedded Systems',
+    });
     expect(s.status).toBe(201);
     subject = s.body.id;
     const u = await orgApi(app, staff, orgId).post('/materials/folders', {
@@ -110,18 +118,23 @@ describe('Learning materials', () => {
     const o = await api(app, outsider).get('/my/materials');
     expect(o.body.materials).toEqual([]);
     // CSE student can't open the ECE-only file
-    expect((await api(app, cseStudent).post(`/my/materials/${pdfId}/open`, { action: 'view' })).status).toBe(404);
+    expect(
+      (await api(app, cseStudent).post(`/my/materials/${pdfId}/open`, { action: 'view' })).status,
+    ).toBe(404);
   });
 
   it('tracks views and downloads, and faculty see who opened it', async () => {
     const v = await api(app, eceStudent).post(`/my/materials/${pdfId}/open`, { action: 'view' });
     expect(v.status).toBe(200);
     expect(v.body.url).toContain('drive.google.com/file/d/');
-    const d = await api(app, eceStudent).post(`/my/materials/${pdfId}/open`, { action: 'download' });
+    const d = await api(app, eceStudent).post(`/my/materials/${pdfId}/open`, {
+      action: 'download',
+    });
     expect(d.body.url).toContain('export=download');
     // videos have no download
     expect(
-      (await api(app, eceStudent).post(`/my/materials/${videoId}/open`, { action: 'download' })).status,
+      (await api(app, eceStudent).post(`/my/materials/${videoId}/open`, { action: 'download' }))
+        .status,
     ).toBe(403);
 
     const lib = await orgApi(app, staff, orgId).get('/materials');
@@ -149,7 +162,8 @@ describe('Learning materials', () => {
     );
     expect(m.link.downloadUrl).toBeNull();
     expect(
-      (await api(app, eceStudent).post(`/my/materials/${pdfId}/open`, { action: 'download' })).status,
+      (await api(app, eceStudent).post(`/my/materials/${pdfId}/open`, { action: 'download' }))
+        .status,
     ).toBe(403);
 
     await orgApi(app, staff, orgId).patch(`/materials/${pdfId}`, { published: false });
@@ -164,36 +178,74 @@ describe('Learning materials', () => {
     expect((await api(app, cseStudent).get('/my/materials')).body.materials).toHaveLength(2);
 
     // Deleting the subject keeps the materials (now not in a folder)
-    expect((await orgApi(app, staff, orgId).delete(`/materials/folders/${subject}`)).status).toBe(204);
+    expect((await orgApi(app, staff, orgId).delete(`/materials/folders/${subject}`)).status).toBe(
+      204,
+    );
     const lib = await orgApi(app, staff, orgId).get('/materials');
     expect(lib.body.folders).toEqual([]);
-    expect(lib.body.materials.every((x: { folderId: string | null }) => x.folderId === null)).toBe(true);
+    expect(lib.body.materials.every((x: { folderId: string | null }) => x.folderId === null)).toBe(
+      true,
+    );
   });
 
   it('students and read-only viewers cannot manage materials; orgs are isolated', async () => {
     expect((await orgApi(app, eceStudent, orgId).get('/materials')).status).toBe(403);
-    expect((await orgApi(app, viewer, orgId).post('/materials', { title: 'x', url: 'https://a.com' })).status).toBe(403);
-    const other = await makeUser(prisma, { memberOf: [{ orgId: otherOrgId, roles: ['ORG_ADMIN'] }] });
-    expect((await orgApi(app, other.token, otherOrgId).patch(`/materials/${pdfId}`, { title: 'Hacked' })).status).toBe(404);
-    expect((await orgApi(app, other.token, otherOrgId).post('/materials', {
-      title: 'Wrong dept', url: 'https://a.com', assignToAll: false, departmentIds: [ece],
-    })).status).toBe(400);
+    expect(
+      (await orgApi(app, viewer, orgId).post('/materials', { title: 'x', url: 'https://a.com' }))
+        .status,
+    ).toBe(403);
+    const other = await makeUser(prisma, {
+      memberOf: [{ orgId: otherOrgId, roles: ['ORG_ADMIN'] }],
+    });
+    expect(
+      (await orgApi(app, other.token, otherOrgId).patch(`/materials/${pdfId}`, { title: 'Hacked' }))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await orgApi(app, other.token, otherOrgId).post('/materials', {
+          title: 'Wrong dept',
+          url: 'https://a.com',
+          assignToAll: false,
+          departmentIds: [ece],
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it('check-link explains what students will get', async () => {
     const r = await orgApi(app, staff, orgId).post('/materials/check-link', {
       url: 'https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOpQr/edit',
     });
-    expect(r.body).toMatchObject({ valid: true, link: { provider: 'google-docs', type: 'slides' } });
-    expect((await orgApi(app, staff, orgId).post('/materials/check-link', { url: 'not a link' })).body).toEqual({ valid: false });
+    expect(r.body).toMatchObject({
+      valid: true,
+      link: { provider: 'google-docs', type: 'slides' },
+    });
+    expect(
+      (await orgApi(app, staff, orgId).post('/materials/check-link', { url: 'not a link' })).body,
+    ).toEqual({ valid: false });
   });
 
   it('uploads a PDF to storage and gives students private, signed links', async () => {
     const st = await orgApi(app, staff, orgId).get('/materials/storage');
     expect(st.body).toEqual({ uploads: true, maxMb: 100 });
     // wrong type / too big
-    expect((await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'virus.exe', size: 10 })).status).toBe(422);
-    expect((await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'a.pdf', size: 200 * 1024 * 1024 })).status).toBe(422);
+    expect(
+      (
+        await orgApi(app, staff, orgId).post('/materials/upload-url', {
+          fileName: 'virus.exe',
+          size: 10,
+        })
+      ).status,
+    ).toBe(422);
+    expect(
+      (
+        await orgApi(app, staff, orgId).post('/materials/upload-url', {
+          fileName: 'a.pdf',
+          size: 200 * 1024 * 1024,
+        })
+      ).status,
+    ).toBe(422);
 
     const u = await orgApi(app, staff, orgId).post('/materials/upload-url', {
       fileName: 'Unit 2 Notes.PDF',
@@ -205,17 +257,29 @@ describe('Learning materials', () => {
     const file = { storagePath: u.body.storagePath, fileName: 'Unit 2 Notes.PDF' };
 
     // not uploaded yet
-    expect((await orgApi(app, staff, orgId).post('/materials', { title: 'Unit 2 notes', file })).status).toBe(400);
+    expect(
+      (await orgApi(app, staff, orgId).post('/materials', { title: 'Unit 2 notes', file })).status,
+    ).toBe(400);
     fakeFiles.put(u.body.storagePath, 5000, 'application/pdf');
     // another college's path is refused
     expect(
-      (await orgApi(app, staff, orgId).post('/materials', {
-        title: 'Sneaky',
-        file: { storagePath: `materials/${otherOrgId}/x-a.pdf`, fileName: 'a.pdf' },
-      })).status,
+      (
+        await orgApi(app, staff, orgId).post('/materials', {
+          title: 'Sneaky',
+          file: { storagePath: `materials/${otherOrgId}/x-a.pdf`, fileName: 'a.pdf' },
+        })
+      ).status,
     ).toBe(400);
     // link and file together is refused
-    expect((await orgApi(app, staff, orgId).post('/materials', { title: 'Both', file, url: 'https://a.com' })).status).toBe(422);
+    expect(
+      (
+        await orgApi(app, staff, orgId).post('/materials', {
+          title: 'Both',
+          file,
+          url: 'https://a.com',
+        })
+      ).status,
+    ).toBe(422);
 
     const c = await orgApi(app, staff, orgId).post('/materials', { title: 'Unit 2 notes', file });
     expect(c.status).toBe(201);
@@ -236,7 +300,9 @@ describe('Learning materials', () => {
     expect(d.body.url).toContain('?download');
 
     // replacing the file with a link removes the old file
-    await orgApi(app, staff, orgId).patch(`/materials/${id}`, { url: 'https://youtu.be/dQw4w9WgXcQ' });
+    await orgApi(app, staff, orgId).patch(`/materials/${id}`, {
+      url: 'https://youtu.be/dQw4w9WgXcQ',
+    });
     expect(fakeFiles.removed).toContain(u.body.storagePath);
     const after = (await orgApi(app, staff, orgId).get('/materials')).body.materials.find(
       (m: { id: string }) => m.id === id,
@@ -245,7 +311,10 @@ describe('Learning materials', () => {
 
     // uploads switched off → clear message
     fakeFiles.configured = false;
-    const off = await orgApi(app, staff, orgId).post('/materials/upload-url', { fileName: 'a.pdf', size: 10 });
+    const off = await orgApi(app, staff, orgId).post('/materials/upload-url', {
+      fileName: 'a.pdf',
+      size: 10,
+    });
     expect(off.status).toBe(503);
     fakeFiles.configured = true;
   });
