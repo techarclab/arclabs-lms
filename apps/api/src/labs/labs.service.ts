@@ -366,14 +366,16 @@ export class LabsService {
     const max = new Map(criteria.map((c) => [c.id, c.max]));
     const allowed = new Set((await this.learners(lab, departmentId)).map((l) => l.userId));
     // (Department faculty can't mark other departments' students, even ones marked before.)
-    const already = departmentId ? new Set<string>() : new Set(
-      (
-        await this.prisma.labMark.findMany({
-          where: { assessmentId: id },
-          select: { userId: true },
-        })
-      ).map((m) => m.userId),
-    );
+    const already = departmentId
+      ? new Set<string>()
+      : new Set(
+          (
+            await this.prisma.labMark.findMany({
+              where: { assessmentId: id },
+              select: { userId: true },
+            })
+          ).map((m) => m.userId),
+        );
     for (const m of input.marks) {
       if (!allowed.has(m.userId) && !already.has(m.userId))
         throw new BadRequestException('A student in the list isn’t part of this lab');

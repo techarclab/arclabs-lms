@@ -21,20 +21,34 @@ describe('Departments: own registration links, pages and department-only faculty
     app.get(MailService).send = async () => true;
     orgId = (
       await prisma.organization.create({
-        data: { name: 'Dept College', slug: 'deptcol', joinCode: 'DEPTCOL-AAAA', joinEnabled: true },
+        data: {
+          name: 'Dept College',
+          slug: 'deptcol',
+          joinCode: 'DEPTCOL-AAAA',
+          joinEnabled: true,
+        },
       })
     ).id;
     ece = (await prisma.department.create({ data: { organizationId: orgId, name: 'ECE' } })).id;
     cse = (await prisma.department.create({ data: { organizationId: orgId, name: 'CSE' } })).id;
     admin = (await makeUser(prisma, { memberOf: [{ orgId, roles: ['ORG_ADMIN'] }] })).token;
     const f = await makeUser(prisma, { memberOf: [{ orgId, roles: ['INSTRUCTOR'] }] });
-    await prisma.organizationMember.updateMany({ where: { userId: f.user.id }, data: { departmentId: ece } });
+    await prisma.organizationMember.updateMany({
+      where: { userId: f.user.id },
+      data: { departmentId: ece },
+    });
     eceFaculty = { id: f.user.id, token: f.token };
     const e = await makeUser(prisma, { memberOf: [{ orgId, roles: ['LEARNER'] }] });
-    await prisma.organizationMember.updateMany({ where: { userId: e.user.id }, data: { departmentId: ece } });
+    await prisma.organizationMember.updateMany({
+      where: { userId: e.user.id },
+      data: { departmentId: ece },
+    });
     eceStudent = { id: e.user.id, token: e.token };
     const c = await makeUser(prisma, { memberOf: [{ orgId, roles: ['LEARNER'] }] });
-    await prisma.organizationMember.updateMany({ where: { userId: c.user.id }, data: { departmentId: cse } });
+    await prisma.organizationMember.updateMany({
+      where: { userId: c.user.id },
+      data: { departmentId: cse },
+    });
     cseStudent = { id: c.user.id, token: c.token };
   });
   afterAll(async () => {
@@ -42,7 +56,9 @@ describe('Departments: own registration links, pages and department-only faculty
   });
 
   it('each department gets its own registration link that puts students in that department', async () => {
-    const r = await orgApi(app, admin, orgId).post(`/departments/${ece}/join-link`, { enabled: true });
+    const r = await orgApi(app, admin, orgId).post(`/departments/${ece}/join-link`, {
+      enabled: true,
+    });
     expect(r.status).toBe(200);
     expect(r.body.joinCode).toMatch(/^DEPTCO-ECE-[A-Z2-9]{4}$/);
     eceCode = r.body.joinCode;
@@ -88,7 +104,9 @@ describe('Departments: own registration links, pages and department-only faculty
     expect(st.body.map((s: { externalId: string }) => s.externalId)).toContain('22ECE77');
 
     const fac = orgApi(app, eceFaculty.token, orgId);
-    expect((await fac.get('/departments')).body.map((x: { name: string }) => x.name)).toEqual(['ECE']);
+    expect((await fac.get('/departments')).body.map((x: { name: string }) => x.name)).toEqual([
+      'ECE',
+    ]);
     expect((await fac.get(`/departments/${cse}`)).status).toBe(404);
     expect((await fac.post(`/departments/${cse}/join-link`, { enabled: true })).status).toBe(403);
   });
@@ -100,7 +118,8 @@ describe('Departments: own registration links, pages and department-only faculty
     expect(ex.body.audience).toMatchObject({ assignToAll: false, departments: [{ id: ece }] });
     // can't widen to the whole college or another department
     expect(
-      (await fac.put(`/exams/${ex.body.id}/audience`, { assignToAll: true, departmentIds: [] })).status,
+      (await fac.put(`/exams/${ex.body.id}/audience`, { assignToAll: true, departmentIds: [] }))
+        .status,
     ).toBe(403);
     expect(
       (await fac.put(`/exams/${ex.body.id}/audience`, { assignToAll: false, departmentIds: [cse] }))
@@ -141,9 +160,9 @@ describe('Departments: own registration links, pages and department-only faculty
 
   it('materials, lab marks and announcements stay inside the department', async () => {
     const fac = orgApi(app, eceFaculty.token, orgId);
-    expect(
-      (await fac.post('/materials', { title: 'For all', url: 'https://a.com' })).status,
-    ).toBe(403); // default is all students
+    expect((await fac.post('/materials', { title: 'For all', url: 'https://a.com' })).status).toBe(
+      403,
+    ); // default is all students
     const mat = await fac.post('/materials', {
       title: 'ECE notes',
       url: 'https://a.com/n.pdf',
@@ -175,19 +194,23 @@ describe('Departments: own registration links, pages and department-only faculty
     const sheet = await fac.get(`/labs/${collegeLab.body.id}`);
     expect(sheet.body.rows.every((r: { department: string }) => r.department === 'ECE')).toBe(true);
     expect(
-      (await fac.put(`/labs/${collegeLab.body.id}/marks`, {
-        marks: [{ userId: cseStudent.id, scores: { p: 3 } }],
-      })).status,
+      (
+        await fac.put(`/labs/${collegeLab.body.id}/marks`, {
+          marks: [{ userId: cseStudent.id, scores: { p: 3 } }],
+        })
+      ).status,
     ).toBe(400);
     expect(
-      (await fac.put(`/labs/${collegeLab.body.id}/marks`, {
-        marks: [{ userId: eceStudent.id, scores: { p: 3 } }],
-      })).status,
+      (
+        await fac.put(`/labs/${collegeLab.body.id}/marks`, {
+          marks: [{ userId: eceStudent.id, scores: { p: 3 } }],
+        })
+      ).status,
     ).toBe(200);
 
-    expect(
-      (await fac.post('/announcements/preview', { audience: { type: 'all' } })).status,
-    ).toBe(403);
+    expect((await fac.post('/announcements/preview', { audience: { type: 'all' } })).status).toBe(
+      403,
+    );
     const pre = await fac.post('/announcements/preview', {
       audience: { type: 'departments', departmentIds: [ece] },
     });
@@ -203,7 +226,10 @@ describe('Departments: own registration links, pages and department-only faculty
 
   it('college admins are never limited, even with a department set', async () => {
     const a2 = await makeUser(prisma, { memberOf: [{ orgId, roles: ['ORG_ADMIN'] }] });
-    await prisma.organizationMember.updateMany({ where: { userId: a2.user.id }, data: { departmentId: ece } });
+    await prisma.organizationMember.updateMany({
+      where: { userId: a2.user.id },
+      data: { departmentId: ece },
+    });
     const list = await orgApi(app, a2.token, orgId).get('/departments');
     expect(list.body).toHaveLength(2);
     const me = await api(app, eceFaculty.token).get('/auth/me');

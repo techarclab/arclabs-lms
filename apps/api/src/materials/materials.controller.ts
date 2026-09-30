@@ -108,7 +108,9 @@ export class MaterialsController {
     @Param('id', UuidPipe) id: string,
   ) {
     if (org.departmentId)
-      throw new ForbiddenException('Only the college admin can delete subjects (they may hold other departments’ materials).');
+      throw new ForbiddenException(
+        'Only the college admin can delete subjects (they may hold other departments’ materials).',
+      );
     await this.materials.deleteFolder(user, org.organizationId, id);
   }
 

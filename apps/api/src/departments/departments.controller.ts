@@ -161,7 +161,11 @@ export class DepartmentsService {
     }));
   }
 
-  async create(actor: User, orgId: string, input: CreateDepartmentInput): Promise<DepartmentSummary> {
+  async create(
+    actor: User,
+    orgId: string,
+    input: CreateDepartmentInput,
+  ): Promise<DepartmentSummary> {
     const d = await this.prisma.department.create({
       data: { organizationId: orgId, name: input.name },
     });
@@ -192,8 +196,16 @@ export class DepartmentsService {
 
   /** e.g. MREC-ECE-7K2Q */
   private async newCode(orgSlug: string, deptName: string) {
-    const org = orgSlug.replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6) || 'JOIN';
-    const dept = deptName.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 5) || 'DEPT';
+    const org =
+      orgSlug
+        .replace(/[^a-z]/gi, '')
+        .toUpperCase()
+        .slice(0, 6) || 'JOIN';
+    const dept =
+      deptName
+        .replace(/[^a-z0-9]/gi, '')
+        .toUpperCase()
+        .slice(0, 5) || 'DEPT';
     for (let i = 0; i < 10; i++) {
       const suffix = Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
       const code = `${org}-${dept}-${suffix}`;

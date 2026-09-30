@@ -323,7 +323,7 @@ Scanned (photo) PDFs have no text — paste the questions instead.
 Students who registered earlier without one see a banner asking for it; until then their login
 email is used.
 
-**Sending.** Announcements → pick *General message* or *Exam reminder* (or click **Send reminder**
+**Sending.** Announcements → pick _General message_ or _Exam reminder_ (or click **Send reminder**
 on an exam), choose all students / departments / students of an exam (optionally only those who
 haven’t taken it), check the reach count, **Send**. Each message is emailed in Bcc batches (students
 don’t see each other’s addresses, replies come to the sender) and shown under **Announcements** in
@@ -340,8 +340,8 @@ Without SMTP, announcements still appear in the student portal.
 
 - **Departments** (sidebar) lists every department with student/faculty counts and its registration link. **Open** shows the department page: stats, the link, and tabs for students (with CSV), faculty, exams, study materials and labs. **Message ECE** opens Announcements with that department already chosen.
 - **Two kinds of registration link — both work:**
-  - *College link* (People page): students choose their department from a list.
-  - *Department link* (Departments page, e.g. `…/join/CMRIT-ECE-7K2Q`): the department is fixed, so students can't pick the wrong one. Turn it on/off per department; **New code** stops the old link.
+  - _College link_ (People page): students choose their department from a list.
+  - _Department link_ (Departments page, e.g. `…/join/CMRIT-ECE-7K2Q`): the department is fixed, so students can't pick the wrong one. Turn it on/off per department; **New code** stops the old link.
 - **Department-only faculty:** on People, edit a faculty member (Instructor / Content manager / Evaluator) and set their department. They then only see that department — its students, exam results, materials, lab marks and announcements — and anything they create goes to that department automatically. College-wide items stay visible to them but only admins can edit them. **Org admins are never limited**, even with a department set.
 
 ## Updating the live site

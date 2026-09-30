@@ -237,9 +237,7 @@ export class ExamsService {
       data: {
         organizationId: orgId,
         // A department's faculty create exams for their department.
-        ...(departmentId
-          ? { assignToAll: false, audiences: { create: [{ departmentId }] } }
-          : {}),
+        ...(departmentId ? { assignToAll: false, audiences: { create: [{ departmentId }] } } : {}),
         createdById: actor.id,
         title: input.title,
         instructions: input.instructions ?? DEFAULT_INSTRUCTIONS,

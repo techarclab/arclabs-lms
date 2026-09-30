@@ -1,10 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type {
   AnnouncementAudience,
   AnnouncementItem,

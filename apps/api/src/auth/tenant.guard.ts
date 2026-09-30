@@ -88,7 +88,11 @@ export class TenantGuard implements CanActivate {
     if (!hasPermission(roles, permission)) {
       throw new ForbiddenException({ message: `Missing permission: ${permission}` });
     }
-    req.org = { organizationId: orgId, roles, departmentId: departmentScope(roles, membership.departmentId) };
+    req.org = {
+      organizationId: orgId,
+      roles,
+      departmentId: departmentScope(roles, membership.departmentId),
+    };
     return true;
   }
 

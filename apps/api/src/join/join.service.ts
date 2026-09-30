@@ -255,7 +255,9 @@ export class JoinService {
       const { organization, ...dept } = deptRow;
       return { org: organization, dept };
     }
-    const org = deptRow ? null : await this.prisma.organization.findUnique({ where: { joinCode: code } });
+    const org = deptRow
+      ? null
+      : await this.prisma.organization.findUnique({ where: { joinCode: code } });
     if (!org || !org.joinEnabled || org.status !== 'ACTIVE') {
       throw new NotFoundException({
         code: 'JOIN_CODE_INVALID',
