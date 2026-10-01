@@ -35,6 +35,8 @@ const envSchema = z.object({
    * Groq (default, free tier), OpenRouter, Google Gemini's OpenAI endpoint, OpenAI…
    */
   AI_GRADER_API_KEY: z.string().optional(),
+  /** Backup key (e.g. a second Groq account): used automatically when the main one hits its limit. */
+  AI_GRADER_API_KEY_2: z.string().optional(),
   AI_GRADER_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
   AI_GRADER_MODEL: z.string().default('openai/gpt-oss-120b'),
   /** Answers marked per minute. Groq's free plan manages about 5–6. Raise on paid plans. */

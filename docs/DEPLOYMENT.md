@@ -327,6 +327,11 @@ Any OpenAI-compatible service works instead — e.g. **OpenRouter**:
 :free>`, `AI_GRADER_API_KEY=<OpenRouter key>` (its free plan allows only 50 requests a day unless you
 add credit).
 
+**Backup key (recommended):** create a second free Groq key (another Groq account) and add it in
+Vercel → arclabs-api → Environment Variables as `AI_GRADER_API_KEY_2`, then Redeploy. When the main
+key hits its limit (or stops working), marking switches to the backup automatically and returns to
+the main key when it recovers. Never paste keys into chats.
+
 ## 11. Stopping an exam early
 
 Exam page or Results page → **Stop exam** (only while it's live). The window closes at once, everyone
