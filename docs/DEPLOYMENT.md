@@ -194,6 +194,87 @@ The API wakes the runner whenever a student opens an exam. On exam day, open the
 Optional: Render → arclabs-runner → **Settings → Build Filters → Included paths** `apps/runner/**`,
 so the runner only rebuilds when its own files change.
 
+### A2. AWS server (6 months on the AWS free credits) — faster than Render free
+
+One small AWS server (2 CPUs) runs the same runner: about 4 programs at once and it never sleeps,
+so roughly 150–200 students can write a coding exam together (Render free: about 50–80). New AWS
+accounts get up to **$200 credits for 6 months**; the free plan blocks charges. After 6 months,
+either upgrade the AWS account (about $15–20/month) or switch back to Render — only
+`CODE_RUNNER_URL` / `CODE_RUNNER_TOKEN` in Vercel change.
+
+**1. Create the AWS account** — aws.amazon.com → **Create an AWS account** → choose the **Free
+plan**. A card is needed only for verification.
+
+**2. Pick Singapore** — top-right region menu → **Asia Pacific (Singapore)**. (The API runs in
+Singapore, so the runner is close to it.)
+
+**3. Launch the server** — search **EC2** → **Launch instance**:
+
+| Field            | Value                                                                    |
+| ---------------- | ------------------------------------------------------------------------ |
+| Name             | `arclabs-runner`                                                         |
+| Image (AMI)      | **Ubuntu Server 24.04 LTS**, 64-bit (x86)                                |
+| Instance type    | **t3.small** (marked _Free tier eligible_)                               |
+| Key pair         | **Proceed without a key pair** (you'll use the browser terminal)         |
+| Network settings | tick **Allow SSH**, **Allow HTTPS** and **Allow HTTP** from the internet |
+| Storage          | **20 GiB** gp3                                                           |
+
+→ **Launch instance**.
+
+**4. Give it a fixed address** — EC2 → **Elastic IPs** → **Allocate Elastic IP address** →
+**Allocate** → select it → **Actions → Associate Elastic IP address** → Instance:
+`arclabs-runner` → **Associate**. (Without this, the address changes every time you start the
+server and Vercel would need the new one each time.)
+
+**5. Open the server's terminal** — EC2 → Instances → `arclabs-runner` → **Connect** →
+**EC2 Instance Connect** → **Connect**. A black terminal opens in your browser.
+
+**6. Run the setup** (5–8 minutes):
+
+- If the GitHub repository is **public**, paste:
+
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/techarclab/arclabs-lms/main/infra/aws/runner-setup.sh -o setup.sh && sudo bash setup.sh
+  ```
+
+- If it is **private**: type `nano setup.sh`, paste the whole text of `infra/aws/runner-setup.sh`,
+  press **Ctrl+O**, **Enter**, **Ctrl+X**, then run `sudo bash setup.sh`. When it asks, paste a
+  GitHub token (GitHub → Settings → Developer settings → **Fine-grained tokens** → Generate;
+  Repository access: only `arclabs-lms`; Permissions: **Contents → Read-only**). The token is
+  used once and not saved.
+
+At the end it prints `CODE_RUNNER_URL` (like `https://13-250-1-2.sslip.io`) and
+`CODE_RUNNER_TOKEN`. Don't share the token in chats or screenshots.
+
+**7. Connect the LMS** — Vercel → **arclabs-api** → Settings → Environment Variables → set
+`CODE_RUNNER` = `arc`, `CODE_RUNNER_URL` and `CODE_RUNNER_TOKEN` to the printed values →
+Deployments → ⋯ → **Redeploy**.
+
+**8. Check** — open `<CODE_RUNNER_URL>/health` (should show `"ok": true`), then Question bank → a
+coding question → **Check test cases** — every test should pass.
+
+**9. Retire Render** — once AWS works: Render → `arclabs-runner` → Settings → **Suspend**.
+
+**Every exam day (to save credits):**
+
+- **Before** — EC2 → Instances → select → **Instance state → Start**, about 10 minutes before the
+  exam. Open `<CODE_RUNNER_URL>/health` to confirm.
+- **After** — on the exam's Results page, if any coding answers are waiting, click **Evaluate
+  coding answers** until none remain. Then **Instance state → Stop**.
+- Use **Stop**, never **Terminate** (Terminate deletes the server).
+- Keep it running while faculty create or test coding questions.
+
+**Other commands** (in the server's terminal):
+
+| What                             | Command                                 |
+| -------------------------------- | --------------------------------------- |
+| Update the runner to latest code | `sudo arc-runner-setup`                 |
+| Show the token again             | `sudo cat /opt/arc-runner/runner-token` |
+| Is it running?                   | `sudo docker ps`                        |
+| Runner log                       | `sudo docker logs --tail 50 arc-runner` |
+
+Check remaining credits: AWS console → **Billing and Cost Management → Credits**.
+
 ### B. Paid, when more colleges join
 
 - **Upgrade the Render instance** (Settings → Instance Type, e.g. Starter) — no other changes;
