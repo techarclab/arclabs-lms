@@ -210,14 +210,14 @@ Singapore, so the runner is close to it.)
 
 **3. Launch the server** — search **EC2** → **Launch instance**:
 
-| Field            | Value                                                                    |
-| ---------------- | ------------------------------------------------------------------------ |
-| Name             | `arclabs-runner`                                                         |
-| Image (AMI)      | **Ubuntu Server 24.04 LTS**, 64-bit (x86)                                |
-| Instance type    | **t3.small** (marked _Free tier eligible_)                               |
-| Key pair         | **Proceed without a key pair** (you'll use the browser terminal)         |
-| Network settings | tick **Allow SSH**, **Allow HTTPS** and **Allow HTTP** from the internet |
-| Storage          | **20 GiB** gp3                                                           |
+| Field            | Value                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Name             | `arclabs-runner`                                                                                       |
+| Image (AMI)      | **Ubuntu Server 24.04 LTS**, 64-bit (x86)                                                              |
+| Instance type    | **c7i-flex.large** (2 CPUs, 4 GB — faster) or **t3.small** (2 GB — cheaper); both _Free tier eligible_ |
+| Key pair         | **Proceed without a key pair** (you'll use the browser terminal)                                       |
+| Network settings | tick **Allow SSH**, **Allow HTTPS** and **Allow HTTP** from the internet                               |
+| Storage          | **20 GiB** gp3                                                                                         |
 
 → **Launch instance**.
 
@@ -274,6 +274,10 @@ coding question → **Check test cases** — every test should pass.
 | Runner log                       | `sudo docker logs --tail 50 arc-runner` |
 
 Check remaining credits: AWS console → **Billing and Cost Management → Credits**.
+
+**Credits:** c7i-flex.large costs roughly $0.08–0.10 per hour while running (t3.small about a
+quarter of that). Left on 24/7 it would use the $200 in about 3 months; started only for exams and
+question setting (say 40 hours a month) it costs a few dollars a month. Always **Stop** it after.
 
 ### B. Paid, when more colleges join
 
