@@ -171,7 +171,7 @@ export class ExamsService {
   private async summarize(exam: ExamWithCounts): Promise<ExamSummary> {
     const [agg, inProgress, candidates] = await Promise.all([
       this.prisma.quizAttempt.aggregate({
-        where: { quizId: exam.id, status: 'GRADED' },
+        where: { quizId: exam.id, status: 'GRADED', voidedAt: null },
         _count: { _all: true },
         _avg: { percentage: true },
       }),

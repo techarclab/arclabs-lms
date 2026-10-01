@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
+  Megaphone,
   Compass,
   FileQuestion,
   Gauge,
@@ -65,6 +66,8 @@ export function MemberDashboard() {
   const isStaff = isSuperAdmin || hasPermission(roles, 'exam.results.view');
   const viewOnly = !isSuperAdmin && !hasPermission(roles, 'quiz.author');
   const isLearner = roles.includes('LEARNER');
+  const canAnnounce =
+    !me?.accessCode && (isSuperAdmin || hasPermission(roles, 'announcement.send'));
 
   return (
     <>
@@ -90,11 +93,20 @@ export function MemberDashboard() {
         }
         actions={
           isStaff && (
-            <Button asChild>
-              <Link href="/exams">
-                <ClipboardList /> {viewOnly ? 'View exams & results' : 'Manage exams'}
-              </Link>
-            </Button>
+            <>
+              {canAnnounce && (
+                <Button variant="secondary" asChild>
+                  <Link href="/announcements">
+                    <Megaphone /> Send announcement
+                  </Link>
+                </Button>
+              )}
+              <Button asChild>
+                <Link href="/exams">
+                  <ClipboardList /> {viewOnly ? 'View exams & results' : 'Manage exams'}
+                </Link>
+              </Button>
+            </>
           )
         }
       />

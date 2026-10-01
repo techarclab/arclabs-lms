@@ -13,6 +13,7 @@ import type {
   AttemptSession,
   DeliveredQuestion,
   ExamLobby,
+  ExamState,
   MyExamItem,
   ProctorEventResult,
   QuestionOption,
@@ -74,6 +75,30 @@ const VIOLATION_DEBOUNCE_MS = 2500;
 const LIVE_SESSION_MS = 20_000;
 
 type QuestionOrder = { questionId: string; optionOrder: string[] }[];
+
+/**
+ * What this student sees: an attempt set aside for a re-exam doesn't count, and an open re-exam
+ * keeps the exam "LIVE" for them until its deadline (even after the exam has closed for others).
+ */
+export function studentWindow(
+  exam: { status: string; startsAt: Date | null; endsAt: Date | null },
+  attempts: { attemptNo: number; voidedAt: Date | null; reexamUntil: Date | null }[],
+  now = new Date(),
+): { state: ExamState; endsAt: Date | null; counted: number } {
+  const counted = attempts.filter((a) => !a.voidedAt);
+  const base = examState(exam, now);
+  const lastVoid = attempts.filter((a) => a.voidedAt).sort((a, b) => b.attemptNo - a.attemptNo)[0];
+  const pending =
+    lastVoid?.reexamUntil &&
+    lastVoid.reexamUntil > now &&
+    !counted.some((a) => a.attemptNo > lastVoid.attemptNo);
+  if (pending && (base === 'ENDED' || base === 'LIVE')) {
+    const until = lastVoid.reexamUntil!;
+    const endsAt = exam.endsAt && exam.endsAt > until ? exam.endsAt : until;
+    return { state: 'LIVE', endsAt, counted: counted.length };
+  }
+  return { state: base, endsAt: exam.endsAt, counted: counted.length };
+}
 
 @Injectable()
 export class AttemptsService {
@@ -143,8 +168,9 @@ export class AttemptsService {
         orderBy: { attemptNo: 'desc' },
       }),
     ]);
-    const state = examState(exam);
-    const graded = attempts.filter((a) => a.status !== 'IN_PROGRESS');
+    const win = studentWindow(exam, attempts);
+    const state = win.state;
+    const graded = attempts.filter((a) => a.status !== 'IN_PROGRESS' && !a.voidedAt);
     const inProgress = attempts.find((a) => a.status === 'IN_PROGRESS') ?? null;
     const last = graded[0] ?? null;
     const maxAttempts = exam.maxAttempts ?? 1;
@@ -156,7 +182,7 @@ export class AttemptsService {
       title: exam.title,
       state,
       startsAt: exam.startsAt?.toISOString() ?? null,
-      endsAt: exam.endsAt?.toISOString() ?? null,
+      endsAt: win.endsAt?.toISOString() ?? null,
       durationMinutes: exam.timeLimitMinutes,
       questionCount: qs.length,
       totalMarks: qs.reduce((s, q) => s + q.question.points, 0),
@@ -185,7 +211,12 @@ export class AttemptsService {
     meta: { ip?: string; userAgent?: string },
   ): Promise<AttemptSession> {
     const exam = await this.assignedExam(user, examId);
-    const state = examState(exam);
+    const mine = await this.prisma.quizAttempt.findMany({
+      where: { quizId: examId, userId: user.id },
+      select: { attemptNo: true, voidedAt: true, reexamUntil: true },
+    });
+    const win = studentWindow(exam, mine);
+    const state = win.state;
     if (state === 'SCHEDULED')
       throw new ForbiddenException({
         code: 'EXAM_NOT_OPEN',
@@ -241,7 +272,11 @@ export class AttemptsService {
     const used = await this.prisma.quizAttempt.count({
       where: { quizId: examId, userId: user.id },
     });
-    if (used >= (exam.maxAttempts ?? 1)) {
+    // Attempts set aside for a re-exam don't use up the limit.
+    const counted = await this.prisma.quizAttempt.count({
+      where: { quizId: examId, userId: user.id, voidedAt: null },
+    });
+    if (counted >= (exam.maxAttempts ?? 1)) {
       throw new ConflictException({
         code: 'NO_ATTEMPTS_LEFT',
         message: 'You have used all your attempts for this exam',
@@ -259,7 +294,8 @@ export class AttemptsService {
       return { questionId: q.id, optionOrder: shuffleable ? shuffle(ids) : ids };
     });
     const byDuration = new Date(now.getTime() + (exam.timeLimitMinutes ?? 60) * 60_000);
-    const deadlineAt = exam.endsAt && exam.endsAt < byDuration ? exam.endsAt : byDuration;
+    const closesAt = win.endsAt;
+    const deadlineAt = closesAt && closesAt < byDuration ? closesAt : byDuration;
 
     try {
       const attempt = await this.prisma.quizAttempt.create({
@@ -698,7 +734,7 @@ export class AttemptsService {
   async bestPercentages(quizId: string) {
     const rows = await this.prisma.quizAttempt.groupBy({
       by: ['userId'],
-      where: { quizId, status: 'GRADED' },
+      where: { quizId, status: 'GRADED', voidedAt: null },
       _max: { percentage: true },
     });
     return new Map(rows.map((r) => [r.userId, Number(r._max.percentage ?? 0)]));

@@ -309,6 +309,19 @@ export interface CandidateRow {
   violationCount: number;
   submitReason: SubmitReasonName | null;
   submittedAt: string | null;
+  /** Set when faculty gave a re-exam: the earlier attempt is kept as a record but no longer counts. */
+  reexam?: ReexamInfo | null;
+}
+
+export interface ReexamInfo {
+  /** The attempt that was set aside. */
+  attemptId: string;
+  grantedAt: string;
+  reason: string;
+  /** The fresh attempt may start until then (null = the exam's own window). */
+  until: string | null;
+  /** True once the student has started the fresh attempt. */
+  used: boolean;
 }
 
 export interface QuestionStat {
@@ -363,6 +376,17 @@ export interface AttemptDetail {
   userAgent: string | null;
   startedAt: string;
   deadlineAt: string | null;
+  /** This attempt was set aside for a re-exam. */
+  voided: { at: string; reason: string; until: string | null } | null;
+  /** All of this student's attempts at the exam, newest first (to switch between them). */
+  attempts: {
+    id: string;
+    attemptNo: number;
+    percentage: number | null;
+    status: 'IN_PROGRESS' | 'SUBMITTED';
+    voided: boolean;
+    submittedAt: string | null;
+  }[];
 }
 
 /** Camera evidence photo (staff view). */

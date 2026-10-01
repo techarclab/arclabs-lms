@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Gauge,
+  RotateCcw,
   Search,
   ShieldAlert,
   Target,
@@ -47,6 +48,7 @@ import {
   formatDuration,
   SUBMIT_REASON_LABEL,
   timeUntil,
+  toLocalInput,
   plainPrompt,
 } from '@/lib/format';
 import { useApi, useApiMutation } from '@/lib/use-api';
@@ -598,7 +600,10 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
                   key={c.userId}
                   c={c}
                   maxViolations={exam.maxViolations}
-                  onOpen={() => c.attemptId && setDetailId(c.attemptId)}
+                  onOpen={() => {
+                    const open = c.attemptId ?? c.reexam?.attemptId;
+                    if (open) setDetailId(open);
+                  }}
                 />
               ))}
             </tbody>
@@ -614,6 +619,7 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         orgId={orgId}
         attemptId={detailId}
         viewOnly={viewOnly}
+        examEnded={exam.state === 'ENDED'}
         onClose={() => setDetailId(null)}
         onChanged={() => void reload()}
       />
@@ -632,7 +638,7 @@ function CandidateTr({
 }) {
   return (
     <tr
-      className={cn('transition', c.attemptId && 'cursor-pointer hover:bg-ink-50/70')}
+      className={cn('transition', (c.attemptId || c.reexam) && 'cursor-pointer hover:bg-ink-50/70')}
       onClick={onOpen}
     >
       <td className="py-3 pr-3 pl-6">
@@ -657,7 +663,14 @@ function CandidateTr({
         <div className="flex items-center gap-3">
           <Avatar name={c.fullName} size="sm" round />
           <div className="min-w-0">
-            <p className="truncate font-medium text-ink-900">{c.fullName}</p>
+            <p className="flex items-center gap-1.5 truncate font-medium text-ink-900">
+              {c.fullName}
+              {c.reexam && (
+                <Badge tone="violet" title={c.reexam.reason}>
+                  Re-exam
+                </Badge>
+              )}
+            </p>
             <p className="truncate text-xs text-ink-500">{c.externalId ?? c.email}</p>
           </div>
         </div>
@@ -703,7 +716,12 @@ function CandidateTr({
         )}
       </td>
       <td className="py-3 pr-6 pl-3">
-        {c.status === 'NOT_STARTED' ? (
+        {c.status === 'NOT_STARTED' && c.reexam ? (
+          <Badge tone="violet">
+            Re-exam given
+            {c.reexam.until ? ` · until ${formatDateTime(c.reexam.until)}` : ''}
+          </Badge>
+        ) : c.status === 'NOT_STARTED' ? (
           <Badge tone="neutral">Not started</Badge>
         ) : c.status === 'IN_PROGRESS' ? (
           <Badge tone="info" dot>
@@ -722,8 +740,9 @@ function CandidateTr({
 function AttemptDialog({
   examId,
   orgId,
-  attemptId,
+  attemptId: openId,
   viewOnly = false,
+  examEnded = false,
   onClose,
   onChanged,
 }: {
@@ -731,10 +750,14 @@ function AttemptDialog({
   orgId: string;
   attemptId: string | null;
   viewOnly?: boolean;
+  examEnded?: boolean;
   onClose: () => void;
   onChanged?: () => void;
 }) {
   const mutate = useApiMutation();
+  // The dialog can switch between a student's attempts (e.g. before / after a re-exam).
+  const [picked, setPicked] = useState<{ from: string | null; id: string } | null>(null);
+  const attemptId = picked && picked.from === openId ? picked.id : openId;
   const { data, mutate: reload } = useApi<AttemptDetail>(
     attemptId ? `/exams/${examId}/attempts/${attemptId}` : null,
     { orgId },
@@ -781,6 +804,59 @@ function AttemptDialog({
                 </div>
               ))}
             </div>
+            {data.attempts.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {data.attempts.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setPicked({ from: openId, id: a.id })}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs transition',
+                      a.id === attemptId
+                        ? 'border-brand-500 bg-brand-50 text-brand-800'
+                        : 'border-ink-200 text-ink-600 hover:bg-ink-50',
+                    )}
+                  >
+                    Attempt {a.attemptNo}
+                    {a.percentage !== null ? ` · ${a.percentage}%` : ''}
+                    {a.voided ? ' · set aside' : a.status === 'IN_PROGRESS' ? ' · writing' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {data.voided && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+                <b>Re-exam given</b> on {formatDateTime(data.voided.at)} — {data.voided.reason}.
+                This attempt is kept as a record but no longer counts.
+                {data.voided.until &&
+                  ` The fresh attempt is open until ${formatDateTime(data.voided.until)}.`}
+              </div>
+            )}
+            {!viewOnly && data.candidate.status === 'SUBMITTED' && !data.voided && (
+              <ReexamForm
+                examEnded={examEnded}
+                onGrant={async (body) => {
+                  try {
+                    await reload(
+                      await mutate<AttemptDetail>(
+                        `/exams/${examId}/attempts/${attemptId}/reexam`,
+                        'POST',
+                        body,
+                        orgId,
+                      ),
+                      { revalidate: false },
+                    );
+                    onChanged?.();
+                    toast.success('Re-exam given — the student can write the exam again');
+                    return true;
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                    return false;
+                  }
+                }}
+              />
+            )}
             {data.candidate.status === 'IN_PROGRESS' && !viewOnly && (
               <Button
                 variant="destructive-outline"
@@ -913,5 +989,80 @@ function AttemptDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Faculty: let a student write the exam again after a genuine mistake. */
+function ReexamForm({
+  examEnded,
+  onGrant,
+}: {
+  examEnded: boolean;
+  onGrant: (body: { reason: string; until: string | null }) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!open)
+    return (
+      <Button
+        variant="secondary"
+        onClick={() => {
+          setUntil(toLocalInput(new Date(Date.now() + 24 * 3_600_000).toISOString()));
+          setOpen(true);
+        }}
+      >
+        <RotateCcw /> Allow re-exam
+      </Button>
+    );
+  return (
+    <form
+      className="space-y-3 rounded-xl border border-ink-200 bg-ink-50/60 p-4"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        const ok = await onGrant({
+          reason: reason.trim(),
+          until: examEnded && until ? new Date(until).toISOString() : null,
+        });
+        setBusy(false);
+        if (ok) setOpen(false);
+      }}
+    >
+      <div>
+        <p className="text-sm font-semibold text-ink-900">Allow re-exam</p>
+        <p className="text-[13px] text-ink-500">
+          This attempt stays here as a record (with its log and photos) but no longer counts. The
+          student gets one fresh attempt; that one counts.
+        </p>
+      </div>
+      <Input
+        placeholder="Reason, e.g. Left full screen by mistake / power cut"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        maxLength={300}
+        autoFocus
+      />
+      {examEnded && (
+        <label className="block text-[13px] text-ink-600">
+          The exam has closed — the student can start the re-exam until
+          <Input
+            type="datetime-local"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            className="mt-1 max-w-xs"
+          />
+        </label>
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" loading={busy} disabled={reason.trim().length < 3}>
+          Give re-exam
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

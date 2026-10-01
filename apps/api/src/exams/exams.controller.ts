@@ -17,11 +17,13 @@ import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import {
   aiCheckSchema,
+  grantReexamSchema,
   setMarksSchema,
   checkCodingSchema,
   createExamSchema,
   runCodeSchema,
   type AiCheckInput,
+  type GrantReexamInput,
   type SetMarksInput,
   type CheckCodingInput,
   type RunCodeInput,
@@ -402,6 +404,21 @@ export class ExamsController {
     await this.exams.assertAccess(org, u.id, id);
     await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.forceSubmit(u, org.organizationId, id, attemptId);
+  }
+
+  /** Re-exam: keep this attempt as a record and let the student write the exam again. */
+  @Post(':id/attempts/:attemptId/reexam')
+  @HttpCode(200)
+  async reexam(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+    @Body(new ZodValidationPipe(grantReexamSchema)) body: GrantReexamInput,
+  ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
+    return this.analytics.grantReexam(u, org.organizationId, id, attemptId, body);
   }
 }
 

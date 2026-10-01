@@ -379,3 +379,11 @@ export const setMarksSchema = z.object({
   marks: z.coerce.number().min(-100).max(1000).nullable(),
 });
 export type SetMarksInput = z.infer<typeof setMarksSchema>;
+
+/** Faculty: give a student a fresh attempt (a genuine mistake, power cut, wrong auto-submit…). */
+export const grantReexamSchema = z.object({
+  reason: z.string().trim().min(3, 'Write why (e.g. "Left full screen by mistake")').max(300),
+  /** When the fresh attempt may start until (needed if the exam has already closed). */
+  until: z.coerce.date().nullable().optional(),
+});
+export type GrantReexamInput = z.infer<typeof grantReexamSchema>;

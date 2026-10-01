@@ -441,8 +441,19 @@ whenever a rule is broken. The student always sees an on-screen warning first.
 | Faculty walking past / someone far behind the student  | Ignored (only faces close to the camera count) |
 | Face missing, looking away                             | Photo saved for review; **never** auto-submits |
 
+"Looking away" is judged against each student's own normal pose (learned in the first few
+seconds and adjusted as they shift), on a ~2-second average, so reading the lower half of the
+screen, a hand on the chin or a quick glance up never counts.
+
 Review photos on the exam's Results page → a student → camera photos. Test a laptop's camera with
 `/exam/<id>?camcheck=1`.
+
+## 19. Re-exam (a genuine mistake)
+
+Results page → click the student → **Allow re-exam** → write the reason → **Give re-exam**. The old
+attempt stays as a record (log and photos) but no longer counts; the student gets one fresh attempt,
+and that one counts. If the exam has already closed, choose until when the student may start (default
+24 hours) — the exam shows as Live for that student only.
 
 ## Updating the live site
 

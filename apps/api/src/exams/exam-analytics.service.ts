@@ -3,6 +3,7 @@ import type {
   AiReview,
   AttemptDetail,
   CandidateRow,
+  ReexamInfo,
   ExamAnalytics,
   QuestionOption,
   QuestionStat,
@@ -86,8 +87,24 @@ export class ExamAnalyticsService {
     ]);
 
     // One row per candidate: their best graded attempt, else their in-progress one.
+    // Attempts set aside for a re-exam are kept as a record but don't count.
     const byUser = new Map<string, (typeof attempts)[number]>();
+    const reexams = new Map<string, ReexamInfo>();
     for (const a of attempts) {
+      if (!a.voidedAt) continue;
+      if (reexams.has(a.userId)) continue; // newest first
+      reexams.set(a.userId, {
+        attemptId: a.id,
+        grantedAt: a.voidedAt.toISOString(),
+        reason: a.voidReason ?? '',
+        until: a.reexamUntil?.toISOString() ?? null,
+        used: attempts.some(
+          (b) => b.userId === a.userId && !b.voidedAt && b.attemptNo > a.attemptNo,
+        ),
+      });
+    }
+    for (const a of attempts) {
+      if (a.voidedAt) continue;
       const cur = byUser.get(a.userId);
       const better =
         !cur ||
@@ -118,6 +135,7 @@ export class ExamAnalyticsService {
       violationCount: a.violationCount,
       submitReason: a.submitReason,
       submittedAt: a.submittedAt?.toISOString() ?? null,
+      reexam: reexams.get(a.userId) ?? null,
     });
     const candidates: CandidateRow[] = [...byUser.values()].map(rowFor);
     for (const m of assigned) {
@@ -138,6 +156,7 @@ export class ExamAnalyticsService {
         violationCount: 0,
         submitReason: null,
         submittedAt: null,
+        reexam: reexams.get(m.userId) ?? null,
       });
     }
     candidates.sort(
@@ -380,7 +399,86 @@ export class ExamAnalyticsService {
       userAgent: a.userAgent,
       startedAt: a.startedAt.toISOString(),
       deadlineAt: a.deadlineAt?.toISOString() ?? null,
+      voided: a.voidedAt
+        ? {
+            at: a.voidedAt.toISOString(),
+            reason: a.voidReason ?? '',
+            until: a.reexamUntil?.toISOString() ?? null,
+          }
+        : null,
+      attempts: (
+        await this.prisma.quizAttempt.findMany({
+          where: { quizId: examId, userId: a.userId },
+          orderBy: { attemptNo: 'desc' },
+          select: {
+            id: true,
+            attemptNo: true,
+            percentage: true,
+            status: true,
+            voidedAt: true,
+            submittedAt: true,
+          },
+        })
+      ).map((x) => ({
+        id: x.id,
+        attemptNo: x.attemptNo,
+        percentage: x.percentage !== null ? Number(x.percentage) : null,
+        status: x.status === 'IN_PROGRESS' ? ('IN_PROGRESS' as const) : ('SUBMITTED' as const),
+        voided: Boolean(x.voidedAt),
+        submittedAt: x.submittedAt?.toISOString() ?? null,
+      })),
     };
+  }
+
+  /**
+   * Re-exam: sets a submitted attempt aside (kept, with its log and photos, but it no longer
+   * counts) so the student can write the exam again. If the exam has closed, the fresh attempt
+   * can start until `until` (default: 24 hours from now).
+   */
+  async grantReexam(
+    actor: User,
+    orgId: string,
+    examId: string,
+    attemptId: string,
+    input: { reason: string; until?: Date | null },
+  ) {
+    const a = await this.prisma.quizAttempt.findFirst({
+      where: { id: attemptId, quizId: examId, organizationId: orgId },
+      include: { quiz: { select: { status: true, startsAt: true, endsAt: true } } },
+    });
+    if (!a) throw new NotFoundException();
+    if (a.status === 'IN_PROGRESS')
+      throw new ConflictException({
+        code: 'ATTEMPT_IN_PROGRESS',
+        message: 'The student is still writing this attempt — they can simply continue it',
+      });
+    if (a.voidedAt)
+      throw new ConflictException({
+        code: 'ALREADY_REEXAM',
+        message: 'A re-exam was already given for this attempt',
+      });
+    const now = new Date();
+    const closed = examState(a.quiz, now) === 'ENDED';
+    let until: Date | null = input.until ?? null;
+    if (until && until <= now)
+      throw new ConflictException({
+        code: 'BAD_UNTIL',
+        message: 'Choose a time in the future for the re-exam',
+      });
+    if (!until && closed) until = new Date(now.getTime() + 24 * 3_600_000);
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: { voidedAt: now, voidReason: input.reason, voidedById: actor.id, reexamUntil: until },
+    });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.reexam_granted',
+      entityType: 'quiz_attempt',
+      entityId: attemptId,
+      meta: { examId, userId: a.userId, reason: input.reason, until: until?.toISOString() ?? null },
+    });
+    return this.attemptDetail(orgId, examId, attemptId);
   }
 
   async forceSubmit(actor: User, orgId: string, examId: string, attemptId: string) {

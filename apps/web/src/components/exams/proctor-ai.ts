@@ -145,14 +145,14 @@ export interface MonitorOutput {
 }
 
 const WARN_AFTER: Record<CameraIssue, number> = {
-  FACE_MISSING: 1500,
-  LOOKING_AWAY: 1200,
+  FACE_MISSING: 2000,
+  LOOKING_AWAY: 2500,
   MULTIPLE_FACES: 0,
   PHONE_DETECTED: 0,
 };
 const VIOLATE_AFTER: Record<CameraIssue, number> = {
-  FACE_MISSING: 6000,
-  LOOKING_AWAY: 4000,
+  FACE_MISSING: 8000,
+  LOOKING_AWAY: 7000,
   // Someone must STAY in view this long: faculty walking past takes a few seconds at most.
   MULTIPLE_FACES: 8000,
   PHONE_DETECTED: 1500,
@@ -171,19 +171,32 @@ export const COUNTED_ISSUES: ReadonlySet<CameraIssue> = new Set([
   'MULTIPLE_FACES',
   'PHONE_DETECTED',
 ]);
-/** Head turned this many degrees from the student's normal pose counts as looking away. */
-export const YAW_LIMIT = 25;
-const PITCH_LIMIT = 20;
-const PITCH_LIMIT_TYPING = 35;
-const GAZE_SIDE_LIMIT = 0.55;
-const GAZE_DOWN_LIMIT = 0.55;
-const CLEAR_AFTER_MS = 800; // flicker tolerance
+/**
+ * Looking away is judged against THIS student's normal pose and gaze while reading the screen
+ * (laptop cameras sit above the screen, so reading the lower half looks like "eyes down"), on a
+ * short rolling median so one noisy frame (a hand on the chin, a blink) never counts.
+ */
+export const YAW_LIMIT = 30; // head turned sideways (degrees beyond normal)
+const PITCH_DOWN_LIMIT = 28; // head bent down beyond normal
+const PITCH_DOWN_LIMIT_TYPING = 40; // looking at the keyboard while typing is fine
+const PITCH_UP_LIMIT = 25;
+const GAZE_SIDE_EXTRA = 0.35; // eyes sideways beyond normal…
+const GAZE_SIDE_MIN = 0.7; // …and clearly sideways
+const SMOOTH_FRAMES = 5; // ~2 s of frames: decisions use the median of these
+const CALIBRATE_FRAMES = 15; // ~6 s at the start learns the normal pose
+const ADAPT_RATE = 0.01; // the normal pose follows slow posture changes
+const CLEAR_AFTER_MS = 1200; // flicker tolerance
 const REPEAT_WINDOW_MS = 90_000; // 3 warnings of the same kind in this window → violation
 const REPEAT_LIMIT = 3;
 const COOLDOWN_MS = 30_000; // don't report the same kind again right away
-const GLANCE_MIN_MS = 600; // look-aways shorter than this are ignored
+const GLANCE_MIN_MS = 1500; // look-aways shorter than this are ignored
 const GLANCE_WINDOW_MS = 60_000;
-const GLANCE_LIMIT = 6; // 6 look-aways within a minute → violation (warning from the 3rd)
+const GLANCE_LIMIT = 8; // 8 look-aways within a minute → flagged (warning from the 5th)
+
+const median = (a: number[]) => {
+  const b = [...a].sort((x, y) => x - y);
+  return b[Math.floor(b.length / 2)] ?? 0;
+};
 
 export class CameraMonitor {
   private since = new Map<CameraIssue, number>();
@@ -191,8 +204,9 @@ export class CameraMonitor {
   private warned = new Map<CameraIssue, number[]>();
   private warnedThisRun = new Set<CameraIssue>();
   private reportedAt = new Map<CameraIssue, number>();
-  private baseline: { yaw: number; pitch: number } | null = null;
-  private samples: { yaw: number; pitch: number }[] = [];
+  private baseline: { yaw: number; pitch: number; gazeSide: number } | null = null;
+  private samples: { yaw: number; pitch: number; gazeSide: number }[] = [];
+  private recent: { yaw: number; pitch: number; gazeSide: number }[] = [];
   private phoneHitAt = -Infinity;
   /** Starts of short look-aways (≥ 1 s) — many of them in a minute is a pattern too. */
   private glances: number[] = [];
@@ -204,31 +218,49 @@ export class CameraMonitor {
     if (o.faces === 0) out.push('FACE_MISSING');
     else if (o.faces > 1) out.push('MULTIPLE_FACES');
     else if (o.yaw !== undefined && o.pitch !== undefined) {
-      if (!this.baseline) {
-        if (Math.abs(o.yaw) < 25 && Math.abs(o.pitch) < 25)
-          this.samples.push({ yaw: o.yaw, pitch: o.pitch });
-        if (this.samples.length >= 12) {
-          const med = (a: number[]) => a.sort((x, y) => x - y)[Math.floor(a.length / 2)]!;
-          this.baseline = {
-            yaw: med(this.samples.map((s) => s.yaw)),
-            pitch: med(this.samples.map((s) => s.pitch)),
-          };
-        }
-      }
-      const b = this.baseline ?? { yaw: 0, pitch: 0 };
-      const dYaw = Math.abs(o.yaw - b.yaw);
-      const dPitch = Math.abs(o.pitch - b.pitch);
-      // Glancing at the keyboard while typing is normal; looking down while NOT typing isn't.
-      const pitchLimit = typingRecently ? PITCH_LIMIT_TYPING : PITCH_LIMIT;
-      const away =
-        dYaw > YAW_LIMIT ||
-        dPitch > pitchLimit ||
-        (o.gazeSide ?? 0) > GAZE_SIDE_LIMIT ||
-        (!typingRecently && (o.gazeDown ?? 0) > GAZE_DOWN_LIMIT);
-      if (away) out.push('LOOKING_AWAY');
+      if (this.isAway(o, typingRecently)) out.push('LOOKING_AWAY');
     }
     if (o.phone) out.push('PHONE_DETECTED');
     return out;
+  }
+
+  /** Rolling, per-student decision: is the student really looking away from the screen? */
+  private isAway(o: FrameObservation, typingRecently: boolean) {
+    const cur = { yaw: o.yaw!, pitch: o.pitch!, gazeSide: o.gazeSide ?? 0 };
+    this.recent.push(cur);
+    if (this.recent.length > SMOOTH_FRAMES) this.recent.shift();
+    // Learn the normal pose from the first few seconds (ignoring obviously odd frames).
+    if (!this.baseline) {
+      if (Math.abs(cur.yaw) < 30 && Math.abs(cur.pitch) < 30) this.samples.push(cur);
+      if (this.samples.length >= CALIBRATE_FRAMES)
+        this.baseline = {
+          yaw: median(this.samples.map((x) => x.yaw)),
+          pitch: median(this.samples.map((x) => x.pitch)),
+          gazeSide: median(this.samples.map((x) => x.gazeSide)),
+        };
+      return false; // never judge before we know how this student sits
+    }
+    if (this.recent.length < SMOOTH_FRAMES) return false;
+    const b = this.baseline;
+    const m = {
+      yaw: median(this.recent.map((x) => x.yaw)),
+      pitch: median(this.recent.map((x) => x.pitch)),
+      gazeSide: median(this.recent.map((x) => x.gazeSide)),
+    };
+    const dYaw = Math.abs(m.yaw - b.yaw);
+    const dPitch = m.pitch - b.pitch; // which sign is "down" depends on the camera, so check both
+    const down = typingRecently ? PITCH_DOWN_LIMIT_TYPING : PITCH_DOWN_LIMIT;
+    const away =
+      dYaw > YAW_LIMIT ||
+      Math.abs(dPitch) > Math.max(down, PITCH_UP_LIMIT) ||
+      (m.gazeSide > GAZE_SIDE_MIN && m.gazeSide - b.gazeSide > GAZE_SIDE_EXTRA);
+    if (!away) {
+      // Follow slow posture changes (leaning back, sliding the laptop) while looking at the screen.
+      b.yaw += (m.yaw - b.yaw) * ADAPT_RATE;
+      b.pitch += (m.pitch - b.pitch) * ADAPT_RATE;
+      b.gazeSide += (m.gazeSide - b.gazeSide) * ADAPT_RATE;
+    }
+    return away;
   }
 
   update(o: FrameObservation, now: number, typingRecently = false): MonitorOutput {

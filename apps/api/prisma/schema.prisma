@@ -711,6 +711,11 @@ model QuizAttempt {
   violationCount Int           @default(0)
   ipAddress      String?
   userAgent      String?
+  // Re-exam: faculty set this attempt aside (kept as a record, no longer counts) and gave a fresh one.
+  voidedAt       DateTime?
+  voidReason     String?
+  voidedById     String?       @db.Uuid
+  reexamUntil    DateTime? // the fresh attempt may start until then (even after the exam closed)
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quiz         Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)

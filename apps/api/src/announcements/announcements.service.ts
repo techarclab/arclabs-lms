@@ -89,7 +89,9 @@ export class AnnouncementsService {
       if (audience.pendingOnly)
         where.user = {
           status: 'ACTIVE',
-          quizAttempts: { none: { quizId: exam.id, status: { in: ['SUBMITTED', 'GRADED'] } } },
+          quizAttempts: {
+            none: { quizId: exam.id, status: { in: ['SUBMITTED', 'GRADED'] }, voidedAt: null },
+          },
         };
     }
     if (departmentId) where = { ...where, departmentId };
