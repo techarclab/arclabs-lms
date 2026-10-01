@@ -10,8 +10,28 @@ export class ApiError extends Error {
     public status: number,
     public body: ApiErrorBody | undefined,
   ) {
-    super(body?.error.message ?? `Request failed (${status})`);
+    super(friendlyMessage(status, body));
   }
+}
+
+/** "Request validation failed" alone doesn't help: name the first field that is wrong. */
+function friendlyMessage(status: number, body: ApiErrorBody | undefined) {
+  const msg = body?.error.message ?? `Request failed (${status})`;
+  const details = body?.error.details;
+  if (body?.error.code !== 'VALIDATION_FAILED' || !Array.isArray(details) || !details.length)
+    return msg;
+  const d = details[0] as { path?: string; message?: string };
+  const parts = String(d.path ?? '').split('.');
+  const rowOf = (key: string) => {
+    const i = parts.indexOf(key);
+    return i >= 0 && /^\d+$/.test(parts[i + 1] ?? '') ? Number(parts[i + 1]) + 1 : 0;
+  };
+  const where = rowOf('rubric')
+    ? `Marking scheme row ${rowOf('rubric')}`
+    : rowOf('testCases')
+      ? `Test case ${rowOf('testCases')}`
+      : '';
+  return [where, d.message].filter(Boolean).join(': ') || msg;
 }
 
 export async function api<T>(

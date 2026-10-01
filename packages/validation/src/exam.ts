@@ -41,7 +41,10 @@ export const codingConfigSchema = z
       .array(
         z.object({
           text: z.string().trim().min(3, 'Describe what earns these marks').max(300),
-          points: z.coerce.number().min(0.5).max(100),
+          points: z.coerce
+            .number()
+            .min(0.5, 'Give marks (at least 0.5)')
+            .max(100, 'At most 100 marks'),
         }),
       )
       .max(12, 'Up to 12 rubric items')
@@ -356,7 +359,10 @@ export const aiCheckSchema = z.object({
   prompt: z.string().trim().min(3).max(10_000),
   rubric: z
     .array(
-      z.object({ text: z.string().trim().min(3).max(300), points: z.coerce.number().min(0.5) }),
+      z.object({
+        text: z.string().trim().min(3, 'Describe what earns these marks').max(300),
+        points: z.coerce.number().min(0.5, 'Give marks (at least 0.5)'),
+      }),
     )
     .min(1, 'Add the marking scheme first')
     .max(12),
