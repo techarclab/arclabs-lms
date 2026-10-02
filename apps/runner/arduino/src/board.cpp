@@ -15,6 +15,7 @@
 // Serial output (and trace lines) go to stdout; the LCD's final screen is printed at the end.
 
 #include <Arduino.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <unistd.h>
 
@@ -597,10 +598,74 @@ extern "C" void __arc_set_baud(unsigned long baud) {
   if (baud >= 300) baud_us_per_char = 10000000UL / baud;
 }
 
+// ───────── ESP32 sleep ─────────
+// Deep sleep is simulated as a wake-up that starts again at setup(); globals are not reset, which
+// matches RTC_DATA_ATTR variables (the ones students are taught to rely on).
+static jmp_buf wake_jmp;
+static uint64_t sleep_timer_us = 0;
+static uint64_t gpio_wake_mask = 0;
+static int gpio_wake_level = 0;
+static esp_sleep_wakeup_cause_t wake_cause = ESP_SLEEP_WAKEUP_UNDEFINED;
+
+esp_err_t esp_sleep_enable_timer_wakeup(uint64_t us) {
+  sleep_timer_us = us;
+  return ESP_OK;
+}
+esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t mask, esp_deepsleep_gpio_wake_up_mode_t mode) {
+  gpio_wake_mask = mask;
+  gpio_wake_level = mode == ESP_GPIO_WAKEUP_GPIO_HIGH ? 1 : 0;
+  return ESP_OK;
+}
+esp_err_t esp_sleep_enable_gpio_wakeup() { return ESP_OK; }
+esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return wake_cause; }
+
+static bool gpioWakeNow() {
+  for (int p = 0; p < 64; p++)
+    if ((gpio_wake_mask >> p) & 1ULL)
+      if (digitalRead(p) == gpio_wake_level) return true;
+  return false;
+}
+
+// Sleeps until the timer or a wake-up pin fires; returns false if nothing can ever wake it.
+static bool sleepUntilWake() {
+  if (!sleep_timer_us && !gpio_wake_mask) return false;
+  uint64_t slept = 0;
+  for (;;) {
+    if (gpio_wake_mask && gpioWakeNow()) {
+      wake_cause = ESP_SLEEP_WAKEUP_GPIO;
+      return true;
+    }
+    if (sleep_timer_us && slept >= sleep_timer_us) {
+      wake_cause = ESP_SLEEP_WAKEUP_TIMER;
+      return true;
+    }
+    uint64_t step = gpio_wake_mask ? 1000 : sleep_timer_us - slept;
+    if (sleep_timer_us && step > sleep_timer_us - slept) step = sleep_timer_us - slept;
+    sim::advance(step);  // ends the run when the simulated time is up
+    slept += step;
+  }
+}
+
+void esp_deep_sleep_start() {
+  fflush(stdout);
+  if (sim::trace()) sim::traceLine("[deep sleep]");
+  if (!sleepUntilWake()) finish();
+  longjmp(wake_jmp, 1);
+}
+void esp_deep_sleep(uint64_t us) {
+  esp_sleep_enable_timer_wakeup(us);
+  esp_deep_sleep_start();
+}
+esp_err_t esp_light_sleep_start() {
+  sleepUntilWake();
+  return ESP_OK;
+}
+
 // ───────── entry point ─────────
 int main() {
   parseWorld();
   applyDue(0);
+  setjmp(wake_jmp);  // deep-sleep wake-ups come back here
   setup();
   for (;;) {
     uint64_t before = now_us;

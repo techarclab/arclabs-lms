@@ -124,6 +124,38 @@ char *dtostrf(double val, signed char width, unsigned char prec, char *sout);
 char *itoa(int value, char *str, int base);
 char *ltoa(long value, char *str, int base);
 
+// ---- ESP32 / ESP32-C3 extras (lab boards) ----
+#define IRAM_ATTR
+#define RTC_DATA_ATTR
+#define RTC_NOINIT_ATTR
+#ifndef BIT
+#define BIT(n) (1ULL << (n))
+#endif
+typedef int esp_err_t;
+#define ESP_OK 0
+typedef enum {
+  ESP_SLEEP_WAKEUP_UNDEFINED = 0,
+  ESP_SLEEP_WAKEUP_ALL,
+  ESP_SLEEP_WAKEUP_EXT0,
+  ESP_SLEEP_WAKEUP_EXT1,
+  ESP_SLEEP_WAKEUP_TIMER,
+  ESP_SLEEP_WAKEUP_TOUCHPAD,
+  ESP_SLEEP_WAKEUP_ULP,
+  ESP_SLEEP_WAKEUP_GPIO,
+  ESP_SLEEP_WAKEUP_UART,
+} esp_sleep_wakeup_cause_t;
+typedef enum { ESP_GPIO_WAKEUP_GPIO_LOW = 0, ESP_GPIO_WAKEUP_GPIO_HIGH = 1 } esp_deepsleep_gpio_wake_up_mode_t;
+esp_err_t esp_sleep_enable_timer_wakeup(uint64_t time_in_us);
+esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask,
+                                            esp_deepsleep_gpio_wake_up_mode_t mode);
+esp_err_t esp_sleep_enable_gpio_wakeup();
+esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause();
+/** Deep sleep: the board "restarts" at setup() on wake-up; RTC_DATA_ATTR values are kept. */
+[[noreturn]] void esp_deep_sleep_start();
+[[noreturn]] void esp_deep_sleep(uint64_t time_in_us);
+esp_err_t esp_light_sleep_start();
+inline uint32_t getCpuFrequencyMhz() { return 160; }
+
 // Simulator hooks used by the bundled libraries (not part of the Arduino API).
 namespace sim {
 void advance(uint64_t us);
