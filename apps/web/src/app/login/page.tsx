@@ -38,6 +38,10 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   'auth/weak-password': 'Password is too weak — use at least 8 characters.',
   'auth/too-many-requests': 'Too many attempts. Please wait a minute and try again.',
   'auth/popup-closed-by-user': 'Google sign-in was cancelled.',
+  'auth/missing-email': 'Enter the email you sign in with.',
+  'auth/expired-action-code': 'This link has expired. Ask for a new one.',
+  'auth/invalid-action-code':
+    'This link is not valid any more (it may have been used already). Ask for a new one.',
   'auth/network-request-failed':
     'Network error — check your connection (or that the auth emulator is running).',
 };
@@ -85,7 +89,9 @@ function LoginInner() {
   } = useAuth();
   const initialMode = params.get('mode');
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset' | 'faculty'>(
-    initialMode === 'signup' || initialMode === 'faculty' ? initialMode : 'signin',
+    initialMode === 'signup' || initialMode === 'faculty' || initialMode === 'reset'
+      ? initialMode
+      : 'signin',
   );
   const [accessCode, setAccessCode] = useState('');
   const [fullName, setFullName] = useState('');
@@ -95,6 +101,13 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   useEffect(() => {
     if (me) router.replace(next.startsWith('/') ? next : '/dashboard');
@@ -145,8 +158,21 @@ function LoginInner() {
     const auth = firebaseAuth();
     if (mode === 'reset') {
       void run(async () => {
-        await sendPasswordResetEmail(auth, email);
-        setNotice('If an account exists for this email, a reset link is on its way.');
+        const addr = email.trim();
+        try {
+          // After setting the new password, "Continue" brings them back here with the email filled in.
+          await sendPasswordResetEmail(auth, addr, {
+            url: `${window.location.origin}/login?email=${encodeURIComponent(addr)}`,
+          });
+        } catch (e) {
+          const code = (e as { code?: string }).code ?? '';
+          if (!/continue-uri|unauthorized-domain/.test(code)) throw e;
+          await sendPasswordResetEmail(auth, addr); // this site isn't on Firebase's list: plain link
+        }
+        setResendIn(60);
+        setNotice(
+          `If ${addr} has an ARC LABS account, a link to set a new password is on its way. Open the email (check Spam / Promotions too), click the link, choose a new password, then sign in. The link works for 1 hour.`,
+        );
       });
       return;
     }
@@ -278,6 +304,7 @@ function LoginInner() {
               onClick={() => {
                 setMode('signin');
                 setError(null);
+                setNotice(null);
                 setAccessCode('');
               }}
             >
@@ -371,6 +398,7 @@ function LoginInner() {
                       onClick={() => {
                         setMode('reset');
                         setError(null);
+                        setNotice(null);
                       }}
                       className="text-[13px] font-medium text-brand-600 hover:text-brand-700"
                     >
@@ -414,13 +442,44 @@ function LoginInner() {
               </div>
             )}
 
-            <Button type="submit" size="lg" className="w-full" loading={busy}>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              loading={busy}
+              disabled={mode === 'reset' && resendIn > 0}
+            >
               {mode === 'signin' || mode === 'faculty'
                 ? 'Sign in'
                 : mode === 'signup'
                   ? 'Create account'
-                  : 'Send reset link'}
+                  : resendIn > 0
+                    ? `Send again in ${resendIn}s`
+                    : notice
+                      ? 'Send the link again'
+                      : 'Send reset link'}
             </Button>
+            {mode === 'signin' && (
+              <p className="text-center text-[13px] text-ink-500">
+                Forgot your password?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('reset');
+                    setError(null);
+                    setNotice(null);
+                  }}
+                  className="font-medium text-brand-600 hover:text-brand-700"
+                >
+                  Reset it here
+                </button>
+              </p>
+            )}
+            {(mode === 'signin' || mode === 'signup') && (
+              <p className="text-center text-[12px] text-ink-400">
+                For your safety you are signed out when you close this tab or the browser.
+              </p>
+            )}
           </form>
 
           {(mode === 'signin' || mode === 'signup') && (

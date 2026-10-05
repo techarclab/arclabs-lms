@@ -8,17 +8,19 @@ import { firebaseAuth } from '@/lib/firebase';
 
 const ACCESS_KEY = 'arc.accessToken';
 
+// Kept for this tab only (like Firebase sign-ins): closing the tab or browser signs out.
 function readAccessToken() {
   try {
-    return localStorage.getItem(ACCESS_KEY);
+    localStorage.removeItem(ACCESS_KEY); // older versions kept it on the computer
+    return sessionStorage.getItem(ACCESS_KEY);
   } catch {
     return null;
   }
 }
 function writeAccessToken(token: string | null) {
   try {
-    if (token) localStorage.setItem(ACCESS_KEY, token);
-    else localStorage.removeItem(ACCESS_KEY);
+    if (token) sessionStorage.setItem(ACCESS_KEY, token);
+    else sessionStorage.removeItem(ACCESS_KEY);
   } catch {
     /* private mode — the session just won't survive a reload */
   }

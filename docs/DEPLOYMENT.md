@@ -467,6 +467,12 @@ and that one counts. If the exam has already closed, choose until when the stude
 - **Exam → Add from bank**: pick the folder, then **Select all** — only that paper's questions are added.
 - Questions imported before this update were put into folders named **"Imported <date, time>"** (one per import). Rename them, e.g. to "Unit 1 assignment".
 
+## 21. Forgot password and sign-out on close
+
+- **Forgot password**: Login → _Forgot password? Reset it here_ → enter the email → Firebase emails a link (tell students to check Spam). The link opens a page to choose a new password; afterwards they are signed in.
+- To use the ARC LABS page for that link (instead of Firebase's plain page), once: Firebase console → Authentication → **Templates** → _Password reset_ → edit (pencil) → **Customize action URL** → `https://lms.arclabs.in/reset-password` → Save. Optional: change _Sender name_ to "ARC LABS".
+- **Signed out on close**: a sign-in lasts only for that browser tab. Reload keeps it; closing the tab or the browser signs out, so the next student on a lab computer must sign in. Opening the LMS in a second tab also asks to sign in. (Same for college access-code logins.)
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API
