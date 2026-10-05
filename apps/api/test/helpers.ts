@@ -67,6 +67,18 @@ const fakeFirebaseAuth = {
     fakeFirebaseUsers.set(email, u);
     return u;
   },
+  updateUser: async (uid: string, patch: { email?: string; displayName?: string }) => {
+    const cur = [...fakeFirebaseUsers.values()].find((u) => u.uid === uid);
+    if (!cur) throw Object.assign(new Error('not found'), { code: 'auth/user-not-found' });
+    if (patch.email && patch.email !== cur.email) {
+      if (fakeFirebaseUsers.has(patch.email))
+        throw Object.assign(new Error('exists'), { code: 'auth/email-already-exists' });
+      fakeFirebaseUsers.delete(cur.email);
+      cur.email = patch.email;
+      fakeFirebaseUsers.set(cur.email, cur);
+    }
+    return cur;
+  },
   generatePasswordResetLink: async (email: string) =>
     `http://test.local/reset?email=${encodeURIComponent(email)}`,
 };

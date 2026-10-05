@@ -357,6 +357,9 @@ export function MembersPanel({
                         </p>
                         <p className="truncate text-xs text-ink-500">
                           {m.email}
+                          {m.collegeEmail && m.collegeEmail !== m.email && (
+                            <span className="ml-2 text-ink-400">· {m.collegeEmail}</span>
+                          )}
                           {m.externalId && (
                             <span className="ml-2 font-mono text-ink-400">{m.externalId}</span>
                           )}
@@ -388,7 +391,7 @@ export function MembersPanel({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                           <DropdownMenuItem icon={<Pencil />} onSelect={() => setEditing(m)}>
-                            Edit roles & details
+                            Edit name, email & roles
                           </DropdownMenuItem>
                           {m.state === 'INVITED' && (
                             <DropdownMenuItem icon={<Send />} onSelect={() => resend(m)}>

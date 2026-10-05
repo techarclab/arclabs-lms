@@ -20,6 +20,7 @@ import {
   type Paginated,
 } from '@arc/types';
 import {
+  emailOnDomains,
   inviteMemberSchema,
   type InviteMemberParsed,
   type ListMembersQuery,
@@ -65,6 +66,7 @@ function toMember(m: MemberRow, actorId: string): MemberSummary {
     userId: m.user.id,
     fullName: m.user.fullName,
     email: m.user.email,
+    collegeEmail: m.collegeEmail,
     roles: m.roles,
     state,
     department: m.department,
@@ -387,9 +389,12 @@ export class MembersService {
       }
     }
 
+    const identity = await this.changeIdentity(actor, org, m, input);
+
     const updated = await this.prisma.organizationMember.update({
       where: { id: m.id },
       data: {
+        ...(input.collegeEmail !== undefined ? { collegeEmail: input.collegeEmail } : {}),
         ...(input.roles ? { roles: input.roles } : {}),
         ...(input.departmentId !== undefined ? { departmentId: input.departmentId } : {}),
         ...(input.externalId !== undefined ? { externalId: input.externalId || null } : {}),
@@ -414,9 +419,92 @@ export class MembersService {
         email: m.user.email,
         name: m.user.fullName,
         ...(input.roles ? { rolesBefore: m.roles, rolesAfter: input.roles } : {}),
+        ...identity,
+        ...(input.collegeEmail !== undefined && input.collegeEmail !== m.collegeEmail
+          ? { collegeEmailBefore: m.collegeEmail, collegeEmailAfter: input.collegeEmail }
+          : {}),
       },
     });
     return toMember(updated, actor.id);
+  }
+
+  /**
+   * Fixes a person's sign-in email and/or name (the account itself, also in Firebase), and checks
+   * the college email. The account is shared by every college the person is in, so a college
+   * admin can only change it when the person belongs to their college alone.
+   */
+  private async changeIdentity(
+    actor: User,
+    org: OrgContextInfo,
+    m: MemberRow,
+    input: UpdateMemberInput,
+  ): Promise<Record<string, unknown>> {
+    if (input.collegeEmail) {
+      const o = await this.prisma.organization.findUnique({
+        where: { id: org.organizationId },
+        select: { collegeEmailDomains: true },
+      });
+      if (!emailOnDomains(input.collegeEmail, o?.collegeEmailDomains ?? []))
+        throw new BadRequestException({
+          code: 'COLLEGE_EMAIL_REQUIRED',
+          message: `College email must end in @${o!.collegeEmailDomains.join(' or @')}`,
+        });
+    }
+    const newEmail = input.email && input.email !== m.user.email.toLowerCase() ? input.email : null;
+    const newName = input.fullName && input.fullName !== m.user.fullName ? input.fullName : null;
+    if (!newEmail && !newName) return {};
+
+    if (!actor.isSuperAdmin) {
+      const elsewhere = await this.prisma.organizationMember.count({
+        where: { userId: m.userId, organizationId: { not: org.organizationId } },
+      });
+      if (elsewhere)
+        throw new ForbiddenException({
+          code: 'SHARED_ACCOUNT',
+          message:
+            'This person is also in another college, so only ARC LABS can change their sign-in email or name.',
+        });
+    }
+    if (newEmail) {
+      const taken = await this.prisma.user.findFirst({
+        where: { email: { equals: newEmail, mode: 'insensitive' }, id: { not: m.userId } },
+        select: { id: true },
+      });
+      if (taken)
+        throw new ConflictException({
+          code: 'EMAIL_TAKEN',
+          message: `Another account already uses ${newEmail}. Remove that one first, or ask the student which is right.`,
+        });
+    }
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: m.userId },
+      select: { firebaseUid: true },
+    });
+    if (user.firebaseUid) {
+      try {
+        await this.auth.updateUser(user.firebaseUid, {
+          ...(newEmail ? { email: newEmail } : {}),
+          ...(newName ? { displayName: newName } : {}),
+        });
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        if (code === 'auth/email-already-exists')
+          throw new ConflictException({
+            code: 'EMAIL_TAKEN',
+            message: `${newEmail} already has an ARC LABS login. Ask the student to sign in with it instead.`,
+          });
+        if (code !== 'auth/user-not-found') throw e;
+        // No Firebase login yet: the new email is linked when they first sign in.
+      }
+    }
+    await this.prisma.user.update({
+      where: { id: m.userId },
+      data: { ...(newEmail ? { email: newEmail } : {}), ...(newName ? { fullName: newName } : {}) },
+    });
+    return {
+      ...(newEmail ? { emailBefore: m.user.email, emailAfter: newEmail } : {}),
+      ...(newName ? { nameBefore: m.user.fullName, nameAfter: newName } : {}),
+    };
   }
 
   /**

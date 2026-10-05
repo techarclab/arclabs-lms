@@ -28,6 +28,9 @@ export function EditMemberDialog({
   const [roles, setRoles] = useState<string[]>([]);
   const [departmentId, setDepartmentId] = useState('');
   const [externalId, setExternalId] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [collegeEmail, setCollegeEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -35,6 +38,9 @@ export function EditMemberDialog({
       setRoles(member.roles);
       setDepartmentId(member.department?.id ?? '');
       setExternalId(member.externalId ?? '');
+      setFullName(member.fullName);
+      setEmail(member.email);
+      setCollegeEmail(member.collegeEmail ?? '');
     }
   }, [member]);
 
@@ -52,10 +58,27 @@ export function EditMemberDialog({
       await mutate(
         `/members/${member.id}`,
         'PATCH',
-        { roles, departmentId: departmentId || null, externalId: externalId || null },
+        {
+          roles,
+          departmentId: departmentId || null,
+          externalId: externalId || null,
+          // only what changed, so nothing else on the account is touched
+          ...(fullName.trim() !== member.fullName ? { fullName: fullName.trim() } : {}),
+          ...(email.trim().toLowerCase() !== member.email.toLowerCase()
+            ? { email: email.trim() }
+            : {}),
+          ...(collegeEmail.trim() !== (member.collegeEmail ?? '')
+            ? { collegeEmail: collegeEmail.trim() || null }
+            : {}),
+        },
         orgId,
       );
-      toast.success(`${member.fullName} updated`);
+      toast.success(`${fullName.trim() || member.fullName} updated`, {
+        description:
+          email.trim().toLowerCase() !== member.email.toLowerCase()
+            ? `They now sign in with ${email.trim().toLowerCase()} (same password).`
+            : undefined,
+      });
       onSaved();
       onOpenChange(false);
     } catch (e) {
@@ -76,6 +99,38 @@ export function EditMemberDialog({
               <p className="truncate text-sm text-ink-500">{member.email}</p>
             </div>
             <MemberStateBadge state={member.state} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Full name" htmlFor="ed-name">
+              <Input id="ed-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </Field>
+            <Field
+              label="Sign-in email"
+              htmlFor="ed-email"
+              hint="Fix a wrong email here. They sign in with the new email and the same password."
+            >
+              <Input
+                id="ed-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Field>
+            <Field
+              label="College email"
+              htmlFor="ed-cemail"
+              optional
+              className="sm:col-span-2"
+              hint="Announcements are emailed here (the sign-in email is used if this is empty)."
+            >
+              <Input
+                id="ed-cemail"
+                type="email"
+                value={collegeEmail}
+                onChange={(e) => setCollegeEmail(e.target.value)}
+                placeholder="rollno@college.edu"
+              />
+            </Field>
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-medium text-ink-800">Roles</p>

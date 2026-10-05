@@ -8,6 +8,6 @@ export const syncUserSchema = z.object({
 export type SyncUserInput = z.infer<typeof syncUserSchema>;
 
 export const forgotPasswordSchema = z.object({
-  email: z.email('Enter a valid email address').trim().toLowerCase().max(200),
+  email: z.string().trim().toLowerCase().max(200).pipe(z.email('Enter a valid email address')),
 });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

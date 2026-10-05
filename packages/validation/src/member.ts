@@ -56,6 +56,24 @@ export const updateMemberSchema = z
     departmentId: z.uuid().nullable().optional(),
     externalId: z.string().trim().max(60).nullable().optional(),
     status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+    /** Fix a wrong sign-in email (also changes it on their login). */
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(200)
+      .pipe(z.email('Enter a valid email address'))
+      .optional(),
+    /** College email (announcements go here); null clears it. */
+    collegeEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(200)
+      .pipe(z.email('Enter a valid college email'))
+      .nullable()
+      .optional(),
+    fullName: z.string().trim().min(2, 'Name is too short').max(120).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;

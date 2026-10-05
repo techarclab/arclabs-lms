@@ -4,7 +4,8 @@ export interface MemberSummary {
   id: string; // membership id
   userId: string;
   fullName: string;
-  email: string;
+  email: string; // sign-in email
+  collegeEmail: string | null; // announcements go here when set
   roles: string[];
   state: MemberState;
   department: { id: string; name: string } | null;
