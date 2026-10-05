@@ -654,6 +654,7 @@ model Question {
   negativeMarks  Decimal      @default(0) @db.Decimal(5, 2) // deducted when wrong and the exam uses negative marking
   difficulty     Difficulty   @default(MEDIUM)
   topic          String?
+  folder         String? // groups questions, e.g. one imported paper ("Unit 3 assignment")
   tags           String[]
   coding         Json? // CODING: languages, starter code, test cases
   archived       Boolean      @default(false)
@@ -667,6 +668,7 @@ model Question {
 
   @@index([organizationId, archived])
   @@index([organizationId, topic])
+  @@index([organizationId, folder])
   @@map("questions")
 }
 

@@ -460,6 +460,13 @@ attempt stays as a record (log and photos) but no longer counts; the student get
 and that one counts. If the exam has already closed, choose until when the student may start (default
 24 hours) — the exam shows as Live for that student only.
 
+## 20. Question folders (each paper stays separate)
+
+- **Import from PDF / Word** asks for a **folder** (filled in from the file name). Every question in that paper goes into it. Questions already in _that folder_ are skipped; the same question can still be in another paper's folder.
+- **Question bank**: folder chips at the top (All questions · each folder · Not in a folder). Inside a folder the questions are in the paper's order. Tick questions (or **Select page**) → **Move to folder**; the **Rename** button renames the open folder (renaming onto an existing name joins them).
+- **Exam → Add from bank**: pick the folder, then **Select all** — only that paper's questions are added.
+- Questions imported before this update were put into folders named **"Imported <date, time>"** (one per import). Rename them, e.g. to "Unit 1 assignment".
+
 ## Updating the live site
 
 Push to `main` → both Vercel projects rebuild automatically; database migrations run with the API

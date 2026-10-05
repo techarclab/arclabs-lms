@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Library, Search } from 'lucide-react';
-import type { Paginated, QuestionItem } from '@arc/types';
+import type { Paginated, QuestionFolders, QuestionItem } from '@arc/types';
+import { NO_FOLDER } from '@arc/validation';
 import { Button, cn, Dialog, DialogContent, Input, Select, Skeleton } from '@arc/ui';
 import { plainPrompt } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
@@ -24,6 +25,7 @@ export function AddQuestionsDialog({
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [topic, setTopic] = useState('');
+  const [folder, setFolder] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -39,9 +41,10 @@ export function AddQuestionsDialog({
     const sp = new URLSearchParams({ pageSize: '100' });
     if (q) sp.set('search', q);
     if (topic) sp.set('topic', topic);
+    if (folder) sp.set('folder', folder);
     if (difficulty) sp.set('difficulty', difficulty);
     return `/questions?${sp}`;
-  }, [q, topic, difficulty]);
+  }, [q, topic, folder, difficulty]);
   const { data, isLoading } = useApi<Paginated<QuestionItem>>(open ? query : null, {
     orgId,
     keepPreviousData: true,
@@ -50,6 +53,9 @@ export function AddQuestionsDialog({
     open ? '/questions/topics' : null,
     { orgId },
   );
+  const { data: folders } = useApi<QuestionFolders>(open ? '/questions/folders' : null, {
+    orgId,
+  });
   const available = (data?.data ?? []).filter((x) => !existing.includes(x.id));
   const toggle = (id: string) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -70,6 +76,26 @@ export function AddQuestionsDialog({
               className="h-9"
             />
           </div>
+          {folders && (folders.folders.length > 0 || folder) && (
+            <div className="w-full">
+              <Select
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                className="h-9"
+                aria-label="Folder"
+              >
+                <option value="">All folders</option>
+                {folders.folders.map((f) => (
+                  <option key={f.name} value={f.name}>
+                    {f.name} ({f.count})
+                  </option>
+                ))}
+                {folders.unfiled > 0 && (
+                  <option value={NO_FOLDER}>Not in a folder ({folders.unfiled})</option>
+                )}
+              </Select>
+            </div>
+          )}
           <div className="w-44">
             <Select value={topic} onChange={(e) => setTopic(e.target.value)} className="h-9">
               <option value="">All topics</option>
@@ -131,6 +157,11 @@ export function AddQuestionsDialog({
                     <QuestionTypeBadge type={x.type} />
                     <DifficultyBadge difficulty={x.difficulty} />
                     {x.topic && <span className="text-xs text-ink-500">{x.topic}</span>}
+                    {x.folder && !folder && (
+                      <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[11px] text-ink-600">
+                        {x.folder}
+                      </span>
+                    )}
                   </span>
                 </span>
                 <span className="tabular shrink-0 text-sm font-medium text-ink-700">

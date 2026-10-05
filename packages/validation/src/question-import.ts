@@ -13,6 +13,8 @@ export const importParseSchema = z.object({
   /** Let AI suggest answers the file doesn't give (marked for checking). */
   fillAnswers: z.boolean().default(false),
   useAi: z.boolean().default(true),
+  /** The folder the questions will go into: "already in the bank" checks only that folder. */
+  folder: z.string().trim().max(80).optional(),
 });
 export type ImportParseInput = z.infer<typeof importParseSchema>;
 
@@ -244,6 +246,13 @@ export function splitForImport(text: string, max = IMPORT_CHUNK_CHARS): string[]
 export const bulkQuestionsSchema = z.object({
   questions: z.array(z.unknown()).min(1, 'Nothing to import').max(300, 'Up to 300 at a time'),
   skipDuplicates: z.boolean().default(true),
+  /** Every question goes into this folder (duplicates are only checked inside it). */
+  folder: z
+    .string()
+    .trim()
+    .max(80, 'Folder name: up to 80 characters')
+    .optional()
+    .transform((v) => v || null),
 });
 export type BulkQuestionsInput = z.infer<typeof bulkQuestionsSchema>;
 

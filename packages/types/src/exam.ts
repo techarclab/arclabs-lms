@@ -108,12 +108,19 @@ export interface QuestionItem {
   negativeMarks: number;
   difficulty: DifficultyName;
   topic: string | null;
+  folder: string | null;
   tags: string[];
   coding: CodingConfig | null;
   archived: boolean;
   usedInExams: number;
   locked: boolean; // used by a published exam → read-only
   createdAt: string;
+}
+
+/** GET /questions/folders */
+export interface QuestionFolders {
+  folders: { name: string; count: number }[];
+  unfiled: number; // active questions in no folder
 }
 
 export interface ExamSettings {

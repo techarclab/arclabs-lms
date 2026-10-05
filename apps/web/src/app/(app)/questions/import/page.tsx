@@ -10,6 +10,7 @@ import {
   Copy,
   FileText,
   FileUp,
+  Folder,
   Loader2,
   Plus,
   Sparkles,
@@ -18,13 +19,19 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ImportedQuestion, ImportParseResult, ImportableType } from '@arc/types';
+import type {
+  ImportedQuestion,
+  ImportParseResult,
+  ImportableType,
+  QuestionFolders,
+} from '@arc/types';
 import { splitForImport } from '@arc/validation';
 import { Badge, Button, Card, cn, Field, Input, Select, Textarea } from '@arc/ui';
 import { extractText } from '@/components/exams/import/extract-text';
+import { folderFromFileName } from '@/components/exams/QuestionFolders';
 import { OrgRequired } from '@/components/shell/OrgRequired';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { useApiMutation } from '@/lib/use-api';
+import { useApi, useApiMutation } from '@/lib/use-api';
 
 export default function ImportQuestionsPage() {
   return (
@@ -108,6 +115,9 @@ function Importer({ orgId }: { orgId: string }) {
   const [mode, setMode] = useState<'file' | 'paste'>('file');
   const [pasted, setPasted] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
+  const [folder, setFolder] = useState('');
+  const { data: folderData } = useApi<QuestionFolders>('/questions/folders', { orgId });
+  const folderNames = (folderData?.folders ?? []).map((f) => f.name);
   const [dragging, setDragging] = useState(false);
   const [useAi, setUseAi] = useState(true);
   const [fillAnswers, setFillAnswers] = useState(false);
@@ -127,7 +137,7 @@ function Importer({ orgId }: { orgId: string }) {
   });
   const [saving, setSaving] = useState(false);
 
-  async function read(text: string) {
+  async function read(text: string, into = folder) {
     setError(null);
     setDrafts(null);
     const parts = splitForImport(text);
@@ -144,7 +154,12 @@ function Importer({ orgId }: { orgId: string }) {
         const r = await mutate<ImportParseResult>(
           '/questions/import/parse',
           'POST',
-          { text: parts[i], useAi, fillAnswers: useAi && fillAnswers },
+          {
+            text: parts[i],
+            useAi,
+            fillAnswers: useAi && fillAnswers,
+            ...(into.trim() ? { folder: into.trim() } : {}),
+          },
           orgId,
         );
         methods.add(r.method);
@@ -172,11 +187,13 @@ function Importer({ orgId }: { orgId: string }) {
   async function pick(file: File | undefined) {
     if (!file) return;
     setFileName(file.name);
+    const f = folderFromFileName(file.name);
+    setFolder(f);
     setError(null);
     setProgress({ done: 0, total: 1, step: 'Opening the file' });
     try {
       const text = await extractText(file);
-      await read(text);
+      await read(text, f);
     } catch (e) {
       setError((e as Error).message);
       setProgress(null);
@@ -220,6 +237,11 @@ function Importer({ orgId }: { orgId: string }) {
       toast.error(`Fix question ${drafts.indexOf(bad) + 1}: ${problem(bad)}`);
       return;
     }
+    if (!folder.trim()) {
+      document.getElementById('import-folder')?.focus();
+      toast.error('Give the folder a name, so this paper stays separate from other questions.');
+      return;
+    }
     setSaving(true);
     try {
       let created = 0;
@@ -232,6 +254,7 @@ function Importer({ orgId }: { orgId: string }) {
           {
             questions: sel.slice(i, i + 300).map((d) => toInput(d, defaults)),
             skipDuplicates: true,
+            folder: folder.trim(),
           },
           orgId,
         );
@@ -239,9 +262,9 @@ function Importer({ orgId }: { orgId: string }) {
         skipped += r.skipped;
       }
       toast.success(
-        `${created} question${created === 1 ? '' : 's'} added to the bank${skipped ? ` · ${skipped} already there` : ''}`,
+        `${created} question${created === 1 ? '' : 's'} added to the folder “${folder.trim()}”${skipped ? ` · ${skipped} already in it` : ''}`,
       );
-      router.push('/questions');
+      router.push(`/questions?folder=${encodeURIComponent(folder.trim())}`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -494,7 +517,7 @@ function Importer({ orgId }: { orgId: string }) {
                   ['all', `All ${stats.total}`],
                   ['fix', `Needs answer ${stats.fix}`],
                   ['ai', `AI answers ${stats.ai}`],
-                  ['dup', `Already in bank ${stats.dup}`],
+                  ['dup', `Already in ${folder.trim() ? 'folder' : 'bank'} ${stats.dup}`],
                 ] as const
               )
                 .filter(
@@ -523,11 +546,37 @@ function Importer({ orgId }: { orgId: string }) {
                 onClick={() => {
                   setDrafts(null);
                   setFileName(null);
+                  setFolder('');
                 }}
               >
                 <X /> Start over
               </Button>
             </div>
+          </Card>
+
+          <Card className="mb-5 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+            <Field
+              label="Save into folder"
+              htmlFor="import-folder"
+              required
+              className="flex-1"
+              hint="Each paper goes in its own folder, so its questions don’t mix with other papers. When you build the exam, pick this folder and Select all."
+            >
+              <Input
+                id="import-folder"
+                leading={<Folder />}
+                list="import-folder-list"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder="e.g. Unit 3 assignment"
+                maxLength={80}
+              />
+              <datalist id="import-folder-list">
+                {folderNames.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </Field>
           </Card>
 
           {notes.map((n) => (
@@ -646,7 +695,7 @@ function DraftCard({
             )}
             {d.duplicate && (
               <Badge tone="info">
-                <Copy className="size-3" /> Already in bank
+                <Copy className="size-3" /> Already added
               </Badge>
             )}
             {d.answerByAi && (

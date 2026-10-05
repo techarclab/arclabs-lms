@@ -39,6 +39,8 @@ export function QuestionEditor({
   orgId,
   question,
   topics,
+  folders,
+  defaultFolder = '',
   onSaved,
 }: {
   open: boolean;
@@ -46,6 +48,10 @@ export function QuestionEditor({
   orgId: string;
   question?: QuestionItem | null;
   topics: string[];
+  /** Existing folder names; when given, the editor shows a Folder field. */
+  folders?: string[];
+  /** Folder for a new question (e.g. the folder being viewed). */
+  defaultFolder?: string;
   onSaved: (q: QuestionItem) => void;
 }) {
   const mutate = useApiMutation();
@@ -57,6 +63,7 @@ export function QuestionEditor({
   const [tolerance, setTolerance] = useState('0');
   const [explanation, setExplanation] = useState('');
   const [topic, setTopic] = useState('');
+  const [folder, setFolder] = useState('');
   const [difficulty, setDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD'>('MEDIUM');
   const [points, setPoints] = useState('1');
   const [negativeMarks, setNegativeMarks] = useState('0');
@@ -83,11 +90,13 @@ export function QuestionEditor({
       setTolerance(t === 'NUMERIC' ? String(num.tolerance ?? 0) : '0');
       setExplanation(question.explanation ?? '');
       setTopic(question.topic ?? '');
+      setFolder(question.folder ?? '');
       setDifficulty(question.difficulty);
       setPoints(String(question.points));
       setNegativeMarks(String(question.negativeMarks));
       setCoding(question.coding ? codingFromQuestion(question.coding) : blankCoding());
     } else {
+      setFolder(defaultFolder);
       setCoding(blankCoding());
       setPrompt('');
       setOptions(blankOptions());
@@ -96,6 +105,7 @@ export function QuestionEditor({
       setTolerance('0');
       setError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the dialog opens
   }, [open, question]);
 
   function buildInput() {
@@ -103,6 +113,7 @@ export function QuestionEditor({
       prompt,
       explanation: explanation || null,
       topic: topic || null,
+      ...(folders ? { folder: folder.trim() } : {}),
       difficulty,
       points,
       negativeMarks,
@@ -321,6 +332,29 @@ export function QuestionEditor({
 
           {type === 'CODING' && (
             <CodingSetup value={coding} onChange={setCoding} orgId={orgId} prompt={prompt} />
+          )}
+
+          {folders && (
+            <Field
+              label="Folder"
+              htmlFor="q-folder"
+              optional
+              hint="Keeps a paper's questions together, e.g. Unit 3 assignment."
+            >
+              <Input
+                id="q-folder"
+                list="folder-list"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder="No folder"
+                maxLength={80}
+              />
+              <datalist id="folder-list">
+                {folders.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </Field>
           )}
 
           <div className="grid gap-4 sm:grid-cols-4">

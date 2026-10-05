@@ -96,9 +96,9 @@ describe('Import questions from a PDF / Word file', () => {
     ];
     const r = await orgApi(app, staff, orgId).post('/questions/bulk', { questions: qs });
     expect(r.status).toBe(201);
-    expect(r.body).toEqual({ created: 3, skipped: 0 });
+    expect(r.body).toEqual({ created: 3, skipped: 0, folder: null });
     const again = await orgApi(app, staff, orgId).post('/questions/bulk', { questions: qs });
-    expect(again.body).toEqual({ created: 0, skipped: 3 });
+    expect(again.body).toEqual({ created: 0, skipped: 3, folder: null });
     // parse now flags them as duplicates
     const p = await orgApi(app, staff, orgId).post('/questions/import/parse', {
       text: PAPER,

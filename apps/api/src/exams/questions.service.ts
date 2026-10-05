@@ -10,10 +10,12 @@ import type {
   CodingConfig,
   ImportParseResult,
   Paginated,
+  QuestionFolders,
   QuestionItem,
   RunCodeResponse,
 } from '@arc/types';
 import {
+  NO_FOLDER,
   outputsMatch,
   questionInputSchema,
   questionKey,
@@ -22,7 +24,9 @@ import {
   type AiCheckInput,
   type CheckCodingInput,
   type ListQuestionsQuery,
+  type MoveQuestionsInput,
   type QuestionInputParsed,
+  type RenameFolderInput,
 } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
@@ -50,6 +54,7 @@ export function toQuestionItem(q: QuestionRow): QuestionItem {
     negativeMarks: Number(q.negativeMarks),
     difficulty: q.difficulty,
     topic: q.topic,
+    folder: q.folder,
     tags: q.tags,
     coding: (q.coding ?? null) as QuestionItem['coding'],
     archived: q.archived,
@@ -76,6 +81,7 @@ export function toColumns(
     negativeMarks: input.negativeMarks,
     difficulty: input.difficulty,
     topic: input.topic,
+    ...(input.folder !== undefined ? { folder: input.folder } : {}),
     tags: input.tags,
   };
   switch (input.type) {
@@ -152,9 +158,13 @@ export class QuestionsService {
 
   // ───────── Import from PDF / Word ─────────
 
-  private async existingKeys(orgId: string) {
+  /** Question texts already in the bank — only inside `folder` when one is given. */
+  private async existingKeys(orgId: string, folder?: string | null) {
     const rows = await this.prisma.question.findMany({
-      where: { organizationId: orgId },
+      where: {
+        organizationId: orgId,
+        ...(folder ? { folder: { equals: folder, mode: 'insensitive' } } : {}),
+      },
       select: { prompt: true },
     });
     return new Set(rows.map((r) => questionKey(r.prompt)));
@@ -162,7 +172,10 @@ export class QuestionsService {
 
   /** Reads one part of an uploaded file into draft questions (nothing is saved). */
   async parseImport(orgId: string, input: ImportParseInput): Promise<ImportParseResult> {
-    const [r, keys] = await Promise.all([this.importer.parse(input), this.existingKeys(orgId)]);
+    const [r, keys] = await Promise.all([
+      this.importer.parse(input),
+      this.existingKeys(orgId, input.folder),
+    ]);
     return {
       ...r,
       questions: r.questions.map((q) => ({ ...q, duplicate: keys.has(questionKey(q.prompt)) })),
@@ -184,7 +197,8 @@ export class QuestionsService {
         message: `${errors.length} question${errors.length === 1 ? '' : 's'} need fixing`,
         details: errors.map((e) => ({ path: String(e.index), message: e.message })),
       });
-    const keys = input.skipDuplicates ? await this.existingKeys(orgId) : new Set<string>();
+    const folder = input.folder ? await this.canonicalFolder(orgId, input.folder) : null;
+    const keys = input.skipDuplicates ? await this.existingKeys(orgId, folder) : new Set<string>();
     const toCreate: QuestionInputParsed[] = [];
     let skipped = 0;
     for (const q of parsed) {
@@ -196,12 +210,16 @@ export class QuestionsService {
       keys.add(k);
       toCreate.push(q);
     }
+    // 1 ms apart, so a folder lists the questions in the paper's order
+    const base = Date.now();
     if (toCreate.length)
       await this.prisma.question.createMany({
-        data: toCreate.map((q) => ({
+        data: toCreate.map((q, i) => ({
           organizationId: orgId,
           createdById: actor.id,
+          createdAt: new Date(base + i),
           ...toColumns(q),
+          ...(folder ? { folder } : {}),
         })) as Prisma.QuestionCreateManyInput[],
       });
     await this.audit.log({
@@ -210,9 +228,9 @@ export class QuestionsService {
       action: 'question.imported',
       entityType: 'question',
       entityId: orgId,
-      meta: { created: toCreate.length, skipped },
+      meta: { created: toCreate.length, skipped, folder },
     });
-    return { created: toCreate.length, skipped };
+    return { created: toCreate.length, skipped, folder };
   }
 
   /** Coding questions: fill empty expected outputs from the reference solution right away. */
@@ -299,6 +317,9 @@ export class QuestionsService {
       type: q.type ? q.type : { not: 'SHORT_ANSWER' },
       ...(q.difficulty ? { difficulty: q.difficulty } : {}),
       ...(q.topic ? { topic: { equals: q.topic, mode: 'insensitive' } } : {}),
+      ...(q.folder
+        ? { folder: q.folder === NO_FOLDER ? null : { equals: q.folder, mode: 'insensitive' } }
+        : {}),
       ...(q.search
         ? {
             OR: [
@@ -314,7 +335,11 @@ export class QuestionsService {
       this.prisma.question.findMany({
         where,
         include: questionInclude,
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        // inside a folder: paper order (oldest first); otherwise newest first
+        orderBy: [
+          { createdAt: q.folder && q.folder !== NO_FOLDER ? 'asc' : 'desc' },
+          { id: 'asc' },
+        ],
         skip: (q.page - 1) * q.pageSize,
         take: q.pageSize,
       }),
@@ -330,6 +355,68 @@ export class QuestionsService {
       orderBy: { topic: 'asc' },
     });
     return rows.map((r) => ({ topic: r.topic!, count: r._count._all }));
+  }
+
+  // ───────── Folders ─────────
+
+  /** Folders with their active question counts, plus how many questions are in no folder. */
+  async folders(orgId: string): Promise<QuestionFolders> {
+    const rows = await this.prisma.question.groupBy({
+      by: ['folder'],
+      where: { organizationId: orgId, archived: false, type: { not: 'SHORT_ANSWER' } },
+      _count: { _all: true },
+    });
+    const folders = rows
+      .filter((r) => r.folder)
+      .map((r) => ({ name: r.folder!, count: r._count._all }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    return { folders, unfiled: rows.find((r) => !r.folder)?._count._all ?? 0 };
+  }
+
+  /** Re-uses an existing folder's spelling ("unit 3" → "Unit 3") so folders don't split by case. */
+  private async canonicalFolder(orgId: string, name: string) {
+    const hit = await this.prisma.question.findFirst({
+      where: { organizationId: orgId, folder: { equals: name, mode: 'insensitive' } },
+      select: { folder: true },
+    });
+    return hit?.folder ?? name;
+  }
+
+  /** Puts questions into a folder (or takes them out). Allowed for locked questions too. */
+  async move(actor: User, orgId: string, input: MoveQuestionsInput) {
+    const folder = input.folder ? await this.canonicalFolder(orgId, input.folder) : null;
+    const r = await this.prisma.question.updateMany({
+      where: { organizationId: orgId, id: { in: input.ids } },
+      data: { folder },
+    });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'question.moved',
+      entityType: 'question',
+      entityId: orgId,
+      meta: { count: r.count, folder },
+    });
+    return { moved: r.count, folder };
+  }
+
+  /** Renames a folder; renaming onto an existing folder's name merges the two. */
+  async renameFolder(actor: User, orgId: string, input: RenameFolderInput) {
+    const to = await this.canonicalFolder(orgId, input.to);
+    const r = await this.prisma.question.updateMany({
+      where: { organizationId: orgId, folder: { equals: input.from, mode: 'insensitive' } },
+      data: { folder: to },
+    });
+    if (!r.count) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Folder not found' });
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'question.folder_renamed',
+      entityType: 'question',
+      entityId: orgId,
+      meta: { from: input.from, to, count: r.count },
+    });
+    return { renamed: r.count, folder: to };
   }
 
   async create(actor: User, orgId: string, input: QuestionInputParsed): Promise<QuestionItem> {
@@ -412,6 +499,7 @@ export class QuestionsService {
         negativeMarks: src.negativeMarks,
         difficulty: src.difficulty,
         topic: src.topic,
+        folder: src.folder,
         tags: src.tags,
         coding: (src.coding ?? undefined) as Prisma.InputJsonValue | undefined,
       },

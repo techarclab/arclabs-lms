@@ -29,6 +29,10 @@ import {
   type RunCodeInput,
   listExamsQuery,
   listQuestionsQuery,
+  moveQuestionsSchema,
+  renameFolderSchema,
+  type MoveQuestionsInput,
+  type RenameFolderInput,
   proctorEventSchema,
   questionInputSchema,
   saveAnswerSchema,
@@ -85,6 +89,32 @@ export class QuestionsController {
   @Get('topics')
   topics(@OrgContext() org: OrgContextInfo) {
     return this.questions.topics(org.organizationId);
+  }
+
+  @Get('folders')
+  folders(@OrgContext() org: OrgContextInfo) {
+    return this.questions.folders(org.organizationId);
+  }
+
+  /** Puts selected questions into a folder (folder null/empty = no folder). */
+  @Post('move')
+  @HttpCode(200)
+  move(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(moveQuestionsSchema)) body: MoveQuestionsInput,
+  ) {
+    return this.questions.move(u, org.organizationId, body);
+  }
+
+  @Post('folders/rename')
+  @HttpCode(200)
+  renameFolder(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(renameFolderSchema)) body: RenameFolderInput,
+  ) {
+    return this.questions.renameFolder(u, org.organizationId, body);
   }
 
   /** Reads questions from the text of an uploaded PDF / Word file (nothing is saved). */

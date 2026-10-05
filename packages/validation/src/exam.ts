@@ -162,6 +162,11 @@ const optionInput = z.object({
   correct: z.boolean().default(false),
 });
 
+/** A question folder's name, e.g. "Unit 3 assignment". */
+export const folderName = z.string().trim().max(80, 'Folder name: up to 80 characters');
+/** List filter value for questions that are in no folder. */
+export const NO_FOLDER = '__none__';
+
 const questionBase = {
   prompt: z.string().trim().min(3, 'Write the question').max(5000),
   explanation: z.string().trim().max(5000).optional().nullable(),
@@ -175,6 +180,11 @@ const questionBase = {
     .optional()
     .nullable()
     .transform((v) => (v ? v : null)),
+  /** Left out = keep the question's current folder; empty = no folder. */
+  folder: folderName
+    .optional()
+    .nullable()
+    .transform((v) => (v === undefined ? undefined : v || null)),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
 };
 
@@ -231,12 +241,26 @@ export const listQuestionsQuery = paginationQuery.extend({
   type: gradableTypeSchema.optional(),
   difficulty: difficultySchema.optional(),
   topic: z.string().trim().max(80).optional(),
+  folder: z.string().trim().max(80).optional(),
   archived: z
     .enum(['true', 'false'])
     .optional()
     .transform((v) => v === 'true'),
 });
 export type ListQuestionsQuery = z.infer<typeof listQuestionsQuery>;
+
+export const moveQuestionsSchema = z.object({
+  ids: z.array(z.uuid()).min(1, 'Select some questions').max(500),
+  /** Empty or null = take them out of their folder. */
+  folder: folderName.nullable().transform((v) => v || null),
+});
+export type MoveQuestionsInput = z.infer<typeof moveQuestionsSchema>;
+
+export const renameFolderSchema = z.object({
+  from: z.string().trim().min(1).max(80),
+  to: folderName.min(1, 'Give the folder a name'),
+});
+export type RenameFolderInput = z.infer<typeof renameFolderSchema>;
 
 // ───────── Exams ─────────
 
