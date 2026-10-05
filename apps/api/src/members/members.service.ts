@@ -23,6 +23,7 @@ import {
   inviteMemberSchema,
   type InviteMemberParsed,
   type ListMembersQuery,
+  type RemoveMembersInput,
   type UpdateMemberInput,
   type BulkInviteInput,
 } from '@arc/validation';
@@ -416,6 +417,80 @@ export class MembersService {
       },
     });
     return toMember(updated, actor.id);
+  }
+
+  /**
+   * Removes people from the organization (their membership row). Their ARC LABS account and past
+   * exam attempts stay, so results already given are kept; they can join again with a join code.
+   * You can't remove yourself or the last active Org Admin — those are skipped.
+   */
+  async remove(actor: User, org: OrgContextInfo, input: RemoveMembersInput) {
+    const rows = await this.prisma.organizationMember.findMany({
+      where: {
+        organizationId: org.organizationId,
+        ...(input.allDeactivated
+          ? { OR: [{ status: { not: 'ACTIVE' } }, { user: { status: { not: 'ACTIVE' } } }] }
+          : { id: { in: input.ids ?? [] } }),
+      },
+      include: memberInclude,
+    });
+    if (!input.allDeactivated && rows.length === 0) throw new NotFoundException();
+
+    const skipped: { id: string; name: string; reason: string }[] = [];
+    let keep = rows.filter((m) => {
+      if (m.userId === actor.id) {
+        skipped.push({ id: m.id, name: m.user.fullName, reason: 'You can’t remove yourself' });
+        return false;
+      }
+      return true;
+    });
+    if (keep.some((m) => m.roles.includes('ORG_ADMIN'))) {
+      this.assertCanGrant(actor, org, ['ORG_ADMIN']);
+      const activeAdmins = await this.prisma.organizationMember.findMany({
+        where: {
+          organizationId: org.organizationId,
+          status: 'ACTIVE',
+          roles: { has: 'ORG_ADMIN' },
+        },
+        select: { id: true },
+      });
+      const removing = new Set(keep.map((m) => m.id));
+      if (activeAdmins.length > 0 && activeAdmins.every((a) => removing.has(a.id))) {
+        keep = keep.filter((m) => {
+          if (activeAdmins.some((a) => a.id === m.id)) {
+            skipped.push({
+              id: m.id,
+              name: m.user.fullName,
+              reason: 'The organization’s only admin — make someone else an Org Admin first',
+            });
+            return false;
+          }
+          return true;
+        });
+      }
+    }
+    if (keep.length) {
+      await this.prisma.organizationMember.deleteMany({
+        where: { id: { in: keep.map((m) => m.id) } },
+      });
+      await this.prisma.auditLog.createMany({
+        data: keep.map((m) => ({
+          actorId: actor.id,
+          organizationId: org.organizationId,
+          action: 'member.removed',
+          entityType: 'organization_member',
+          entityId: m.id,
+          meta: {
+            email: m.user.email,
+            name: m.user.fullName,
+            roles: m.roles,
+            department: m.department?.name ?? null,
+            externalId: m.externalId,
+          },
+        })),
+      });
+    }
+    return { removed: keep.length, skipped };
   }
 
   // ───────── Helpers ─────────

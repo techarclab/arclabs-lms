@@ -11,9 +11,11 @@ import {
   Pencil,
   Search,
   Send,
+  Trash2,
   UserCheck,
   UserMinus,
   Users,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DepartmentSummary, MemberState, MemberSummary, Paginated } from '@arc/types';
@@ -22,6 +24,8 @@ import {
   Button,
   Card,
   cn,
+  Dialog,
+  DialogContent,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -83,6 +87,12 @@ export function MembersPanel({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MemberSummary | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  /** Who the confirm dialog is about: some people, or everyone deactivated. */
+  const [removing, setRemoving] = useState<
+    { kind: 'some'; people: MemberSummary[] } | { kind: 'deactivated' } | null
+  >(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const q = useDebounced(search);
 
   useEffect(() => {
@@ -92,6 +102,7 @@ export function MembersPanel({
     if (importSignal) setImportOpen(true);
   }, [importSignal]);
   useEffect(() => setPage(1), [q, tab, role, orgId]);
+  useEffect(() => setSelected([]), [q, tab, role, orgId, page]);
 
   const query = useMemo(() => {
     const sp = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
@@ -127,6 +138,38 @@ export function MembersPanel({
       refresh();
     } catch (e) {
       toast.error('Could not update', { description: (e as Error).message });
+    }
+  }
+
+  const pageRows = (data?.data ?? []).filter((m) => !m.isSelf);
+  const allOnPage = pageRows.length > 0 && pageRows.every((m) => selected.includes(m.id));
+  const toggle = (id: string) =>
+    setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  async function confirmRemove() {
+    if (!removing) return;
+    setRemoveBusy(true);
+    try {
+      const r = await mutate<{ removed: number; skipped: { name: string; reason: string }[] }>(
+        '/members/remove',
+        'POST',
+        removing.kind === 'deactivated'
+          ? { allDeactivated: true }
+          : { ids: removing.people.map((m) => m.id) },
+        orgId,
+      );
+      toast.success(`${r.removed} ${r.removed === 1 ? 'person' : 'people'} removed`, {
+        description: r.skipped.length
+          ? `Not removed: ${r.skipped.map((x) => `${x.name} (${x.reason})`).join(', ')}`
+          : undefined,
+      });
+      setSelected([]);
+      setRemoving(null);
+      refresh();
+    } catch (e) {
+      toast.error('Could not remove', { description: (e as Error).message });
+    } finally {
+      setRemoveBusy(false);
     }
   }
 
@@ -192,11 +235,75 @@ export function MembersPanel({
           </div>
         </div>
 
+        {!readOnly && (selected.length > 0 || (tab === 'INACTIVE' && total > 0)) && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 bg-ink-50/70 px-6 py-2.5">
+            <p className="flex-1 text-sm text-ink-700">
+              {selected.length > 0 ? (
+                <>
+                  <b className="font-semibold text-ink-900">{selected.length}</b> selected
+                </>
+              ) : (
+                <>
+                  <b className="font-semibold text-ink-900">{total}</b> deactivated
+                  {total === 1 ? ' person' : ' people'}
+                </>
+              )}
+            </p>
+            {selected.length > 0 ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() =>
+                    setRemoving({
+                      kind: 'some',
+                      people: (data?.data ?? []).filter((m) => selected.includes(m.id)),
+                    })
+                  }
+                >
+                  <Trash2 /> Remove {selected.length}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
+                  <X /> Clear
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setRemoving({ kind: 'deactivated' })}
+              >
+                <Trash2 /> Remove all {total} deactivated
+              </Button>
+            )}
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-xs text-ink-500">
-                <th className="py-2.5 pr-3 pl-6 font-medium">Person</th>
+                <th className="py-2.5 pr-3 pl-6 font-medium">
+                  <span className="flex items-center gap-3">
+                    {!readOnly && (
+                      <input
+                        type="checkbox"
+                        aria-label="Select everyone on this page"
+                        checked={allOnPage}
+                        disabled={!pageRows.length}
+                        onChange={() =>
+                          setSelected((p) =>
+                            allOnPage
+                              ? p.filter((id) => !pageRows.some((m) => m.id === id))
+                              : [...new Set([...p, ...pageRows.map((m) => m.id)])],
+                          )
+                        }
+                        className="size-4 accent-brand-600"
+                      />
+                    )}
+                    Person
+                  </span>
+                </th>
                 <th className="px-3 py-2.5 font-medium">Roles</th>
                 <th className="px-3 py-2.5 font-medium">Department</th>
                 <th className="px-3 py-2.5 font-medium">Status</th>
@@ -230,6 +337,16 @@ export function MembersPanel({
                 >
                   <td className="py-3 pr-3 pl-6">
                     <div className="flex items-center gap-3">
+                      {!readOnly && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${m.fullName}`}
+                          checked={selected.includes(m.id)}
+                          disabled={m.isSelf}
+                          onChange={() => toggle(m.id)}
+                          className="size-4 shrink-0 accent-brand-600 disabled:opacity-30"
+                        />
+                      )}
                       <Avatar name={m.fullName} size="md" round className="size-9 text-xs" />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-ink-900">
@@ -306,6 +423,13 @@ export function MembersPanel({
                                   Deactivate
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem
+                                danger
+                                icon={<Trash2 />}
+                                onSelect={() => setRemoving({ kind: 'some', people: [m] })}
+                              >
+                                Remove from {orgName.length > 24 ? 'college' : orgName}
+                              </DropdownMenuItem>
                             </>
                           )}
                         </DropdownMenuContent>
@@ -401,6 +525,37 @@ export function MembersPanel({
         canGrantAdmin={canGrantAdmin}
         onImported={refresh}
       />
+      <Dialog open={removing !== null} onOpenChange={(o) => !o && !removeBusy && setRemoving(null)}>
+        <DialogContent
+          icon={<Trash2 />}
+          title={
+            removing?.kind === 'deactivated'
+              ? `Remove all ${total} deactivated people?`
+              : removing?.people.length === 1
+                ? `Remove ${removing.people[0]!.fullName}?`
+                : `Remove ${removing?.kind === 'some' ? removing.people.length : 0} people?`
+          }
+          description={`They are taken out of ${orgName} and disappear from its lists. Their ARC LABS account and any exam results already given are kept. To bring someone back, invite them again or share a join code.`}
+        >
+          {removing?.kind === 'some' && removing.people.length > 1 && (
+            <ul className="mx-6 mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg bg-ink-50 px-4 py-3 text-[13px] text-ink-700">
+              {removing.people.map((m) => (
+                <li key={m.id} className="truncate">
+                  {m.fullName} <span className="text-ink-400">· {m.email}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-6 flex justify-end gap-3 rounded-b-2xl border-t border-ink-100 bg-ink-50/60 px-6 py-4">
+            <Button variant="secondary" disabled={removeBusy} onClick={() => setRemoving(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" loading={removeBusy} onClick={() => void confirmRemove()}>
+              <Trash2 /> Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <EditMemberDialog
         member={editing}
         onOpenChange={(o) => !o && setEditing(null)}

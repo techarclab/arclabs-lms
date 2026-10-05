@@ -60,6 +60,15 @@ export const updateMemberSchema = z
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 
+/** Take people out of the organization: the listed ones, or everyone deactivated. */
+export const removeMembersSchema = z
+  .object({
+    ids: z.array(z.uuid()).max(500).optional(),
+    allDeactivated: z.boolean().optional(),
+  })
+  .refine((v) => (v.ids?.length ?? 0) > 0 || v.allDeactivated, 'Select who to remove');
+export type RemoveMembersInput = z.infer<typeof removeMembersSchema>;
+
 export const listMembersQuery = paginationQuery.extend({
   role: orgRoleSchema.optional(),
   status: memberStatusFilter.optional(),

@@ -1,13 +1,15 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import {
   bulkInviteSchema,
   inviteMemberSchema,
   listMembersQuery,
+  removeMembersSchema,
   updateMemberSchema,
   type BulkInviteInput,
   type InviteMemberParsed,
   type ListMembersQuery,
+  type RemoveMembersInput,
   type UpdateMemberInput,
 } from '@arc/validation';
 import type { OrgContextInfo } from '../auth/auth.types';
@@ -60,6 +62,28 @@ export class MembersController {
     @Body(new ZodValidationPipe(bulkInviteSchema)) body: BulkInviteInput,
   ) {
     return this.members.bulkInvite(user, org, body);
+  }
+
+  /** Remove several people (or everyone deactivated) from the organization. */
+  @Post('remove')
+  @HttpCode(200)
+  removeMany(
+    @CurrentUser() user: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(removeMembersSchema)) body: RemoveMembersInput,
+  ) {
+    return this.members.remove(user, org, body);
+  }
+
+  /** Remove one person from the organization. */
+  @Delete(':id')
+  @HttpCode(200)
+  removeOne(
+    @CurrentUser() user: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+  ) {
+    return this.members.remove(user, org, { ids: [id] });
   }
 
   @Patch(':id')
