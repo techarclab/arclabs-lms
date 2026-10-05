@@ -470,6 +470,10 @@ and that one counts. If the exam has already closed, choose until when the stude
 ## 21. Forgot password and sign-out on close
 
 - **Forgot password**: Login → _Forgot password? Reset it here_ → enter the email → Firebase emails a link (tell students to check Spam). The link opens a page to choose a new password; afterwards they are signed in.
+- **Sent from hello@arclabs.in**: the API sends the reset email itself through your mail server when SMTP is set on the API project (Vercel → arclabs-api → Environment Variables), then Redeploy:
+  `EMAIL_DELIVERY=direct`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER=hello@arclabs.in`, `SMTP_PASS` (an app password from the mail provider), `MAIL_FROM=ARC LABS <hello@arclabs.in>`.
+  Google Workspace: `smtp.gmail.com`, 587 (2-Step Verification on, then create an App password). Zoho Mail India: `smtp.zoho.in`, 465. The same settings send invites and announcement emails.
+  The link opens `/reset-password` on the LMS. Limits: one email a minute and 5 an hour per address. Without SMTP, Firebase sends the email instead (from its own address).
 - To use the ARC LABS page for that link (instead of Firebase's plain page), once: Firebase console → Authentication → **Templates** → _Password reset_ → edit (pencil) → **Customize action URL** → `https://lms.arclabs.in/reset-password` → Save. Optional: change _Sender name_ to "ARC LABS".
 - **Signed out on close**: a sign-in lasts only for that browser tab. Reload keeps it; closing the tab or the browser signs out, so the next student on a lab computer must sign in. Opening the LMS in a second tab also asks to sign in. (Same for college access-code logins.)
 

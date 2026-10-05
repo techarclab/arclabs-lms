@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Auth } from 'firebase-admin/auth';
+import { ownActionLink } from '../auth/password-reset.service';
 import {
   hasPermission,
   type BulkInviteResult,
@@ -483,7 +484,10 @@ export class MembersService {
     const loginUrl = `${this.env.WEB_ORIGIN.split(',')[0]}/login?email=${encodeURIComponent(email)}`;
     if (!isNewAccount) return loginUrl;
     try {
-      return await this.auth.generatePasswordResetLink(email, { url: loginUrl });
+      return ownActionLink(
+        await this.auth.generatePasswordResetLink(email, { url: loginUrl }),
+        this.env.WEB_ORIGIN.split(',')[0]!.replace(/\/$/, ''),
+      );
     } catch (e) {
       this.logger.warn(`Could not generate password link for ${email}: ${(e as Error).message}`);
       return loginUrl;

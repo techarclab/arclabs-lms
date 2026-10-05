@@ -159,15 +159,27 @@ function LoginInner() {
     if (mode === 'reset') {
       void run(async () => {
         const addr = email.trim();
-        try {
-          // After setting the new password, "Continue" brings them back here with the email filled in.
-          await sendPasswordResetEmail(auth, addr, {
-            url: `${window.location.origin}/login?email=${encodeURIComponent(addr)}`,
-          });
-        } catch (e) {
-          const code = (e as { code?: string }).code ?? '';
-          if (!/continue-uri|unauthorized-domain/.test(code)) throw e;
-          await sendPasswordResetEmail(auth, addr); // this site isn't on Firebase's list: plain link
+        // ARC LABS sends the email itself (from hello@arclabs.in) when a mail server is set up;
+        // otherwise Firebase sends it.
+        const r = await api<{ via: 'email' | 'firebase' }>('/auth/forgot-password', {
+          method: 'POST',
+          body: { email: addr },
+        }).catch((e: unknown) => {
+          if (e instanceof ApiError && e.status === 422)
+            throw new Error('Please enter a valid email address.');
+          return { via: 'firebase' as const };
+        });
+        if (r.via === 'firebase') {
+          try {
+            // After setting the new password, "Continue" brings them back here with the email filled in.
+            await sendPasswordResetEmail(auth, addr, {
+              url: `${window.location.origin}/login?email=${encodeURIComponent(addr)}`,
+            });
+          } catch (e) {
+            const code = (e as { code?: string }).code ?? '';
+            if (!/continue-uri|unauthorized-domain/.test(code)) throw e;
+            await sendPasswordResetEmail(auth, addr); // this site isn't on Firebase's list: plain link
+          }
         }
         setResendIn(60);
         setNotice(

@@ -6,3 +6,8 @@ export const syncUserSchema = z.object({
   phone: z.string().trim().max(20).optional(),
 });
 export type SyncUserInput = z.infer<typeof syncUserSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: z.email('Enter a valid email address').trim().toLowerCase().max(200),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;

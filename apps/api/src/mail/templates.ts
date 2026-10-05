@@ -56,6 +56,28 @@ export function inviteEmail(o: {
   return { subject, html, text };
 }
 
+/** "Forgot password" email with a link to the ARC LABS set-a-new-password page. */
+export function passwordResetEmail(o: { name: string | null; link: string }) {
+  const subject = 'Reset your ARC LABS password';
+  const hello = o.name ? `Hi ${o.name.split(' ')[0]},` : 'Hi,';
+  const html = layout({
+    preheader: 'Set a new password for your ARC LABS account',
+    heading: 'Reset your password',
+    body:
+      p(escText(hello)) +
+      p(
+        'We got a request to reset the password of your ARC LABS account. Click below to choose a new one.',
+      ) +
+      p('The link works for <b>1 hour</b> and only once.'),
+    ctaLabel: 'Set a new password',
+    ctaUrl: o.link,
+    footer:
+      'Didn’t ask for this? Ignore this email — your password stays the same. Never share this link.',
+  });
+  const text = `${hello}\n\nWe got a request to reset the password of your ARC LABS account. Open this link to choose a new one (works for 1 hour, once):\n\n${o.link}\n\nDidn't ask for this? Ignore this email - your password stays the same.\n`;
+  return { subject, html, text };
+}
+
 /** Faculty access code, sent by a college admin. Subject and body are generated. */
 export function accessCodeEmail(o: {
   orgName: string;
