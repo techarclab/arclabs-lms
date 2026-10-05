@@ -5,3 +5,4 @@ dist
 coverage
 pnpm-lock.yaml
 apps/api/src/generated
+apps/web/public/study
