@@ -26,7 +26,7 @@ import {
   type ListQuestionsQuery,
   type MoveQuestionsInput,
   type QuestionInputParsed,
-  type RenameFolderInput,
+  type RenameQuestionFolderInput,
 } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
@@ -401,7 +401,7 @@ export class QuestionsService {
   }
 
   /** Renames a folder; renaming onto an existing folder's name merges the two. */
-  async renameFolder(actor: User, orgId: string, input: RenameFolderInput) {
+  async renameFolder(actor: User, orgId: string, input: RenameQuestionFolderInput) {
     const to = await this.canonicalFolder(orgId, input.to);
     const r = await this.prisma.question.updateMany({
       where: { organizationId: orgId, folder: { equals: input.from, mode: 'insensitive' } },

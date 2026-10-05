@@ -256,11 +256,11 @@ export const moveQuestionsSchema = z.object({
 });
 export type MoveQuestionsInput = z.infer<typeof moveQuestionsSchema>;
 
-export const renameFolderSchema = z.object({
+export const renameQuestionFolderSchema = z.object({
   from: z.string().trim().min(1).max(80),
   to: folderName.min(1, 'Give the folder a name'),
 });
-export type RenameFolderInput = z.infer<typeof renameFolderSchema>;
+export type RenameQuestionFolderInput = z.infer<typeof renameQuestionFolderSchema>;
 
 // ───────── Exams ─────────
 

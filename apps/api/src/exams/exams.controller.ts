@@ -30,9 +30,9 @@ import {
   listExamsQuery,
   listQuestionsQuery,
   moveQuestionsSchema,
-  renameFolderSchema,
+  renameQuestionFolderSchema,
   type MoveQuestionsInput,
-  type RenameFolderInput,
+  type RenameQuestionFolderInput,
   proctorEventSchema,
   questionInputSchema,
   saveAnswerSchema,
@@ -112,7 +112,7 @@ export class QuestionsController {
   renameFolder(
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
-    @Body(new ZodValidationPipe(renameFolderSchema)) body: RenameFolderInput,
+    @Body(new ZodValidationPipe(renameQuestionFolderSchema)) body: RenameQuestionFolderInput,
   ) {
     return this.questions.renameFolder(u, org.organizationId, body);
   }
