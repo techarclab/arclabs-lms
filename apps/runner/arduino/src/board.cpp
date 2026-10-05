@@ -11,6 +11,8 @@
 //   trace_time=on      put the time on trace lines: [2004 ms] D8 HIGH (for timing questions)
 //   dht=error          DHT sensor not responding     dht_pin=2 / dht_type=22  (for bit-banging)
 //   @1500 D2=LOW       change something at 1500 ms   (several: @1500 temp=40, humidity=20)
+//   field1=FAN_ON      ThingSpeak field 1 (readStringField / readFloatField); @20000 field1=LIGHT_ON
+//   wifi=off           Wi-Fi never connects          wifi_ms=1500  time to connect (default 1000)
 //
 // Serial output (and trace lines) go to stdout; the LCD's final screen is printed at the end.
 
@@ -45,6 +47,7 @@ int last_char = '\n';
 unsigned long baud_us_per_char = 1042;  // 9600 baud
 
 std::map<std::string, double> world;
+std::map<std::string, std::string> world_text;  // the same settings as text (ThingSpeak fields)
 std::vector<Event> schedule;
 size_t next_event = 0;
 std::string serial_in;
@@ -258,6 +261,7 @@ void applySetting(const std::string &rawKey, const std::string &value, bool time
   int apin = pinFromKey(key, 'a');
   if (apin >= 0) key = "a" + std::to_string(apin);
   int dpin = pinFromKey(key, 'd');
+  world_text[key] = value;
   double v = parseValue(value);
   int before = dpin >= 0 && dpin < 64 ? inputLevel(dpin) : 0;
   world[key] = v;
@@ -340,6 +344,10 @@ double value(const char *key, double fallback) {
   return it == world.end() ? fallback : it->second;
 }
 bool has(const char *key) { return world.count(canon(key)) > 0; }
+const char *text(const char *key, const char *fallback) {
+  auto it = world_text.find(canon(key));
+  return it == world_text.end() ? fallback : it->second.c_str();
+}
 bool trace() { return trace_on; }
 bool tracePin(int pin) { return watching(pin); }
 void traceLine(const char *fmt, ...) {

@@ -161,6 +161,7 @@ namespace sim {
 void advance(uint64_t us);
 double value(const char *key, double fallback);
 bool has(const char *key);
+const char *text(const char *key, const char *fallback);  // a setting as typed (e.g. field1=FAN_ON)
 bool trace();
 bool tracePin(int pin);
 void traceLine(const char *fmt, ...);
