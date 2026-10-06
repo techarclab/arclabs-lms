@@ -171,3 +171,12 @@ export function parseMembersCsv(text: string) {
     return r;
   });
 }
+
+/** Merge duplicate registrations of one student into the account to keep. */
+export const mergeMembersSchema = z
+  .object({
+    keepId: z.uuid(),
+    mergeIds: z.array(z.uuid()).min(1, 'Choose the duplicates to merge').max(20),
+  })
+  .refine((v) => !v.mergeIds.includes(v.keepId), 'The account to keep can’t also be merged');
+export type MergeMembersInput = z.infer<typeof mergeMembersSchema>;

@@ -4,11 +4,13 @@ import {
   bulkInviteSchema,
   inviteMemberSchema,
   listMembersQuery,
+  mergeMembersSchema,
   removeMembersSchema,
   updateMemberSchema,
   type BulkInviteInput,
   type InviteMemberParsed,
   type ListMembersQuery,
+  type MergeMembersInput,
   type RemoveMembersInput,
   type UpdateMemberInput,
 } from '@arc/validation';
@@ -18,6 +20,7 @@ import { UuidPipe } from '../common/uuid.pipe';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import type { User } from '../generated/prisma/client';
 import { MembersService } from './members.service';
+import { MergeService } from './merge.service';
 
 @ApiTags('members')
 @ApiBearerAuth()
@@ -25,7 +28,27 @@ import { MembersService } from './members.service';
 @Controller('members')
 @RequirePermission('user.manage')
 export class MembersController {
-  constructor(private readonly members: MembersService) {}
+  constructor(
+    private readonly members: MembersService,
+    private readonly merger: MergeService,
+  ) {}
+
+  /** Students registered more than once (same roll number or college email). */
+  @Get('duplicates')
+  duplicates(@CurrentUser() user: User, @OrgContext() org: OrgContextInfo) {
+    return this.merger.duplicates(user, org);
+  }
+
+  /** Merge duplicate registrations into one account. */
+  @Post('merge')
+  @HttpCode(200)
+  merge(
+    @CurrentUser() user: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(mergeMembersSchema)) body: MergeMembersInput,
+  ) {
+    return this.merger.merge(user, org, body);
+  }
 
   @Get()
   @RequirePermission('member.view')

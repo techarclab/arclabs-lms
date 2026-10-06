@@ -7,6 +7,7 @@ import {
   Copy,
   FileSpreadsheet,
   MailPlus,
+  Merge,
   MoreHorizontal,
   Pencil,
   Search,
@@ -18,7 +19,13 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { DepartmentSummary, MemberState, MemberSummary, Paginated } from '@arc/types';
+import type {
+  DepartmentSummary,
+  DuplicateGroup,
+  MemberState,
+  MemberSummary,
+  Paginated,
+} from '@arc/types';
 import {
   Avatar,
   Button,
@@ -39,6 +46,7 @@ import {
 import { timeAgo } from '@/lib/format';
 import { useApi, useApiMutation } from '@/lib/use-api';
 import { BulkImportDialog } from './BulkImportDialog';
+import { DuplicatesDialog } from './DuplicatesDialog';
 import { EditMemberDialog } from './EditMemberDialog';
 import { InviteMemberDialog } from './InviteMemberDialog';
 import { MemberStateBadge, RoleBadges, ROLE_OPTIONS } from './shared';
@@ -121,6 +129,11 @@ export function MembersPanel({
     '/departments',
     { orgId },
   );
+  const { data: duplicates = [], mutate: reloadDups } = useApi<DuplicateGroup[]>(
+    readOnly ? null : '/members/duplicates',
+    { orgId },
+  );
+  const [dupOpen, setDupOpen] = useState(false);
   const total = data?.meta.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = Boolean(q || tab !== 'ALL' || role);
@@ -128,6 +141,7 @@ export function MembersPanel({
   const refresh = () => {
     void reload();
     void reloadDepts();
+    void reloadDups();
     onChanged?.();
   };
 
@@ -194,6 +208,17 @@ export function MembersPanel({
 
   return (
     <>
+      {!readOnly && duplicates.length > 0 && (
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-amber-900">
+            <b>{duplicates.length}</b> student{duplicates.length === 1 ? ' is' : 's are'} registered
+            more than once (same roll number or college email).
+          </p>
+          <Button size="sm" onClick={() => setDupOpen(true)}>
+            <Merge /> Review &amp; merge
+          </Button>
+        </div>
+      )}
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-ink-100 px-4 py-3.5 lg:flex-row lg:items-center">
           <div className="flex rounded-lg bg-ink-100/80 p-0.5">
@@ -559,6 +584,13 @@ export function MembersPanel({
           </div>
         </DialogContent>
       </Dialog>
+      <DuplicatesDialog
+        open={dupOpen}
+        onOpenChange={setDupOpen}
+        orgId={orgId}
+        groups={duplicates}
+        onMerged={refresh}
+      />
       <EditMemberDialog
         member={editing}
         onOpenChange={(o) => !o && setEditing(null)}

@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Auth } from 'firebase-admin/auth';
 import { ownActionLink } from '../auth/password-reset.service';
+import { assertUniqueInCollege, normEmail, normRoll } from './identity';
 import {
   hasPermission,
   type BulkInviteResult,
@@ -47,14 +48,14 @@ const ROLE_LABEL: Record<string, string> = {
   LEARNER: 'Learner',
 };
 
-const memberInclude = {
+export const memberInclude = {
   user: { select: { id: true, fullName: true, email: true, lastLoginAt: true, status: true } },
   department: { select: { id: true, name: true } },
 } satisfies Prisma.OrganizationMemberInclude;
 
-type MemberRow = Prisma.OrganizationMemberGetPayload<{ include: typeof memberInclude }>;
+export type MemberRow = Prisma.OrganizationMemberGetPayload<{ include: typeof memberInclude }>;
 
-function toMember(m: MemberRow, actorId: string): MemberSummary {
+export function toMember(m: MemberRow, actorId: string): MemberSummary {
   const state =
     m.status !== 'ACTIVE' || m.user.status !== 'ACTIVE'
       ? 'INACTIVE'
@@ -176,6 +177,14 @@ export class MembersService {
       }
     }
 
+    await assertUniqueInCollege(
+      this.prisma,
+      org.organizationId,
+      { externalId: input.externalId },
+      existingUser?.id ?? null,
+      true,
+    );
+
     let user = existingUser;
     let created = false;
     if (!user) {
@@ -194,7 +203,7 @@ export class MembersService {
         userId: user.id,
         roles: input.roles,
         departmentId: input.departmentId ?? null,
-        externalId: input.externalId ?? null,
+        externalId: normRoll(input.externalId),
       },
       include: memberInclude,
     });
@@ -289,7 +298,10 @@ export class MembersService {
         results.push({ row: rowNo, email, status: r.created ? 'invited' : 'added' });
       } catch (e) {
         const status = e instanceof ConflictException ? 'skipped' : 'error';
-        const msg = e instanceof ConflictException ? 'Already a member' : (e as Error).message;
+        const msg =
+          e instanceof ConflictException
+            ? ((e.getResponse() as { message?: string }).message ?? 'Already a member')
+            : (e as Error).message;
         if (status === 'error') this.logger.warn(`Bulk invite row ${rowNo} failed: ${msg}`);
         results.push({ row: rowNo, email, status, message: msg });
       }
@@ -389,6 +401,22 @@ export class MembersService {
       }
     }
 
+    const rollChanged =
+      input.externalId !== undefined && normRoll(input.externalId) !== normRoll(m.externalId);
+    const cemailChanged =
+      input.collegeEmail !== undefined &&
+      normEmail(input.collegeEmail) !== normEmail(m.collegeEmail);
+    if (rollChanged || cemailChanged)
+      await assertUniqueInCollege(
+        this.prisma,
+        org.organizationId,
+        {
+          externalId: rollChanged ? input.externalId : null,
+          collegeEmail: cemailChanged ? input.collegeEmail : null,
+        },
+        m.userId,
+        true,
+      );
     const identity = await this.changeIdentity(actor, org, m, input);
 
     const updated = await this.prisma.organizationMember.update({
@@ -397,7 +425,7 @@ export class MembersService {
         ...(input.collegeEmail !== undefined ? { collegeEmail: input.collegeEmail } : {}),
         ...(input.roles ? { roles: input.roles } : {}),
         ...(input.departmentId !== undefined ? { departmentId: input.departmentId } : {}),
-        ...(input.externalId !== undefined ? { externalId: input.externalId || null } : {}),
+        ...(input.externalId !== undefined ? { externalId: normRoll(input.externalId) } : {}),
         ...(input.status ? { status: input.status } : {}),
       },
       include: memberInclude,

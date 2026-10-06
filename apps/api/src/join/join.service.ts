@@ -1,3 +1,4 @@
+import { assertUniqueInCollege, normEmail, normRoll } from '../members/identity';
 import { randomInt } from 'node:crypto';
 import {
   BadRequestException,
@@ -191,6 +192,22 @@ export class JoinService {
         message: 'Choose your department from the list',
       });
     this.checkCollegeEmail(input.collegeEmail, org.collegeEmailDomains);
+    const externalId = normRoll(input.externalId);
+    const collegeEmail = normEmail(input.collegeEmail);
+    // One student, one account: the roll number and college email must not be registered already.
+    const already = existing
+      ? await this.prisma.organizationMember.findUnique({
+          where: { organizationId_userId: { organizationId: org.id, userId: existing.id } },
+        })
+      : null;
+    if (!already)
+      await assertUniqueInCollege(
+        this.prisma,
+        org.id,
+        { externalId, collegeEmail },
+        existing?.id ?? null,
+        false,
+      );
     const user = existing ?? (await this.auth.sync(identity, { fullName: input.fullName }));
     if (user.status !== 'ACTIVE')
       throw new ForbiddenException({
@@ -208,11 +225,20 @@ export class JoinService {
           message: `Your access to ${org.name} has been disabled. Contact your college admin.`,
         });
       }
-      if (!membership.collegeEmail)
-        await this.prisma.organizationMember.update({
-          where: { id: membership.id },
-          data: { collegeEmail: input.collegeEmail },
+      if (!membership.collegeEmail) {
+        const taken = await this.prisma.organizationMember.count({
+          where: {
+            organizationId: org.id,
+            userId: { not: user.id },
+            collegeEmail: { equals: collegeEmail ?? '', mode: 'insensitive' },
+          },
         });
+        if (!taken)
+          await this.prisma.organizationMember.update({
+            where: { id: membership.id },
+            data: { collegeEmail },
+          });
+      }
       return { organizationId: org.id, organizationName: org.name, alreadyMember: true };
     }
 
@@ -223,8 +249,8 @@ export class JoinService {
           userId: user.id,
           roles: ['LEARNER'],
           departmentId: dept.id,
-          externalId: input.externalId,
-          collegeEmail: input.collegeEmail,
+          externalId,
+          collegeEmail,
         },
       }),
       // Keep the name the student typed if their account had only an email-derived name.

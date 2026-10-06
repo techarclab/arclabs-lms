@@ -82,3 +82,18 @@ export interface EmailJob {
   bcc?: string[];
   replyTo?: string;
 }
+
+/** People in one college who look like the same student (same roll number or college email). */
+export interface DuplicateGroup {
+  /** What they share, e.g. "Roll no. 21J41A0168" */
+  reasons: string[];
+  /** Suggested account to keep (most exam attempts, then most recent sign-in). */
+  keepId: string;
+  members: (MemberSummary & { attempts: number; labMarks: number })[];
+}
+
+export interface MergeResult {
+  merged: number;
+  moved: { attempts: number; labMarks: number; other: number };
+  kept: MemberSummary;
+}
