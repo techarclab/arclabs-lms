@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { api, createTestApp, fakeAi, makeUser, orgApi, resetDb } from './helpers';
+import { api, createTestApp, fakeAi, fakeRunner, makeUser, orgApi, resetDb } from './helpers';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 describe('AI-marked coding questions and stopping an exam', () => {
@@ -176,5 +176,54 @@ describe('AI-marked coding questions and stopping an exam', () => {
     expect(ev.body).toMatchObject({ evaluated: 1, remaining: 0 });
     const after = await prisma.quizAttempt.findUniqueOrThrow({ where: { id: s.body.attemptId } });
     expect(Number(after.score)).toBe(10);
+  });
+  it('answers that failed to compile because of the runner can be marked again', async () => {
+    fakeAi.down = false;
+    const learner = (await makeUser(prisma, { memberOf: [{ orgId: orgA, roles: ['LEARNER'] }] }))
+      .token;
+    const ex = (await staff().post('/exams', { title: 'IoT', durationMinutes: 30 })).body.id;
+    await staff().put(`/exams/${ex}/questions`, { questionIds: [questionId] });
+    await staff().put(`/exams/${ex}/audience`, { assignToAll: true });
+    const now = Date.now();
+    await staff().patch(`/exams/${ex}`, {
+      startsAt: new Date(now - 60_000).toISOString(),
+      endsAt: new Date(now + 3_600_000).toISOString(),
+    });
+    await staff().post(`/exams/${ex}/publish`);
+
+    // the runner lacks WiFi.h during the exam
+    fakeRunner.noWifiLib = true;
+    const s = await me(learner).post(`/my/exams/${ex}/start`);
+    await withSession(
+      me(learner).post(`/my/attempts/${s.body.attemptId}/answers`, {
+        questionId,
+        answer: { language: 'arduino', code: 'HALF #include <WIFI.h>' },
+      }),
+      s.body.sessionId,
+    );
+    const done = await withSession(
+      me(learner).post(`/my/attempts/${s.body.attemptId}/submit`),
+      s.body.sessionId,
+    );
+    expect(done.body.score).toBe(2.5);
+
+    // runner fixed: mark again
+    fakeRunner.noWifiLib = false;
+    expect((await orgApi(app, viewer, orgA).post(`/exams/${ex}/remark-coding`, {})).status).toBe(
+      403,
+    );
+    const r = await staff().post(`/exams/${ex}/remark-coding`, {});
+    expect(r.body).toEqual({ attempts: 1, answers: 1 });
+    const ev = await staff().post(`/exams/${ex}/evaluate-coding`, {});
+    expect(ev.body).toEqual({ evaluated: 1, remaining: 0 });
+    const d = await staff().get(`/exams/${ex}/attempts/${s.body.attemptId}`);
+    expect(Number(d.body.candidate.score)).toBe(5);
+    expect(d.body.review[0].ai).toMatchObject({ compiled: true, penaltyPct: 0 });
+
+    // nothing left that didn't compile
+    expect((await staff().post(`/exams/${ex}/remark-coding`, {})).body).toEqual({
+      attempts: 0,
+      answers: 0,
+    });
   });
 });

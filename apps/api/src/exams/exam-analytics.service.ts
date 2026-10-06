@@ -605,6 +605,56 @@ export class ExamAnalyticsService {
     return { evaluated, remaining };
   }
 
+  /**
+   * Marks AI-marked coding answers again — by default only the ones that did not compile
+   * (e.g. the code runner was missing a library during the exam). Faculty-set marks are kept.
+   * The answers become "waiting"; Evaluate coding answers then compiles and AI-marks them again.
+   */
+  async remarkCoding(
+    actor: User,
+    orgId: string,
+    examId: string,
+    opts: { onlyNotCompiled: boolean },
+  ) {
+    const exam = await this.prisma.quiz.findFirst({ where: { id: examId, organizationId: orgId } });
+    if (!exam) throw new NotFoundException();
+    const attempts = await this.prisma.quizAttempt.findMany({
+      where: { quizId: examId, status: 'GRADED' },
+      select: { id: true, results: true },
+    });
+    let answers = 0;
+    let queued = 0;
+    for (const a of attempts) {
+      const results = { ...((a.results ?? {}) as Record<string, Record<string, unknown>>) };
+      let changed = false;
+      for (const [qid, r] of Object.entries(results)) {
+        const ai = r.ai as { compiled?: boolean } | undefined;
+        if (!ai || (opts.onlyNotCompiled && ai.compiled !== false)) continue;
+        if (typeof r.override === 'number') continue; // faculty already set these marks
+        const next: Record<string, unknown> = { ...r, pending: true };
+        delete next.ai;
+        results[qid] = next;
+        changed = true;
+        answers++;
+      }
+      if (!changed) continue;
+      queued++;
+      await this.prisma.quizAttempt.update({
+        where: { id: a.id },
+        data: { results: results as unknown as Prisma.InputJsonValue, codingPending: true },
+      });
+    }
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.coding_remark',
+      entityType: 'quiz',
+      entityId: examId,
+      meta: { attempts: queued, answers, onlyNotCompiled: opts.onlyNotCompiled },
+    });
+    return { attempts: queued, answers };
+  }
+
   async csv(orgId: string, examId: string, departmentId?: string | null) {
     const a = await this.analytics(orgId, examId, { departmentId });
     const esc = (v: unknown) => {

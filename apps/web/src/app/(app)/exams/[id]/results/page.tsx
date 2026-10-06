@@ -90,6 +90,32 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
     !isSuperAdmin && !hasPermission((current?.roles ?? []) as OrgRole[], 'quiz.author');
   const mutate = useApiMutation();
   const [evaluating, setEvaluating] = useState(false);
+  const [remarkOpen, setRemarkOpen] = useState(false);
+  const [remarkBusy, setRemarkBusy] = useState(false);
+
+  /** Marks again the coding answers that did not compile (e.g. the runner lacked a library). */
+  async function remark() {
+    setRemarkBusy(true);
+    try {
+      const r = await mutate<{ attempts: number; answers: number }>(
+        `/exams/${id}/remark-coding`,
+        'POST',
+        {},
+        orgId,
+      );
+      setRemarkOpen(false);
+      if (!r.answers) {
+        toast.success('No coding answers failed to compile — nothing to mark again.');
+        return;
+      }
+      toast.success(`Marking ${r.answers} coding answer${r.answers === 1 ? '' : 's'} again…`);
+      await evaluateAll(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRemarkBusy(false);
+    }
+  }
   const {
     data,
     isLoading,
@@ -212,6 +238,17 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
               onStopped={() => void reload().then(() => void evaluateAll(true))}
             />
           )}
+          {!viewOnly &&
+            exam.state !== 'LIVE' &&
+            data.questions.some((q) => q.type === 'CODING') && (
+              <Button
+                variant="secondary"
+                loading={remarkBusy || evaluating}
+                onClick={() => setRemarkOpen(true)}
+              >
+                <RotateCcw /> Re-mark coding
+              </Button>
+            )}
           <Button
             variant="secondary"
             onClick={async () => {
@@ -230,6 +267,23 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
           </Button>
         </div>
       </div>
+
+      <Dialog open={remarkOpen} onOpenChange={(o) => !remarkBusy && setRemarkOpen(o)}>
+        <DialogContent
+          title="Re-mark coding answers?"
+          icon={<RotateCcw />}
+          description="Every coding answer that did not compile is compiled and AI-marked again. Use this after fixing the code runner (for example a missing library such as WiFi.h). Marks you set by hand are kept."
+        >
+          <div className="mt-4 flex justify-end gap-3 rounded-b-2xl border-t border-ink-100 bg-ink-50/60 px-6 py-4">
+            <Button variant="secondary" disabled={remarkBusy} onClick={() => setRemarkOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={remarkBusy} onClick={() => void remark()}>
+              <RotateCcw /> Re-mark
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {stats.codingPending > 0 && (
         <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center">

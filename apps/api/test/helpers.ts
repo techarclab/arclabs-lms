@@ -87,13 +87,13 @@ const fakeFirebaseAuth = {
  * Stand-in code runner. "Programs" are keywords: REVERSE prints the input reversed, ECHO prints it
  * back, COMPILE_ERR fails to compile, LOOP times out. Set `fakeRunner.down` to simulate an outage.
  */
-export const fakeRunner = { down: false, runs: 0 };
+export const fakeRunner = { down: false, runs: 0, noWifiLib: false };
 const fakeRunnerImpl: CodeRunnerImpl = {
   provider: 'local',
   async run(_lang, code, stdin) {
     fakeRunner.runs++;
     if (fakeRunner.down) throw new Error('runner offline');
-    if (code.includes('COMPILE_ERR'))
+    if (code.includes('COMPILE_ERR') || (fakeRunner.noWifiLib && code.includes('WIFI')))
       return { status: 'COMPILE_ERROR', stdout: '', error: 'main.c:1: error', timeMs: null };
     if (code.includes('LOOP'))
       return { status: 'TIME_LIMIT', stdout: '', error: null, timeMs: 2000 };

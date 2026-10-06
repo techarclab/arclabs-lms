@@ -397,6 +397,21 @@ export class ExamsController {
     return this.analytics.evaluateCoding(u, org.organizationId, id);
   }
 
+  /** Mark coding answers again (default: only the ones that didn't compile). */
+  @Post(':id/remark-coding')
+  @HttpCode(200)
+  async remarkCoding(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body() body: { all?: boolean },
+  ) {
+    await this.exams.assertAccess(org, u.id, id, true);
+    return this.analytics.remarkCoding(u, org.organizationId, id, {
+      onlyNotCompiled: body?.all !== true,
+    });
+  }
+
   /** Stop a live exam now: everyone still writing is submitted. */
   @Post(':id/end')
   @HttpCode(200)
