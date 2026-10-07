@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import {
   AlertTriangle,
+  CheckCircle2,
   Cpu,
+  Hammer,
   Eye,
   EyeOff,
   FlaskConical,
@@ -18,6 +20,7 @@ import type {
   CodingMode,
   CodeRunnerStatus,
   CodingConfig,
+  CompileCheckResponse,
   OutputCompare,
   RunCodeResponse,
 } from '@arc/types';
@@ -449,6 +452,12 @@ export function CodingSetup({
           value={value.solution.code}
           onChange={(v) => set({ solution: { ...value.solution, code: v } })}
         />
+        <CompileCheck
+          orgId={orgId}
+          language={value.solution.language}
+          code={value.solution.code}
+          runnerReady={Boolean(runner?.configured)}
+        />
         {ai ? (
           <AiTry orgId={orgId} prompt={prompt} value={value} aiReady={Boolean(runner?.aiGrader)} />
         ) : (
@@ -698,6 +707,106 @@ function AiTry({
             ))}
           </ul>
           {review.feedback && <p className="mt-2 text-ink-600">{review.feedback}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Check it compiles" — compiles the code on the code runner (nothing is run or saved). */
+function CompileCheck({
+  orgId,
+  language,
+  code,
+  runnerReady,
+}: {
+  orgId: string;
+  language: CodeLanguageName;
+  code: string;
+  runnerReady: boolean;
+}) {
+  const mutate = useApiMutation();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<(CompileCheckResponse & { code: string }) | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const stale = result && result.code !== code;
+
+  async function check() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await mutate<CompileCheckResponse>(
+        '/questions/compile-check',
+        'POST',
+        { language, code },
+        orgId,
+      );
+      setResult({ ...r, code });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          loading={busy}
+          disabled={!code.trim() || !runnerReady}
+          onClick={() => void check()}
+        >
+          <Hammer /> Check it compiles
+        </Button>
+        <span className="text-xs text-ink-500">
+          {runnerReady
+            ? `Compiles the reference solution on the code runner (${LANGUAGE_LABEL[language]}) — the same compiler students’ answers use.`
+            : 'Available once a code runner is connected.'}
+        </span>
+      </div>
+      {error && <p className="text-[13px] text-rose-700">{error}</p>}
+      {result && (
+        <div
+          className={cn(
+            'rounded-lg px-3 py-2 text-[13px] ring-1',
+            result.ok
+              ? 'bg-emerald-50 text-emerald-800 ring-emerald-100'
+              : 'bg-rose-50 text-rose-800 ring-rose-100',
+            stale && 'opacity-60',
+          )}
+        >
+          <p className="flex items-center gap-2 font-medium">
+            {result.ok ? (
+              <>
+                <CheckCircle2 className="size-4" /> Compiles — no errors
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="size-4" /> Does not compile
+              </>
+            )}
+            <span className="font-normal text-ink-500">
+              · {(result.timeMs / 1000).toFixed(1)} s
+              {stale ? ' · code changed since — check again' : ''}
+            </span>
+          </p>
+          {!result.ok && result.error && (
+            <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-white/70 p-2 font-mono text-[12px] whitespace-pre-wrap text-rose-900">
+              {result.error}
+            </pre>
+          )}
+          {!result.ok && /No such file or directory/.test(result.error ?? '') && (
+            <p className="mt-2 text-ink-600">
+              A library header is missing on the code runner. If it is one the simulator supports
+              (e.g. WiFi.h, ThingSpeak.h, PubSubClient.h), update the runner with{' '}
+              <code className="font-mono">sudo arc-runner-setup</code> and check again.
+            </p>
+          )}
         </div>
       )}
     </div>

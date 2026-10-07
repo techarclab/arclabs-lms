@@ -378,6 +378,13 @@ export const checkCodingSchema = z.object({
 });
 export type CheckCodingInput = z.infer<typeof checkCodingSchema>;
 
+/** Staff: check that a piece of code compiles on the code runner (nothing is run or saved). */
+export const compileCheckSchema = z.object({
+  language: codeLanguageSchema,
+  code: z.string().min(1, 'Paste the code first').max(MAX_CODE),
+});
+export type CompileCheckInput = z.infer<typeof compileCheckSchema>;
+
 /** Staff: try AI marking on some code before the exam (e.g. the reference or a weak answer). */
 export const aiCheckSchema = z.object({
   prompt: z.string().trim().min(3).max(10_000),

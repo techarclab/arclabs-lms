@@ -86,6 +86,14 @@ export interface RunCodeResponse {
   results: TestRunResult[];
 }
 
+/** Result of compiling code on the runner without running it. */
+export interface CompileCheckResponse {
+  ok: boolean;
+  /** Compiler message when it doesn't compile. */
+  error: string | null;
+  timeMs: number;
+}
+
 export interface CodeRunnerStatus {
   configured: boolean;
   provider: 'arc' | 'judge0' | 'local' | null;

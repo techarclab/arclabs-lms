@@ -20,12 +20,14 @@ import {
   grantReexamSchema,
   setMarksSchema,
   checkCodingSchema,
+  compileCheckSchema,
   createExamSchema,
   runCodeSchema,
   type AiCheckInput,
   type GrantReexamInput,
   type SetMarksInput,
   type CheckCodingInput,
+  type CompileCheckInput,
   type RunCodeInput,
   listExamsQuery,
   listQuestionsQuery,
@@ -149,6 +151,13 @@ export class QuestionsController {
   @HttpCode(200)
   checkCode(@Body(new ZodValidationPipe(checkCodingSchema)) body: CheckCodingInput) {
     return this.questions.checkCoding(body);
+  }
+
+  /** Check that code compiles on the runner (e.g. the reference solution) — nothing is run. */
+  @Post('compile-check')
+  @HttpCode(200)
+  compileCheck(@Body(new ZodValidationPipe(compileCheckSchema)) body: CompileCheckInput) {
+    return this.questions.compileCheck(body);
   }
 
   @Post()

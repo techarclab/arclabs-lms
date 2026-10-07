@@ -12,6 +12,7 @@ import type {
   Paginated,
   QuestionFolders,
   QuestionItem,
+  CompileCheckResponse,
   RunCodeResponse,
 } from '@arc/types';
 import {
@@ -23,6 +24,7 @@ import {
   type ImportParseInput,
   type AiCheckInput,
   type CheckCodingInput,
+  type CompileCheckInput,
   type ListQuestionsQuery,
   type MoveQuestionsInput,
   type QuestionInputParsed,
@@ -274,6 +276,24 @@ export class QuestionsService {
     } catch (e) {
       if (e instanceof AiGraderUnavailableError)
         throw new ConflictException({ code: 'AI_UNAVAILABLE', message: e.message });
+      throw e;
+    }
+  }
+
+  /** Compiles code on the runner without running it (authors checking the reference solution). */
+  async compileCheck(input: CompileCheckInput): Promise<CompileCheckResponse> {
+    if (!this.runner.configured)
+      throw new ConflictException({
+        code: 'RUNNER_NOT_CONFIGURED',
+        message: 'No code runner is connected yet.',
+      });
+    const started = Date.now();
+    try {
+      const c = await this.runner.compile(input.language, input.code);
+      return { ok: c.ok, error: c.error, timeMs: Date.now() - started };
+    } catch (e) {
+      if (e instanceof RunnerUnavailableError)
+        throw new ConflictException({ code: 'RUNNER_UNAVAILABLE', message: e.message });
       throw e;
     }
   }
