@@ -13,6 +13,7 @@
 //   @1500 D2=LOW       change something at 1500 ms   (several: @1500 temp=40, humidity=20)
 //   field1=FAN_ON      ThingSpeak field 1 (readStringField / readFloatField); @20000 field1=LIGHT_ON
 //   wifi=off           Wi-Fi never connects          wifi_ms=1500  time to connect (default 1000)
+//   mqtt_in=<topic> <payload>   an MQTT message for the sketch (PubSubClient); mqtt=down  broker refuses
 //
 // Serial output (and trace lines) go to stdout; the LCD's final screen is printed at the end.
 
@@ -298,7 +299,7 @@ void parseWorld() {
     // "a=1, b=2" or "a=1 b=2" — but serial text keeps everything after its '='
     std::vector<std::string> parts;
     size_t sp = lower(line).find("serial");
-    if (sp == 0) {
+    if (sp == 0 || lower(line).rfind("mqtt_in", 0) == 0) {
       parts.push_back(line);
     } else {
       std::string cur;
