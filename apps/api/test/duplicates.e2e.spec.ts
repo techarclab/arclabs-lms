@@ -26,6 +26,11 @@ describe('One student, one account: roll number and college email', () => {
     ece = (await prisma.department.create({ data: { organizationId: orgId, name: 'ECE' } })).id;
     admin = (await makeUser(prisma, { memberOf: [{ orgId, roles: ['ORG_ADMIN'] }] })).token;
     code = (await A().put('/join-settings', { enabled: true })).body.code;
+    // Simulate a college that had duplicates before the database rule existed.
+    await prisma.$executeRawUnsafe('DROP INDEX IF EXISTS "organization_users_org_roll_key"');
+    await prisma.$executeRawUnsafe(
+      'DROP INDEX IF EXISTS "organization_users_org_college_email_key"',
+    );
   });
   afterAll(async () => {
     await app.close();
@@ -107,6 +112,22 @@ describe('One student, one account: roll number and college email', () => {
     ).toBe(422);
     await A().post('/members/merge', { keepId: c.memberId, mergeIds: [d.memberId] });
     expect((await A().get('/members/duplicates')).body).toEqual([]);
+
+    // with no duplicates left, the database itself now refuses a second registration
+    const idx = await prisma.$queryRawUnsafe<{ indexname: string }[]>(
+      "SELECT indexname FROM pg_indexes WHERE indexname IN ('organization_users_org_roll_key', 'organization_users_org_college_email_key') ORDER BY 1",
+    );
+    expect(idx.map((i) => i.indexname)).toEqual([
+      'organization_users_org_college_email_key',
+      'organization_users_org_roll_key',
+    ]);
+    const e = await student(null, null);
+    await expect(
+      prisma.organizationMember.update({
+        where: { id: e.memberId },
+        data: { externalId: '21J41A0168' },
+      }),
+    ).rejects.toThrow();
   });
 
   it('a student can’t register again with a roll number or college email already used', async () => {

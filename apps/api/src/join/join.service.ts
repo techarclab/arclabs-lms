@@ -165,11 +165,19 @@ export class JoinService {
     if (!m || m.status !== 'ACTIVE')
       throw new NotFoundException('You aren’t a member of this college');
     this.checkCollegeEmail(input.collegeEmail, m.organization.collegeEmailDomains);
+    const collegeEmail = normEmail(input.collegeEmail);
+    await assertUniqueInCollege(
+      this.prisma,
+      input.organizationId,
+      { collegeEmail },
+      user.id,
+      false,
+    );
     await this.prisma.organizationMember.update({
       where: { id: m.id },
-      data: { collegeEmail: input.collegeEmail },
+      data: { collegeEmail },
     });
-    return { collegeEmail: input.collegeEmail };
+    return { collegeEmail };
   }
 
   async join(

@@ -110,6 +110,37 @@ export class MergeService {
     });
   }
 
+  /**
+   * Puts the "one roll number / one college email per college" rule into the database once no
+   * college has duplicates left (the migration skips it while old duplicates exist).
+   */
+  async ensureUniqueRules() {
+    const rules = [
+      { name: 'organization_users_org_roll_key', column: 'externalId' },
+      { name: 'organization_users_org_college_email_key', column: 'collegeEmail' },
+    ] as const;
+    for (const r of rules) {
+      try {
+        const exists = await this.prisma.$queryRawUnsafe<unknown[]>(
+          `SELECT 1 FROM pg_indexes WHERE indexname = '${r.name}'`,
+        );
+        if (exists.length) continue;
+        const dups = await this.prisma.$queryRawUnsafe<unknown[]>(
+          `SELECT 1 FROM "organization_users" WHERE "${r.column}" IS NOT NULL
+           GROUP BY "organizationId", "${r.column}" HAVING COUNT(*) > 1 LIMIT 1`,
+        );
+        if (dups.length) continue;
+        await this.prisma.$executeRawUnsafe(
+          `CREATE UNIQUE INDEX IF NOT EXISTS "${r.name}" ON "organization_users"
+           ("organizationId", "${r.column}") WHERE "${r.column}" IS NOT NULL`,
+        );
+        this.logger.log(`Unique rule ${r.name} is now on`);
+      } catch (e) {
+        this.logger.warn(`Could not add ${r.name}: ${(e as Error).message}`);
+      }
+    }
+  }
+
   async merge(actor: User, org: OrgContextInfo, input: MergeMembersInput): Promise<MergeResult> {
     const orgId = org.organizationId;
     const ids = [input.keepId, ...input.mergeIds];
@@ -233,17 +264,21 @@ export class MergeService {
           });
           moved.other += n.count;
 
-          // Fill in what the kept membership is missing, then drop the duplicate membership.
+          // Drop the duplicate membership first (its roll no. / college email must be free), then
+          // fill in what the kept membership is missing.
+          await tx.organizationMember.delete({ where: { id: d.id } });
+          const cur = await tx.organizationMember.findUniqueOrThrow({ where: { id: keep.id } });
           await tx.organizationMember.update({
             where: { id: keep.id },
             data: {
-              ...(!keep.externalId && d.externalId ? { externalId: normRoll(d.externalId) } : {}),
-              ...(!keep.collegeEmail && d.collegeEmail ? { collegeEmail: d.collegeEmail } : {}),
-              ...(!keep.departmentId && d.departmentId ? { departmentId: d.departmentId } : {}),
-              roles: [...new Set([...keep.roles, ...d.roles])],
+              ...(!cur.externalId && d.externalId ? { externalId: normRoll(d.externalId) } : {}),
+              ...(!cur.collegeEmail && d.collegeEmail
+                ? { collegeEmail: normEmail(d.collegeEmail) }
+                : {}),
+              ...(!cur.departmentId && d.departmentId ? { departmentId: d.departmentId } : {}),
+              roles: [...new Set([...cur.roles, ...d.roles])],
             },
           });
-          await tx.organizationMember.delete({ where: { id: d.id } });
 
           const left = await tx.organizationMember.count({ where: { userId: from } });
           if (!left) {
@@ -289,6 +324,7 @@ export class MergeService {
       }
     }
 
+    await this.ensureUniqueRules();
     const kept = await this.prisma.organizationMember.findUniqueOrThrow({
       where: { id: keep.id },
       include: memberInclude,
