@@ -47,6 +47,7 @@ import { timeAgo } from '@/lib/format';
 import { useApi, useApiMutation } from '@/lib/use-api';
 import { BulkImportDialog } from './BulkImportDialog';
 import { DuplicatesDialog } from './DuplicatesDialog';
+import { MergeIntoDialog } from './MergeIntoDialog';
 import { EditMemberDialog } from './EditMemberDialog';
 import { InviteMemberDialog } from './InviteMemberDialog';
 import { MemberStateBadge, RoleBadges, ROLE_OPTIONS } from './shared';
@@ -95,6 +96,7 @@ export function MembersPanel({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MemberSummary | null>(null);
+  const [mergeFrom, setMergeFrom] = useState<MemberSummary | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   /** Who the confirm dialog is about: some people, or everyone deactivated. */
   const [removing, setRemoving] = useState<
@@ -433,6 +435,11 @@ export function MembersPanel({
                             Copy email
                           </DropdownMenuItem>
                           {!m.isSelf && (
+                            <DropdownMenuItem icon={<Merge />} onSelect={() => setMergeFrom(m)}>
+                              Merge into another account…
+                            </DropdownMenuItem>
+                          )}
+                          {!m.isSelf && (
                             <>
                               <DropdownMenuSeparator />
                               {m.state === 'INACTIVE' ? (
@@ -584,6 +591,12 @@ export function MembersPanel({
           </div>
         </DialogContent>
       </Dialog>
+      <MergeIntoDialog
+        source={mergeFrom}
+        onOpenChange={(o) => !o && setMergeFrom(null)}
+        orgId={orgId}
+        onMerged={refresh}
+      />
       <DuplicatesDialog
         open={dupOpen}
         onOpenChange={setDupOpen}
