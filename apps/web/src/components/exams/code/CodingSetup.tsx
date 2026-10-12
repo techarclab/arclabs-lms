@@ -829,6 +829,7 @@ function ArduinoHelp() {
       'Add the time to pin lines (“[2004 ms] D8 HIGH”) — only for timing questions',
     ],
     ['dht_pin=2', 'Only when students read the DHT by hand (bit-banging) on pin 2'],
+    ['oled=missing', 'SSD1306 OLED not found (display.begin() returns false)'],
   ];
   return (
     <div className="rounded-xl border border-brand-100 bg-brand-50/50 px-4 py-3 text-[13px]">
@@ -837,8 +838,8 @@ function ArduinoHelp() {
       </p>
       <p className="mt-1 text-ink-600">
         Students write a normal sketch (setup/loop, DHT, Servo, LiquidCrystal / LiquidCrystal_I2C,
-        Wire). Each test describes the board: one setting per line. Tests compare what the sketch
-        prints on Serial, plus traced pins and the final LCD screen.
+        SSD1306 OLED, Wire). Each test describes the board: one setting per line. Tests compare what
+        the sketch prints on Serial, plus traced pins and the final LCD / OLED screen.
       </p>
       <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-[max-content_1fr]">
         {rows.map(([k, v]) => (
