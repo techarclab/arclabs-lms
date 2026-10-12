@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type {
   AiReview,
   AttemptDetail,
@@ -7,6 +12,7 @@ import type {
   ExamAnalytics,
   QuestionOption,
   QuestionStat,
+  TotalAdjustment,
 } from '@arc/types';
 import { AuditService } from '../audit/audit.service';
 import type { Prisma, User } from '../generated/prisma/client';
@@ -136,6 +142,7 @@ export class ExamAnalyticsService {
       submitReason: a.submitReason,
       submittedAt: a.submittedAt?.toISOString() ?? null,
       reexam: reexams.get(a.userId) ?? null,
+      adjusted: adjustmentOf(a),
     });
     const candidates: CandidateRow[] = [...byUser.values()].map(rowFor);
     for (const m of assigned) {
@@ -349,6 +356,7 @@ export class ExamAnalyticsService {
         violationCount: a.violationCount,
         submitReason: a.submitReason,
         submittedAt: a.submittedAt?.toISOString() ?? null,
+        adjusted: adjustmentOf(a),
       },
       reviewHidden,
       review: (reviewHidden ? [] : order).map(({ questionId }) => {
@@ -541,6 +549,62 @@ export class ExamAnalyticsService {
   }
 
   /**
+   * Faculty sets a student's final total by hand — e.g. reduce it or make it 0 when a proxy
+   * wrote the exam. null puts back the marked total. Kept through re-marking; audit-logged.
+   */
+  async setTotal(
+    actor: User,
+    orgId: string,
+    examId: string,
+    attemptId: string,
+    input: { marks: number | null; reason: string },
+  ) {
+    const a = await this.prisma.quizAttempt.findFirst({
+      where: { id: attemptId, quizId: examId, organizationId: orgId },
+    });
+    if (!a) throw new NotFoundException();
+    if (a.status !== 'GRADED')
+      throw new ConflictException({
+        code: 'NOT_SUBMITTED',
+        message: 'The total can be changed after the attempt is submitted',
+      });
+    const max = Number(a.maxScore ?? 0);
+    if (input.marks !== null && input.marks > max)
+      throw new BadRequestException({
+        code: 'TOTAL_TOO_HIGH',
+        message: `The total can be at most ${max} (the exam's full marks)`,
+      });
+    const before = Number(a.score ?? 0);
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data:
+        input.marks === null
+          ? {
+              totalOverride: null,
+              overrideReason: null,
+              overrideById: null,
+              overrideAt: null,
+            }
+          : {
+              totalOverride: input.marks,
+              overrideReason: input.reason,
+              overrideById: actor.id,
+              overrideAt: new Date(),
+            },
+    });
+    await this.engine.regrade(attemptId, Date.now() + 15_000);
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: input.marks === null ? 'exam.total_restored' : 'exam.total_changed',
+      entityType: 'quiz_attempt',
+      entityId: attemptId,
+      meta: { marks: input.marks, before, reason: input.reason },
+    });
+    return this.attemptDetail(orgId, examId, attemptId);
+  }
+
+  /**
    * Stops a live exam now: closes the window and submits everyone still writing. Coding answers
    * of those attempts are marked afterwards with "Evaluate coding answers".
    */
@@ -676,6 +740,7 @@ export class ExamAnalyticsService {
       'Violations',
       'Submitted by',
       'Submitted at',
+      'Marks changed by faculty',
     ];
     const lines = a.candidates.map((c) =>
       [
@@ -693,6 +758,9 @@ export class ExamAnalyticsService {
         c.violationCount,
         c.submitReason ? c.submitReason.replace('_', ' ').toLowerCase() : '',
         c.submittedAt,
+        c.adjusted
+          ? `${c.adjusted.calculated ?? ''} -> ${c.adjusted.marks}: ${c.adjusted.reason}`
+          : '',
       ]
         .map(esc)
         .join(','),
@@ -702,4 +770,20 @@ export class ExamAnalyticsService {
       body: '﻿' + [header.join(','), ...lines].join('\r\n'),
     };
   }
+}
+
+/** The hand-set total of an attempt, if faculty changed it. */
+function adjustmentOf(a: {
+  totalOverride: Prisma.Decimal | null;
+  calculatedScore: Prisma.Decimal | null;
+  overrideReason: string | null;
+  overrideAt: Date | null;
+}): TotalAdjustment | null {
+  if (a.totalOverride === null) return null;
+  return {
+    marks: Number(a.totalOverride),
+    calculated: a.calculatedScore !== null ? Number(a.calculatedScore) : null,
+    reason: a.overrideReason ?? '',
+    at: a.overrideAt?.toISOString() ?? null,
+  };
 }

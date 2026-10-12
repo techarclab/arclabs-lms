@@ -31,5 +31,6 @@ import { QuestionsService } from './questions.service';
     AttemptsService,
     ExamAnalyticsService,
   ],
+  exports: [AttemptsService, ExamsService],
 })
 export class ExamsModule {}

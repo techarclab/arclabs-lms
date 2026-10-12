@@ -269,6 +269,7 @@ model User {
   isSuperAdmin Boolean      @default(false)
   status       RecordStatus @default(ACTIVE)
   lastLoginAt  DateTime?
+  notificationsSeenAt DateTime? // when the bell was last opened (newer items show as unread)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -718,6 +719,12 @@ model QuizAttempt {
   voidReason     String?
   voidedById     String?       @db.Uuid
   reexamUntil    DateTime? // the fresh attempt may start until then (even after the exam closed)
+  // Faculty set the final total by hand (e.g. proxy / malpractice): score, % and pass use it.
+  totalOverride  Decimal?      @db.Decimal(7, 2)
+  calculatedScore Decimal?     @db.Decimal(7, 2) // the marked total before the override
+  overrideReason String?
+  overrideById   String?       @db.Uuid
+  overrideAt     DateTime?
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quiz         Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)

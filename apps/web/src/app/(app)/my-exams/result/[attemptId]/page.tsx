@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import {
   Loader2,
@@ -28,6 +28,7 @@ import {
   Skeleton,
 } from '@arc/ui';
 import { ReviewCard } from '@/components/exams/AnswerView';
+import { Pager, paginate } from '@/components/shell/Pager';
 import { formatDateTime, formatDuration } from '@/lib/format';
 import { useApi } from '@/lib/use-api';
 
@@ -47,6 +48,7 @@ const REASON_NOTE: Record<string, { tone: string; text: string }> = {
 export default function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
   const { attemptId } = use(params);
   const { data: r, error } = useApi<AttemptResult>(`/my/attempts/${attemptId}/result`);
+  const [reviewPage, setReviewPage] = useState(0); // answers are shown 10 at a time
 
   if (error) {
     return (
@@ -249,16 +251,39 @@ export default function ResultPage({ params }: { params: Promise<{ attemptId: st
         </div>
       )}
 
-      <div className="mt-8">
+      <div className="mt-8" id="answer-review">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
           <Award className="size-5 text-brand-600" /> Answer review
         </h2>
         {r.review ? (
-          <div className="space-y-4">
-            {r.review.map((item, i) => (
-              <ReviewCard key={item.questionId} item={item} index={i} />
-            ))}
-          </div>
+          (() => {
+            const pg = paginate(r.review, reviewPage);
+            return (
+              <>
+                <div className="space-y-4">
+                  {pg.rows.map((item, i) => (
+                    <ReviewCard key={item.questionId} item={item} index={pg.from + i} />
+                  ))}
+                </div>
+                {pg.pages > 1 && (
+                  <Card className="mt-4 overflow-hidden">
+                    <Pager
+                      page={pg.page}
+                      pages={pg.pages}
+                      total={r.review.length}
+                      className="border-t-0"
+                      onChange={(p) => {
+                        setReviewPage(p);
+                        document
+                          .getElementById('answer-review')
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    />
+                  </Card>
+                )}
+              </>
+            );
+          })()
         ) : (
           <Card>
             <EmptyState

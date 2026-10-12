@@ -114,7 +114,11 @@ export class AttemptsService {
 
   // ───────── Listing & lobby ─────────
 
-  async listMine(user: User): Promise<MyExamItem[]> {
+  /**
+   * The student's exams. `window` limits it to exams open around that time (the notification bell
+   * only needs recent and upcoming ones).
+   */
+  async listMine(user: User, window?: { from: Date; to: Date }): Promise<MyExamItem[]> {
     await this.engine.finalizeExpired({ userId: user.id });
     const memberships = await this.prisma.organizationMember.findMany({
       where: { userId: user.id, status: 'ACTIVE', organization: { status: 'ACTIVE' } },
@@ -125,6 +129,14 @@ export class AttemptsService {
         organizationId: { in: memberships.map((m) => m.organizationId) },
         status: 'PUBLISHED',
         courseId: null,
+        ...(window
+          ? {
+              AND: [
+                { OR: [{ endsAt: null }, { endsAt: { gte: window.from } }] },
+                { OR: [{ startsAt: null }, { startsAt: { lte: window.to } }] },
+              ],
+            }
+          : {}),
       },
       include: { audiences: true },
       orderBy: { startsAt: 'desc' },

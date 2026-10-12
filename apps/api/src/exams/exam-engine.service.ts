@@ -14,6 +14,7 @@ import { ExpectedOutputs } from './expected-outputs';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import {
   gradeAttempt,
+  withTotalOverride,
   type CodeOutcome,
   type GradableQuestion,
   type QuestionResult,
@@ -332,14 +333,21 @@ export class ExamEngine {
       code,
       overridesOf(previous),
     );
+    // A total set by hand (e.g. proxy) replaces the marked total; the marked one is kept.
+    const total = withTotalOverride(
+      g,
+      attempt.totalOverride !== null ? Number(attempt.totalOverride) : null,
+      attempt.quiz.passPct,
+    );
     await this.prisma.quizAttempt.update({
       where: { id: attemptId },
       data: {
         results: g.results as unknown as Prisma.InputJsonValue,
-        score: g.score,
+        score: total.score,
         maxScore: g.maxScore,
-        percentage: g.percentage,
-        passed: g.passed,
+        percentage: total.percentage,
+        passed: total.passed,
+        calculatedScore: total.calculatedScore,
         correctCount: g.correctCount,
         wrongCount: g.wrongCount,
         unansweredCount: g.unansweredCount,

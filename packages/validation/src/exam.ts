@@ -411,6 +411,18 @@ export const setMarksSchema = z.object({
 });
 export type SetMarksInput = z.infer<typeof setMarksSchema>;
 
+/** Faculty: set a student's final total by hand (null puts back the marked total). */
+export const setTotalSchema = z
+  .object({
+    marks: z.coerce.number().min(0, 'Marks can’t be negative').max(10_000).nullable(),
+    reason: z.string().trim().max(300).optional().default(''),
+  })
+  .refine((v) => v.marks === null || v.reason.length >= 3, {
+    message: 'Write the reason (e.g. "Proxy - another person wrote the exam")',
+    path: ['reason'],
+  });
+export type SetTotalInput = z.infer<typeof setTotalSchema>;
+
 /** Faculty: give a student a fresh attempt (a genuine mistake, power cut, wrong auto-submit…). */
 export const grantReexamSchema = z.object({
   reason: z.string().trim().min(3, 'Write why (e.g. "Left full screen by mistake")').max(300),

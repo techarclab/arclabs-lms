@@ -8,6 +8,7 @@ import {
   median,
   percentileOf,
   type GradableQuestion,
+  withTotalOverride,
 } from './grading';
 
 const q = (over: Partial<GradableQuestion>): GradableQuestion => ({
@@ -130,5 +131,30 @@ describe('grading', () => {
       );
       expect(g.codingPending).toBe(true);
     });
+  });
+});
+
+describe('withTotalOverride', () => {
+  const g = { score: 44, maxScore: 50, percentage: 88, passed: true };
+  it('keeps the marked total when there is no override', () => {
+    expect(withTotalOverride(g, null, 40)).toEqual({
+      score: 44,
+      percentage: 88,
+      passed: true,
+      calculatedScore: null,
+    });
+  });
+  it('uses the hand-set total and keeps the marked one', () => {
+    expect(withTotalOverride(g, 0, 40)).toEqual({
+      score: 0,
+      percentage: 0,
+      passed: false,
+      calculatedScore: 44,
+    });
+    expect(withTotalOverride(g, 25, 40)).toMatchObject({ score: 25, percentage: 50, passed: true });
+  });
+  it('never goes above full marks or below 0', () => {
+    expect(withTotalOverride(g, 80, 40).score).toBe(50);
+    expect(withTotalOverride(g, -5, 40).score).toBe(0);
   });
 });

@@ -10,3 +10,4 @@ export * from './material';
 export * from './lab';
 export * from './question-import';
 export * from './announcement';
+export * from './notification';

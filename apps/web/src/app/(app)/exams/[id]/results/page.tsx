@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Gauge,
+  Pencil,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -42,6 +43,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { hasPermission, type OrgRole } from '@arc/types';
 import { useOrg } from '@/components/providers/OrgProvider';
 import { OrgRequired } from '@/components/shell/OrgRequired';
+import { Pager, paginate } from '@/components/shell/Pager';
 import { downloadFile } from '@/lib/api';
 import {
   formatDateTime,
@@ -129,6 +131,10 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
   >('ALL');
   const [search, setSearch] = useState('');
   const [openQ, setOpenQ] = useState<string | null>(null);
+  // Long lists are shown 10 at a time.
+  const [candPage, setCandPage] = useState(0);
+  const [qPage, setQPage] = useState(0);
+  const [topicPage, setTopicPage] = useState(0);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   /** Marks waiting coding answers, calling again while progress is made (each call is ~20 s max). */
@@ -194,6 +200,9 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
   }
 
   const { exam, stats } = data;
+  const candPaged = paginate(candidates, candPage);
+  const qPaged = paginate(data.questions, qPage);
+  const topicPaged = paginate(data.topics, topicPage);
   const maxBucket = Math.max(1, ...data.distribution.map((b) => b.count));
 
   return (
@@ -337,100 +346,87 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         />
       </div>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <div>
-              <CardTitle>Score distribution</CardTitle>
-              <CardDescription>
-                Highest {stats.highestPct ?? '—'}% · lowest {stats.lowestPct ?? '—'}% · avg time{' '}
-                {formatDuration(stats.avgTimeSec)}
-              </CardDescription>
-            </div>
-            <span className="flex size-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100">
-              <TrendingUp className="size-[18px]" />
-            </span>
-          </CardHeader>
-          <CardContent>
-            <div className="relative flex h-48 items-end gap-2 border-b border-ink-200 pb-0">
-              <div
-                className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-amber-400"
-                style={{ left: `${exam.passPct}%` }}
+      <Card className="mt-6 overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-ink-100 px-4 py-3.5 lg:flex-row lg:items-center">
+          <div className="flex flex-wrap rounded-lg bg-ink-100/80 p-0.5">
+            {(
+              [
+                ['ALL', `All ${data.candidates.length}`],
+                ['SUBMITTED', `Submitted ${stats.submitted}`],
+                ['IN_PROGRESS', `Writing ${stats.inProgress}`],
+                ['NOT_STARTED', `Absent ${stats.notStarted}`],
+                ['FLAGGED', `Flagged ${stats.withViolations}`],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => {
+                  setFilter(v);
+                  setCandPage(0);
+                }}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-[13px] font-medium transition',
+                  filter === v
+                    ? 'bg-white text-ink-900 shadow-xs'
+                    : 'text-ink-500 hover:text-ink-800',
+                )}
               >
-                <span className="absolute -top-1 left-1.5 text-[11px] font-medium whitespace-nowrap text-amber-700">
-                  Pass {exam.passPct}%
-                </span>
-              </div>
-              {data.distribution.map((b) => (
-                <div
-                  key={b.from}
-                  className="group relative flex h-full flex-1 flex-col justify-end"
-                >
-                  {b.count > 0 && (
-                    <span className="tabular mb-1 text-center text-xs font-medium text-ink-700">
-                      {b.count}
-                    </span>
-                  )}
-                  <div
-                    className={cn(
-                      'w-full rounded-t-md transition',
-                      b.to <= exam.passPct
-                        ? 'bg-rose-300 group-hover:bg-rose-400'
-                        : 'bg-brand-500 group-hover:bg-brand-600',
-                    )}
-                    style={{ height: `${(b.count / maxBucket) * 85}%`, minHeight: b.count ? 4 : 0 }}
-                  />
-                </div>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="lg:ml-auto lg:w-72">
+            <Input
+              leading={<Search />}
+              placeholder="Search candidates"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCandPage(0);
+              }}
+              className="h-9"
+            />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead>
+              <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-xs text-ink-500">
+                <th className="py-2.5 pr-3 pl-6 font-medium">Rank</th>
+                <th className="px-3 py-2.5 font-medium">Candidate</th>
+                <th className="px-3 py-2.5 font-medium">Department</th>
+                <th className="px-3 py-2.5 text-right font-medium">Score</th>
+                <th className="px-3 py-2.5 font-medium">Result</th>
+                <th className="px-3 py-2.5 font-medium">Time</th>
+                <th className="px-3 py-2.5 font-medium">Integrity</th>
+                <th className="py-2.5 pr-6 pl-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {candPaged.rows.map((c) => (
+                <CandidateTr
+                  key={c.userId}
+                  c={c}
+                  maxViolations={exam.maxViolations}
+                  onOpen={() => {
+                    const open = c.attemptId ?? c.reexam?.attemptId;
+                    if (open) setDetailId(open);
+                  }}
+                />
               ))}
-            </div>
-            <div className="mt-2 flex gap-2">
-              {data.distribution.map((b) => (
-                <span key={b.from} className="tabular flex-1 text-center text-[11px] text-ink-400">
-                  {b.from}–{b.to}
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Topic performance</CardTitle>
-              <CardDescription>Weakest first — plan revision here</CardDescription>
-            </div>
-            <span className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
-              <Target className="size-[18px]" />
-            </span>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3.5">
-              {data.topics.map((t) => (
-                <li key={t.topic}>
-                  <div className="mb-1.5 flex justify-between text-sm">
-                    <span className="truncate text-ink-700">{t.topic}</span>
-                    <span className="tabular font-medium">{t.avgPct}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-ink-100">
-                    <div
-                      className={cn(
-                        'h-full rounded-full',
-                        t.avgPct < 40
-                          ? 'bg-rose-500'
-                          : t.avgPct < 70
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500',
-                      )}
-                      style={{ width: `${t.avgPct}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-              {!data.topics.length && <li className="text-sm text-ink-400">No data yet</li>}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+            </tbody>
+          </table>
+          {!candidates.length && (
+            <p className="px-6 py-10 text-center text-sm text-ink-500">No candidates here.</p>
+          )}
+        </div>
+        <Pager
+          page={candPaged.page}
+          pages={candPaged.pages}
+          total={candidates.length}
+          onChange={setCandPage}
+        />
+      </Card>
 
       {data.questionsHidden && (
         <Card className="mt-6 px-6 py-5 text-sm text-ink-600">
@@ -462,7 +458,7 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {data.questions.map((q) => {
+              {qPaged.rows.map((q) => {
                 const d = q.discrimination;
                 const quality =
                   d === null
@@ -574,7 +570,118 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
             </tbody>
           </table>
         </div>
+        <Pager
+          page={qPaged.page}
+          pages={qPaged.pages}
+          total={data.questions.length}
+          onChange={(p) => {
+            setQPage(p);
+            setOpenQ(null);
+          }}
+        />
       </Card>
+
+      <div className="mt-6 grid items-start gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <div>
+              <CardTitle>Score distribution</CardTitle>
+              <CardDescription>
+                Highest {stats.highestPct ?? '—'}% · lowest {stats.lowestPct ?? '—'}% · avg time{' '}
+                {formatDuration(stats.avgTimeSec)}
+              </CardDescription>
+            </div>
+            <span className="flex size-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 ring-1 ring-brand-100">
+              <TrendingUp className="size-[18px]" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="relative flex h-48 items-end gap-2 border-b border-ink-200 pb-0">
+              <div
+                className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-amber-400"
+                style={{ left: `${exam.passPct}%` }}
+              >
+                <span className="absolute -top-1 left-1.5 text-[11px] font-medium whitespace-nowrap text-amber-700">
+                  Pass {exam.passPct}%
+                </span>
+              </div>
+              {data.distribution.map((b) => (
+                <div
+                  key={b.from}
+                  className="group relative flex h-full flex-1 flex-col justify-end"
+                >
+                  {b.count > 0 && (
+                    <span className="tabular mb-1 text-center text-xs font-medium text-ink-700">
+                      {b.count}
+                    </span>
+                  )}
+                  <div
+                    className={cn(
+                      'w-full rounded-t-md transition',
+                      b.to <= exam.passPct
+                        ? 'bg-rose-300 group-hover:bg-rose-400'
+                        : 'bg-brand-500 group-hover:bg-brand-600',
+                    )}
+                    style={{ height: `${(b.count / maxBucket) * 85}%`, minHeight: b.count ? 4 : 0 }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
+              {data.distribution.map((b) => (
+                <span key={b.from} className="tabular flex-1 text-center text-[11px] text-ink-400">
+                  {b.from}–{b.to}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Topic performance</CardTitle>
+              <CardDescription>Weakest first — plan revision here</CardDescription>
+            </div>
+            <span className="flex size-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
+              <Target className="size-[18px]" />
+            </span>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3.5">
+              {topicPaged.rows.map((t) => (
+                <li key={t.topic}>
+                  <div className="mb-1.5 flex justify-between text-sm">
+                    <span className="truncate text-ink-700">{t.topic}</span>
+                    <span className="tabular font-medium">{t.avgPct}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-ink-100">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        t.avgPct < 40
+                          ? 'bg-rose-500'
+                          : t.avgPct < 70
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500',
+                      )}
+                      style={{ width: `${t.avgPct}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+              {!data.topics.length && <li className="text-sm text-ink-400">No data yet</li>}
+            </ul>
+          </CardContent>
+          <Pager
+            page={topicPaged.page}
+            pages={topicPaged.pages}
+            total={data.topics.length}
+            onChange={setTopicPage}
+            className="px-4"
+          />
+        </Card>
+      </div>
 
       {data.departments.length > 1 && (
         <Card className="mt-6">
@@ -598,82 +705,13 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         </Card>
       )}
 
-      <Card className="mt-6 overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-ink-100 px-4 py-3.5 lg:flex-row lg:items-center">
-          <div className="flex flex-wrap rounded-lg bg-ink-100/80 p-0.5">
-            {(
-              [
-                ['ALL', `All ${data.candidates.length}`],
-                ['SUBMITTED', `Submitted ${stats.submitted}`],
-                ['IN_PROGRESS', `Writing ${stats.inProgress}`],
-                ['NOT_STARTED', `Absent ${stats.notStarted}`],
-                ['FLAGGED', `Flagged ${stats.withViolations}`],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setFilter(v)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-[13px] font-medium transition',
-                  filter === v
-                    ? 'bg-white text-ink-900 shadow-xs'
-                    : 'text-ink-500 hover:text-ink-800',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="lg:ml-auto lg:w-72">
-            <Input
-              leading={<Search />}
-              placeholder="Search candidates"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9"
-            />
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-xs text-ink-500">
-                <th className="py-2.5 pr-3 pl-6 font-medium">Rank</th>
-                <th className="px-3 py-2.5 font-medium">Candidate</th>
-                <th className="px-3 py-2.5 font-medium">Department</th>
-                <th className="px-3 py-2.5 text-right font-medium">Score</th>
-                <th className="px-3 py-2.5 font-medium">Result</th>
-                <th className="px-3 py-2.5 font-medium">Time</th>
-                <th className="px-3 py-2.5 font-medium">Integrity</th>
-                <th className="py-2.5 pr-6 pl-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-100">
-              {candidates.map((c) => (
-                <CandidateTr
-                  key={c.userId}
-                  c={c}
-                  maxViolations={exam.maxViolations}
-                  onOpen={() => {
-                    const open = c.attemptId ?? c.reexam?.attemptId;
-                    if (open) setDetailId(open);
-                  }}
-                />
-              ))}
-            </tbody>
-          </table>
-          {!candidates.length && (
-            <p className="px-6 py-10 text-center text-sm text-ink-500">No candidates here.</p>
-          )}
-        </div>
-      </Card>
-
       <AttemptDialog
         examId={id}
         orgId={orgId}
         attemptId={detailId}
         viewOnly={viewOnly}
         examEnded={exam.state === 'ENDED'}
+        totalMarks={exam.totalMarks}
         onClose={() => setDetailId(null)}
         onChanged={() => void reload()}
       />
@@ -735,6 +773,15 @@ function CandidateTr({
           <>
             <b className="font-semibold text-ink-900">{c.percentage}%</b>
             <span className="ml-1.5 text-xs text-ink-400">{c.score}</span>
+            {c.adjusted && (
+              <span
+                className="mt-0.5 block text-[11px] font-medium text-amber-700"
+                title={c.adjusted.reason}
+              >
+                changed by faculty
+                {c.adjusted.calculated !== null ? ` (was ${c.adjusted.calculated})` : ''}
+              </span>
+            )}
           </>
         ) : (
           <span className="text-ink-300">—</span>
@@ -797,6 +844,7 @@ function AttemptDialog({
   attemptId: openId,
   viewOnly = false,
   examEnded = false,
+  totalMarks,
   onClose,
   onChanged,
 }: {
@@ -805,6 +853,7 @@ function AttemptDialog({
   attemptId: string | null;
   viewOnly?: boolean;
   examEnded?: boolean;
+  totalMarks: number;
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -841,7 +890,9 @@ function AttemptDialog({
               {[
                 [
                   'Score',
-                  data.candidate.percentage !== null ? `${data.candidate.percentage}%` : '—',
+                  data.candidate.percentage !== null
+                    ? `${data.candidate.score} / ${totalMarks} · ${data.candidate.percentage}%`
+                    : '—',
                 ],
                 ['Time', formatDuration(data.candidate.timeTakenSec)],
                 ['Violations', data.candidate.violationCount],
@@ -886,6 +937,47 @@ function AttemptDialog({
                 {data.voided.until &&
                   ` The fresh attempt is open until ${formatDateTime(data.voided.until)}.`}
               </div>
+            )}
+            {data.candidate.adjusted && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <b>Total changed by faculty</b>
+                {data.candidate.adjusted.calculated !== null &&
+                  ` from ${data.candidate.adjusted.calculated}`}{' '}
+                to <b>{data.candidate.adjusted.marks}</b> / {totalMarks}
+                {data.candidate.adjusted.at && ` on ${formatDateTime(data.candidate.adjusted.at)}`}
+                {data.candidate.adjusted.reason && ` — ${data.candidate.adjusted.reason}`}
+              </div>
+            )}
+            {!viewOnly && data.candidate.status === 'SUBMITTED' && !data.voided && (
+              <TotalForm
+                key={attemptId}
+                totalMarks={totalMarks}
+                current={data.candidate.score}
+                adjusted={Boolean(data.candidate.adjusted)}
+                onSave={async (body) => {
+                  try {
+                    await reload(
+                      await mutate<AttemptDetail>(
+                        `/exams/${examId}/attempts/${attemptId}/total`,
+                        'PUT',
+                        body,
+                        orgId,
+                      ),
+                      { revalidate: false },
+                    );
+                    onChanged?.();
+                    toast.success(
+                      body.marks === null
+                        ? 'Marked total put back'
+                        : `Total set to ${body.marks} / ${totalMarks}`,
+                    );
+                    return true;
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                    return false;
+                  }
+                }}
+              />
             )}
             {!viewOnly && data.candidate.status === 'SUBMITTED' && !data.voided && (
               <ReexamForm
@@ -1112,6 +1204,108 @@ function ReexamForm({
       <div className="flex gap-2">
         <Button type="submit" loading={busy} disabled={reason.trim().length < 3}>
           Give re-exam
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Faculty: set the student's final total by hand — reduce it or make it 0 (e.g. a proxy wrote
+ * the exam). The marked total is kept and can be put back.
+ */
+function TotalForm({
+  totalMarks,
+  current,
+  adjusted,
+  onSave,
+}: {
+  totalMarks: number;
+  current: number | null;
+  adjusted: boolean;
+  onSave: (body: { marks: number | null; reason?: string }) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [marks, setMarks] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const n = Number(marks);
+  const valid = marks.trim() !== '' && Number.isFinite(n) && n >= 0 && n <= totalMarks;
+
+  async function save(body: { marks: number | null; reason?: string }) {
+    setBusy(true);
+    const ok = await onSave(body);
+    setBusy(false);
+    if (ok) setOpen(false);
+  }
+
+  if (!open)
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setMarks(current !== null ? String(current) : '');
+            setReason('');
+            setOpen(true);
+          }}
+        >
+          <Pencil /> Change total marks
+        </Button>
+        {adjusted && (
+          <Button variant="ghost" loading={busy} onClick={() => void save({ marks: null })}>
+            <RotateCcw /> Put back marked total
+          </Button>
+        )}
+      </div>
+    );
+  return (
+    <form
+      className="space-y-3 rounded-xl border border-ink-200 bg-ink-50/60 p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid && reason.trim().length >= 3) void save({ marks: n, reason: reason.trim() });
+      }}
+    >
+      <div>
+        <p className="text-sm font-semibold text-ink-900">Change total marks</p>
+        <p className="text-[13px] text-ink-500">
+          For malpractice such as a proxy: reduce the total or make it 0. The score, result and rank
+          use this total. The marked answers are kept, and you can put the marked total back.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={totalMarks}
+          step="0.5"
+          value={marks}
+          onChange={(e) => setMarks(e.target.value)}
+          className="w-28"
+          autoFocus
+        />
+        <span className="text-sm text-ink-600">/ {totalMarks}</span>
+        <Button type="button" variant="destructive-outline" size="sm" onClick={() => setMarks('0')}>
+          Make it 0
+        </Button>
+      </div>
+      {marks.trim() !== '' && !valid && (
+        <p className="text-[13px] text-rose-700">Enter marks from 0 to {totalMarks}.</p>
+      )}
+      <Input
+        placeholder="Reason, e.g. Proxy - another person wrote the exam"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        maxLength={300}
+      />
+      <div className="flex gap-2">
+        <Button type="submit" loading={busy} disabled={!valid || reason.trim().length < 3}>
+          Save total
         </Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
           Cancel

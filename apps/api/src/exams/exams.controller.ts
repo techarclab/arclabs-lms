@@ -19,6 +19,7 @@ import {
   aiCheckSchema,
   grantReexamSchema,
   setMarksSchema,
+  setTotalSchema,
   checkCodingSchema,
   compileCheckSchema,
   createExamSchema,
@@ -26,6 +27,7 @@ import {
   type AiCheckInput,
   type GrantReexamInput,
   type SetMarksInput,
+  type SetTotalInput,
   type CheckCodingInput,
   type CompileCheckInput,
   type RunCodeInput,
@@ -445,6 +447,20 @@ export class ExamsController {
     await this.exams.assertAccess(org, u.id, id);
     await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
     return this.analytics.setMarks(u, org.organizationId, id, attemptId, body);
+  }
+
+  /** Faculty sets the final total of a submitted attempt (e.g. proxy → reduce or 0); null restores. */
+  @Put(':id/attempts/:attemptId/total')
+  async setTotal(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Param('attemptId', UuidPipe) attemptId: string,
+    @Body(new ZodValidationPipe(setTotalSchema)) body: SetTotalInput,
+  ) {
+    await this.exams.assertAccess(org, u.id, id);
+    await this.analytics.assertAttemptInDepartment(org.organizationId, attemptId, org.departmentId);
+    return this.analytics.setTotal(u, org.organizationId, id, attemptId, body);
   }
 
   @Post(':id/attempts/:attemptId/force-submit')

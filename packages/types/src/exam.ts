@@ -326,6 +326,17 @@ export interface CandidateRow {
   submittedAt: string | null;
   /** Set when faculty gave a re-exam: the earlier attempt is kept as a record but no longer counts. */
   reexam?: ReexamInfo | null;
+  /** Set when faculty changed the final total by hand (e.g. proxy). score/percentage already use it. */
+  adjusted?: TotalAdjustment | null;
+}
+
+export interface TotalAdjustment {
+  /** The total that counts now. */
+  marks: number;
+  /** The total the marking gave before the change. */
+  calculated: number | null;
+  reason: string;
+  at: string | null;
 }
 
 export interface ReexamInfo {

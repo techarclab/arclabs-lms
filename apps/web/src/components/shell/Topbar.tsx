@@ -1,6 +1,7 @@
 'use client';
 
-import { Bell, Menu, Search } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 import { OrgSwitcher } from './OrgSwitcher';
 import { UserMenu } from './UserMenu';
 
@@ -25,13 +26,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             Ctrl K
           </kbd>
         </button>
-        <button
-          className="relative rounded-lg p-2 text-ink-500 transition hover:bg-ink-100 hover:text-ink-800"
-          aria-label="Notifications"
-        >
-          <Bell className="size-5" strokeWidth={1.8} />
-          <span className="absolute top-2 right-2 size-2 rounded-full bg-brand-500 ring-2 ring-white" />
-        </button>
+        <NotificationBell />
         <div className="mx-1 h-6 w-px bg-ink-200" />
         <UserMenu />
       </div>

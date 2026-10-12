@@ -241,3 +241,19 @@ export function discriminationIndex(
   const rate = (g: typeof top) => g.filter((c) => c.correct).length / g.length;
   return round2(rate(top) - rate(bottom));
 }
+
+/**
+ * Applies a total set by hand by faculty (e.g. a proxy caught after the exam). The marked total
+ * is returned as calculatedScore so it can be shown and restored. Null = no override.
+ */
+export function withTotalOverride(
+  g: { score: number; maxScore: number; percentage: number; passed: boolean },
+  override: number | null,
+  passPct: number,
+) {
+  if (override === null)
+    return { score: g.score, percentage: g.percentage, passed: g.passed, calculatedScore: null };
+  const score = Math.min(Math.max(0, override), g.maxScore);
+  const percentage = g.maxScore ? round2((score / g.maxScore) * 100) : 0;
+  return { score, percentage, passed: percentage >= passPct, calculatedScore: g.score };
+}

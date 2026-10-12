@@ -143,6 +143,40 @@ describe('AI-marked coding questions and stopping an exam', () => {
     expect(cleared.body.review[0].marks).toBe(2.5);
   });
 
+  it('faculty can set the final total by hand (proxy) and put it back', async () => {
+    const url = `/exams/${examId}/attempts/${attempt1}/total`;
+    expect((await orgApi(app, viewer, orgA).put(url, { marks: 0, reason: 'Proxy' })).status).toBe(
+      403,
+    );
+    expect((await staff().put(url, { marks: 0 })).status).toBe(422); // a reason is required
+    expect((await staff().put(url, { marks: 11, reason: 'Too many' })).status).toBe(400);
+
+    const zero = await staff().put(url, { marks: 0, reason: 'Proxy - another person wrote it' });
+    expect(zero.status).toBe(200);
+    expect(zero.body.candidate).toMatchObject({ score: 0, percentage: 0, passed: false });
+    expect(zero.body.candidate.adjusted).toMatchObject({
+      marks: 0,
+      calculated: 2.5,
+      reason: 'Proxy - another person wrote it',
+    });
+    const results = await staff().get(`/exams/${examId}/analytics`);
+    const row = results.body.candidates.find(
+      (c: { attemptId: string }) => c.attemptId === attempt1,
+    );
+    expect(row).toMatchObject({ score: 0, adjusted: { marks: 0, calculated: 2.5 } });
+    const csv = await staff().get(`/exams/${examId}/results.csv`);
+    expect(csv.text).toContain('2.5 -> 0: Proxy - another person wrote it');
+
+    // re-marking keeps the hand-set total
+    await staff().put(`/exams/${examId}/attempts/${attempt1}/marks`, { questionId, marks: 8 });
+    const kept = await staff().get(`/exams/${examId}/attempts/${attempt1}`);
+    expect(kept.body.candidate).toMatchObject({ score: 0, adjusted: { calculated: 8 } });
+    await staff().put(`/exams/${examId}/attempts/${attempt1}/marks`, { questionId, marks: null });
+
+    const back = await staff().put(url, { marks: null });
+    expect(back.body.candidate).toMatchObject({ score: 2.5, adjusted: null });
+  });
+
   it('stopping the exam submits everyone still writing; coding is marked afterwards', async () => {
     fakeAi.down = true;
     const s = await me(l2).post(`/my/exams/${examId}/start`);
