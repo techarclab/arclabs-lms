@@ -19,6 +19,7 @@ import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamEngine, examState } from './exam-engine.service';
 import { ExamsService } from './exams.service';
+import { formatDistance } from './geofence';
 import {
   competitionRanks,
   discriminationIndex,
@@ -358,6 +359,15 @@ export class ExamAnalyticsService {
         submittedAt: a.submittedAt?.toISOString() ?? null,
         adjusted: adjustmentOf(a),
       },
+      location:
+        a.startLat !== null && a.startLng !== null
+          ? {
+              lat: a.startLat,
+              lng: a.startLng,
+              accuracyM: a.startAccuracyM,
+              distanceM: a.startDistanceM,
+            }
+          : null,
       reviewHidden,
       review: (reviewHidden ? [] : order).map(({ questionId }) => {
         const q = byId.get(questionId)!;
@@ -402,6 +412,7 @@ export class ExamAnalyticsService {
         type: e.type,
         counted: e.counted,
         occurredAt: e.occurredAt.toISOString(),
+        detail: eventDetail(e.type, e.meta),
       })),
       ipAddress: a.ipAddress,
       userAgent: a.userAgent,
@@ -786,4 +797,14 @@ function adjustmentOf(a: {
     reason: a.overrideReason ?? '',
     at: a.overrideAt?.toISOString() ?? null,
   };
+}
+
+/** Extra words for location events: "4.2 km from campus (±20 m)", "refused to start". */
+function eventDetail(type: string, meta: unknown): string | null {
+  if (type !== 'OUTSIDE_CAMPUS' || !meta || typeof meta !== 'object') return null;
+  const m = meta as { distanceM?: number; accuracyM?: number; refused?: boolean };
+  if (typeof m.distanceM !== 'number') return null;
+  return `${formatDistance(m.distanceM)} from campus${
+    typeof m.accuracyM === 'number' ? ` (±${formatDistance(m.accuracyM)})` : ''
+  }${m.refused ? ' — not allowed to continue' : ''}`;
 }

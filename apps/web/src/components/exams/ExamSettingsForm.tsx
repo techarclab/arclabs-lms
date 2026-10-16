@@ -8,13 +8,15 @@ import {
   Eye,
   EyeOff,
   Lock,
+  MapPin,
   Maximize,
   ShieldAlert,
   Shuffle,
   TimerReset,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ExamDetail, ResultVisibilityName } from '@arc/types';
+import type { CampusSettings, ExamDetail, ResultVisibilityName } from '@arc/types';
+import Link from 'next/link';
 import {
   Button,
   Card,
@@ -30,7 +32,7 @@ import {
   Textarea,
 } from '@arc/ui';
 import { toLocalInput } from '@/lib/format';
-import { useApiMutation } from '@/lib/use-api';
+import { useApi, useApiMutation } from '@/lib/use-api';
 
 const RESULT_OPTIONS: {
   value: ResultVisibilityName;
@@ -68,6 +70,8 @@ export function ExamSettingsForm({
   onSaved: (e: ExamDetail) => void;
 }) {
   const mutate = useApiMutation();
+  const { data: campus } = useApi<CampusSettings>('/campus', { orgId });
+  const campusSet = campus?.lat != null && campus?.lng != null;
   const locked = exam.state !== 'DRAFT';
   const [s, setS] = useState(() => fromExam(exam));
   const [busy, setBusy] = useState(false);
@@ -83,6 +87,7 @@ export function ExamSettingsForm({
           instructions: s.instructions,
           resultVisibility: s.resultVisibility,
           endsAt: s.endsAt ? new Date(s.endsAt).toISOString() : null,
+          requireOnCampus: s.requireOnCampus,
         }
       : {
           title: s.title,
@@ -100,6 +105,7 @@ export function ExamSettingsForm({
           blockCopyPaste: s.blockCopyPaste,
           maxViolations: s.strict ? 1 : Number(s.maxViolations),
           requireCamera: s.requireCamera,
+          requireOnCampus: s.requireOnCampus,
         };
     setBusy(true);
     try {
@@ -308,6 +314,26 @@ export function ExamSettingsForm({
             onCheckedChange={(v) => set('requireCamera', v)}
             disabled={locked}
           />
+          <SwitchRow
+            icon={<MapPin />}
+            label="Students must be on campus"
+            description={
+              campusSet
+                ? `Students can start only within ${campus!.radiusM} m of the college${campus!.address ? ` (${campus!.address})` : ''}; their browser asks for location. Leaving the campus during the exam counts as a violation. You can switch this off any time, even after publishing.`
+                : 'Students can start only on the college campus (their browser asks for location). Set the campus location first.'
+            }
+            checked={s.requireOnCampus}
+            onCheckedChange={(v) => set('requireOnCampus', v)}
+          />
+          {s.requireOnCampus && campus && !campusSet && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+              No campus location is set for this college yet.{' '}
+              <Link href="/users#campus" className="font-medium underline">
+                Set it on the People page
+              </Link>{' '}
+              (college admins), then publish.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -373,6 +399,7 @@ function fromExam(e: ExamDetail) {
     strict: e.maxViolations === 1,
     maxViolations: String(e.maxViolations === 1 ? 3 : e.maxViolations),
     requireCamera: e.requireCamera,
+    requireOnCampus: e.requireOnCampus,
   };
 }
 

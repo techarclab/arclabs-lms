@@ -469,6 +469,12 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
                 <ShieldCheck className="size-4 text-brand-600" />{' '}
                 {exam.requireCamera ? 'Camera on (not recorded)' : 'No camera'}
               </p>
+              {exam.requireOnCampus && (
+                <p className="flex items-center gap-2">
+                  <ShieldCheck className="size-4 text-brand-600" /> On campus only (location
+                  checked)
+                </p>
+              )}
               <p className="flex items-center gap-2">
                 <ShieldCheck className="size-4 text-brand-600" />{' '}
                 {exam.blockCopyPaste ? 'Copy / paste blocked' : 'Copy / paste allowed'}

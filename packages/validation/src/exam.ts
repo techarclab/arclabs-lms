@@ -282,6 +282,8 @@ export const examSettingsSchema = z.object({
   blockCopyPaste: z.boolean(),
   maxViolations: z.coerce.number().int().min(0).max(50),
   requireCamera: z.boolean(),
+  /** Students must be within the college's campus radius (geofence) to start and keep writing. */
+  requireOnCampus: z.boolean(),
 });
 
 export const createExamSchema = examSettingsSchema.partial().extend({
@@ -357,6 +359,31 @@ export const proctorEventSchema = z.object({
 });
 export type ProctorEventInput = z.infer<typeof proctorEventSchema>;
 
+/** The student's position from the browser (Geolocation API). */
+export const geoPositionSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  /** Metres (the browser's own estimate). */
+  accuracy: z.number().min(0).max(1_000_000),
+});
+export type GeoPosition = z.infer<typeof geoPositionSchema>;
+
+/** Body of POST /my/exams/:id/start (location only for on-campus exams). */
+export const startAttemptSchema = z
+  .object({ location: geoPositionSchema.optional() })
+  .optional()
+  .default({});
+
+/** Body of the heartbeat: the latest location, or why there is none. */
+export const heartbeatSchema = z
+  .object({
+    location: geoPositionSchema.nullable().optional(),
+    locationError: z.enum(['DENIED', 'UNAVAILABLE', 'TIMEOUT']).optional(),
+  })
+  .optional()
+  .default({});
+export type HeartbeatInput = z.infer<typeof heartbeatSchema>;
+
 /** Student "Run" during the exam: sample test cases, or their own input. */
 export const runCodeSchema = z.object({
   questionId: z.uuid(),
@@ -430,3 +457,16 @@ export const grantReexamSchema = z.object({
   until: z.coerce.date().nullable().optional(),
 });
 export type GrantReexamInput = z.infer<typeof grantReexamSchema>;
+
+/** College admins: where the campus is, for on-campus exams. null lat/lng removes it. */
+export const campusSettingsSchema = z.object({
+  address: z.string().trim().max(300).optional().nullable(),
+  lat: z.number().min(-90).max(90).nullable(),
+  lng: z.number().min(-180).max(180).nullable(),
+  radiusM: z.coerce.number().int().min(50, 'At least 50 m').max(5000, 'At most 5000 m (5 km)'),
+});
+export type CampusSettingsInput = z.infer<typeof campusSettingsSchema>;
+
+export const geocodeQuerySchema = z.object({
+  q: z.string().trim().min(3, 'Type at least 3 letters').max(300),
+});

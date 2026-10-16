@@ -20,10 +20,12 @@ import {
   ShieldAlert,
   ScanFace,
   Timer,
+  MapPin,
 } from 'lucide-react';
 import type {
   AttemptSession,
   CodeLanguageName,
+  HeartbeatResult,
   ProctorEventResult,
   RunCodeResponse,
 } from '@arc/types';
@@ -37,6 +39,7 @@ import { COUNTED_ISSUES, ISSUE_MESSAGE, useProctorAi, type CameraIssue } from '.
 import { CameraAiNumbers, CameraAiStatus, cameraCheckEnabled } from './CameraAiStatus';
 import { CodingAnswer } from './code/CodingAnswer';
 import { enterFullscreen, exitFullscreen, useLockdown, type LockdownEvent } from './useLockdown';
+import { useLocation } from './location';
 
 type SaveState = 'saved' | 'saving' | 'offline';
 const CLOSED_CODES = new Set(['ATTEMPT_CLOSED', 'TIME_UP', 'AUTO_SUBMITTED']);
@@ -79,8 +82,9 @@ export function ExamRunner({
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [violations, setViolations] = useState(initial.violationCount);
   const [warning, setWarning] = useState<{
-    type: LockdownEvent | CameraIssue;
+    type: LockdownEvent | CameraIssue | 'OUTSIDE_CAMPUS';
     remaining: number | null;
+    distanceM?: number;
   } | null>(null);
   const [inFullscreen, setInFullscreen] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -210,22 +214,63 @@ export function ExamRunner({
     return () => clearInterval(t);
   }, [finish]);
 
+  // On-campus exams: the latest location goes with every heartbeat; the server checks it.
+  const location = useLocation({ autoStart: session.requireOnCampus });
+  const locationState = useRef(location.state);
+  locationState.current = location.state;
+  const { fresh: freshLocation } = location;
   useEffect(() => {
     const beat = async () => {
       try {
-        const r = await call<{ serverNow: string; deadlineAt: string; violationCount: number }>(
+        const pos = session.requireOnCampus ? freshLocation() : null;
+        const ls = locationState.current;
+        const r = await call<HeartbeatResult>(
           `/my/attempts/${session.attemptId}/heartbeat`,
+          !session.requireOnCampus
+            ? {}
+            : pos
+              ? { location: { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy } }
+              : ls === 'denied'
+                ? { locationError: 'DENIED' }
+                : ls === 'timeout'
+                  ? { locationError: 'TIMEOUT' }
+                  : ls === 'unavailable'
+                    ? { locationError: 'UNAVAILABLE' }
+                    : {},
         );
         offset.current = new Date(r.serverNow).getTime() - Date.now();
         deadline.current = new Date(r.deadlineAt).getTime();
-        setViolations(r.violationCount);
+        if (r.autoSubmitted) {
+          void finish('violations');
+          return;
+        }
+        setViolations((prev) => {
+          if (r.outsideCampus && r.violationCount > prev)
+            setWarning({
+              type: 'OUTSIDE_CAMPUS',
+              remaining:
+                session.maxViolations > 0
+                  ? Math.max(0, session.maxViolations - r.violationCount)
+                  : null,
+              distanceM: r.outsideCampus.distanceM,
+            });
+          return r.violationCount;
+        });
       } catch (e) {
         handleError(e);
       }
     };
     const t = setInterval(beat, 15_000);
     return () => clearInterval(t);
-  }, [call, handleError, session.attemptId]);
+  }, [
+    call,
+    finish,
+    freshLocation,
+    handleError,
+    session.attemptId,
+    session.maxViolations,
+    session.requireOnCampus,
+  ]);
 
   // ───────── Lockdown ─────────
   const onEvent = useCallback(
@@ -710,6 +755,32 @@ export function ExamRunner({
         </div>
       )}
 
+      {session.requireOnCampus &&
+        ['denied', 'unavailable', 'timeout'].includes(location.state) &&
+        !cameraAi.warning && (
+          <div className="fixed inset-x-0 top-20 z-40 flex justify-center px-4">
+            <div className="flex items-center gap-3 rounded-2xl bg-amber-500 px-5 py-3 text-amber-950 shadow-2xl shadow-amber-900/20">
+              <MapPin className="size-6 shrink-0" />
+              <div>
+                <p className="text-[15px] font-semibold">
+                  {location.state === 'denied'
+                    ? 'Location is turned off for this exam'
+                    : 'Your location can’t be found'}
+                </p>
+                <p className="text-xs">
+                  This exam is on campus only. Turn location back on — this is recorded for your
+                  instructor.
+                </p>
+              </div>
+              {location.state !== 'denied' && (
+                <Button size="sm" variant="secondary" onClick={location.start}>
+                  Retry
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
       {/* Camera gate */}
       {cameraBlocked && (inFullscreen || !session.requireFullscreen) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 p-6 backdrop-blur-xl">
@@ -742,9 +813,11 @@ export function ExamRunner({
                     ? 'A second screen was detected. Disconnect it — only one screen is allowed.'
                     : warning?.type === 'AI_EXTENSION'
                       ? 'A browser extension (such as an AI assistant) was detected on the exam page. AI help is not allowed.'
-                      : warning && warning.type in ISSUE_MESSAGE
-                        ? `Camera check: ${ISSUE_MESSAGE[warning.type as CameraIssue]} A photo was saved.`
-                        : 'An exam rule was broken.'}{' '}
+                      : warning?.type === 'OUTSIDE_CAMPUS'
+                        ? `Your location is outside the college campus${warning.distanceM ? ` (about ${warning.distanceM < 1000 ? `${warning.distanceM} m` : `${(warning.distanceM / 1000).toFixed(1)} km`} away)` : ''}. This exam must be written on campus.`
+                        : warning && warning.type in ISSUE_MESSAGE
+                          ? `Camera check: ${ISSUE_MESSAGE[warning.type as CameraIssue]} A photo was saved.`
+                          : 'An exam rule was broken.'}{' '}
               This has been recorded and is visible to your instructor.
             </p>
             {warning?.remaining !== null && warning?.remaining !== undefined && (

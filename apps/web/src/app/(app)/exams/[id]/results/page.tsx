@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   Gauge,
+  MapPin,
   Pencil,
   RotateCcw,
   Search,
@@ -82,6 +83,8 @@ const EVENT_LABEL: Record<string, string> = {
   LOOKING_AWAY: 'Looking away from screen',
   PHONE_DETECTED: 'Phone in camera',
   SHORTCUT: 'Tried a blocked shortcut',
+  OUTSIDE_CAMPUS: 'Outside the campus',
+  LOCATION_OFF: 'Location turned off / not found',
 };
 
 function Results({ id, orgId }: { id: string; orgId: string }) {
@@ -1034,6 +1037,9 @@ function AttemptDialog({
                       />
                       <span className={e.counted ? 'font-medium text-rose-700' : 'text-ink-600'}>
                         {EVENT_LABEL[e.type] ?? e.type}
+                        {e.detail && (
+                          <span className="ml-1.5 font-normal text-ink-500">· {e.detail}</span>
+                        )}
                       </span>
                       <span className="ml-auto text-xs text-ink-400">
                         {new Date(e.occurredAt).toLocaleTimeString('en-IN')}
@@ -1085,6 +1091,24 @@ function AttemptDialog({
                     />
                   )}
                 </div>
+              )}
+              {data.location && (
+                <p className="mt-3 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-600">
+                  <MapPin className="size-3.5 text-emerald-600" />
+                  Started on campus
+                  {data.location.distanceM !== null &&
+                    ` · ${Math.round(data.location.distanceM)} m from the centre`}
+                  {data.location.accuracyM !== null &&
+                    ` (±${Math.round(data.location.accuracyM)} m)`}
+                  <a
+                    href={`https://www.google.com/maps?q=${data.location.lat},${data.location.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand-700 hover:underline"
+                  >
+                    · map
+                  </a>
+                </p>
               )}
               <p className="mt-3 text-xs text-ink-400">
                 Started {formatDateTime(data.startedAt)} · IP {data.ipAddress ?? '—'} ·{' '}

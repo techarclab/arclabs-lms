@@ -12,6 +12,7 @@ import { JoinModule } from './join/join.module';
 import { QueueModule } from './mail/queue.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { CampusModule } from './campus/campus.module';
 import { LabsModule } from './labs/labs.module';
 import { MaterialsModule } from './materials/materials.module';
 import { MembersModule } from './members/members.module';
@@ -40,6 +41,7 @@ import { StorageModule } from './storage/storage.module';
     LabsModule,
     AnnouncementsModule,
     NotificationsModule,
+    CampusModule,
   ],
 })
 export class AppModule {}

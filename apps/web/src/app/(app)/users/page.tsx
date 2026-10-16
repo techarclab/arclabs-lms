@@ -27,6 +27,7 @@ import {
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AccessCodeCard } from '@/components/join/AccessCodeCard';
 import { JoinLinkCard } from '@/components/join/JoinLinkCard';
+import { CampusLocationCard } from '@/components/campus/CampusLocationCard';
 import { DepartmentsCard } from '@/components/members/DepartmentsCard';
 import { MembersPanel } from '@/components/members/MembersPanel';
 import { ROLE_OPTIONS } from '@/components/members/shared';
@@ -178,6 +179,7 @@ export default function UsersPage() {
         <div className="grid items-start gap-6 md:grid-cols-2 2xl:grid-cols-1">
           {canManage && <JoinLinkCard orgId={current.id} orgName={current.name} />}
           {canManage && <AccessCodeCard orgId={current.id} orgName={current.name} />}
+          {canManage && <CampusLocationCard orgId={current.id} />}
           <Card>
             <CardHeader>
               <div>

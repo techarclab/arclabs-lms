@@ -42,6 +42,7 @@ import {
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AccessCodeCard } from '@/components/join/AccessCodeCard';
 import { JoinLinkCard } from '@/components/join/JoinLinkCard';
+import { CampusLocationCard } from '@/components/campus/CampusLocationCard';
 import { MembersPanel } from '@/components/members/MembersPanel';
 import { BRAND_SWATCHES } from '@/components/organizations/CreateOrganizationDialog';
 import { StatusBadge, TypeBadge } from '@/components/organizations/OrgBadges';
@@ -332,6 +333,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
             <div className="grid items-start gap-6 lg:grid-cols-2">
               <JoinLinkCard orgId={org.id} orgName={org.name} />
               <AccessCodeCard orgId={org.id} orgName={org.name} />
+              <CampusLocationCard orgId={org.id} />
             </div>
             <MembersPanel
               orgId={org.id}

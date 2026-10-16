@@ -147,6 +147,7 @@ export interface ExamSettings {
   blockCopyPaste: boolean;
   maxViolations: number;
   requireCamera: boolean;
+  requireOnCampus: boolean;
 }
 
 export interface ExamSummary extends ExamSettings {
@@ -211,6 +212,8 @@ export interface ExamLobby extends MyExamItem {
   requireCamera: boolean;
   resultVisibility: ResultVisibilityName;
   serverNow: string;
+  /** Set when the exam must be written on campus. */
+  campus: { radiusM: number; address: string | null } | null;
 }
 
 /** A question as delivered to a student — no answer key. */
@@ -238,8 +241,33 @@ export interface AttemptSession {
   requireFullscreen: boolean;
   blockCopyPaste: boolean;
   requireCamera: boolean;
+  /** Location is checked during the exam (geofence). */
+  requireOnCampus: boolean;
   negativeMarking: boolean;
   resumed: boolean;
+}
+
+export interface HeartbeatResult {
+  serverNow: string;
+  deadlineAt: string;
+  violationCount: number;
+  /** On-campus exams: set when the latest location is outside the campus radius. */
+  outsideCampus: { distanceM: number; radiusM: number } | null;
+  autoSubmitted: boolean;
+}
+
+/** The campus of a college, for on-campus exams. */
+export interface CampusSettings {
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  radiusM: number;
+}
+
+export interface GeocodeResult {
+  label: string;
+  lat: number;
+  lng: number;
 }
 
 export interface ProctorEventResult {
@@ -397,13 +425,15 @@ export interface AttemptDetail {
   candidate: CandidateRow;
   reviewHidden: boolean;
   review: ReviewItem[];
-  events: { type: string; counted: boolean; occurredAt: string }[];
+  events: { type: string; counted: boolean; occurredAt: string; detail?: string | null }[];
   ipAddress: string | null;
   userAgent: string | null;
   startedAt: string;
   deadlineAt: string | null;
   /** This attempt was set aside for a re-exam. */
   voided: { at: string; reason: string; until: string | null } | null;
+  /** On-campus exams: where the student started. */
+  location: { lat: number; lng: number; accuracyM: number | null; distanceM: number | null } | null;
   /** All of this student's attempts at the exam, newest first (to switch between them). */
   attempts: {
     id: string;

@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   Copy,
   FileQuestion,
+  MapPin,
   Maximize,
   ShieldAlert,
   Timer,
@@ -28,6 +29,7 @@ import { CameraView, useCamera } from './camera';
 import { useProctorAi } from './proctor-ai';
 import { CameraAiNumbers, cameraCheckEnabled } from './CameraAiStatus';
 import { findInjectedElements, hasExtraScreens } from './integrity';
+import { accuracyText, useLocation, type LivePosition } from './location';
 
 export function ExamLobby({
   lobby,
@@ -36,7 +38,8 @@ export function ExamLobby({
   error,
 }: {
   lobby: Lobby;
-  onStart: () => void;
+  /** On-campus exams pass the student's current position. */
+  onStart: (location?: LivePosition) => void;
   starting: boolean;
   error: string | null;
 }) {
@@ -81,6 +84,11 @@ export function ExamLobby({
     return () => clearInterval(t);
   }, [canTake, leftStrict]);
   const integrityOk = !extraScreen && injected.length === 0;
+  // On-campus exams: the browser's location is checked by the server when the exam starts.
+  const campus = lobby.campus;
+  const location = useLocation({ autoStart: Boolean(campus) && canTake && !leftStrict });
+  const locationReady = !campus || location.state === 'on';
+  const begin = () => onStart(campus ? (location.fresh() ?? undefined) : undefined);
   const attemptsLeft = lobby.maxAttempts - lobby.attemptsUsed;
 
   return (
@@ -199,6 +207,13 @@ export function ExamLobby({
                       the whole exam.
                     </li>
                   )}
+                  {campus && (
+                    <li className="flex gap-2 font-semibold">
+                      <MapPin className="mt-0.5 size-3.5 shrink-0" /> This exam must be written on
+                      campus{campus.address ? ` (${campus.address})` : ''}. Your location is checked
+                      when you start and during the exam; leaving the campus counts as a violation.
+                    </li>
+                  )}
                   {lobby.requireCamera && (
                     <li className="flex gap-2">
                       <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
@@ -270,6 +285,41 @@ export function ExamLobby({
                 </div>
               )}
 
+              {canTake && !leftStrict && campus && (
+                <div className="rounded-2xl border border-ink-200 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                    <MapPin className="size-4 text-brand-600" /> Location check
+                  </p>
+                  <p
+                    className={cn(
+                      'mt-3 rounded-lg px-3 py-2 text-[12.5px] font-medium',
+                      location.state === 'on'
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : location.state === 'requesting' || location.state === 'idle'
+                          ? 'bg-ink-50 text-ink-600'
+                          : 'bg-rose-50 text-rose-800',
+                    )}
+                  >
+                    {location.state === 'on' && location.position
+                      ? `Location found (${accuracyText(location.position.accuracy)}). It is checked against the campus when you start.`
+                      : location.state === 'denied'
+                        ? 'Location is blocked. Click the lock (or location) icon at the left of the address bar → Location → Allow, then press “Share my location”.'
+                        : location.state === 'unavailable' || location.state === 'timeout'
+                          ? 'Couldn’t find your location. Turn on Wi-Fi and location (Windows: Settings → Privacy → Location), then press “Share my location”.'
+                          : 'Finding your location… allow it when the browser asks.'}
+                  </p>
+                  {location.state !== 'on' && location.state !== 'requesting' && (
+                    <Button variant="secondary" className="mt-3 w-full" onClick={location.start}>
+                      <MapPin /> Share my location
+                    </Button>
+                  )}
+                  <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
+                    You must be within {campus.radiusM} m of the college. Laptops find their
+                    location through Wi-Fi, so keep Wi-Fi on.
+                  </p>
+                </div>
+              )}
+
               {canTake && !leftStrict && !integrityOk && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
@@ -310,7 +360,7 @@ export function ExamLobby({
                     it is submitted with the answers you had saved.
                   </p>
                   {error && <p className="mt-2 text-[13px] text-rose-700">{error}</p>}
-                  <Button className="mt-4 w-full" loading={starting} onClick={onStart}>
+                  <Button className="mt-4 w-full" loading={starting} onClick={() => onStart()}>
                     See my result
                   </Button>
                 </div>
@@ -333,9 +383,9 @@ export function ExamLobby({
                   <Button
                     size="lg"
                     className="w-full"
-                    disabled={!agree || !cameraReady || !integrityOk}
+                    disabled={!agree || !cameraReady || !integrityOk || !locationReady}
                     loading={starting}
-                    onClick={onStart}
+                    onClick={begin}
                   >
                     {resuming ? 'Resume exam' : 'Start exam'}
                   </Button>
@@ -346,9 +396,11 @@ export function ExamLobby({
                         : 'Turn on your camera to start.'
                       : !integrityOk
                         ? 'Fix the problems above to start.'
-                        : resuming
-                          ? 'Your timer kept running while you were away.'
-                          : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
+                        : !locationReady
+                          ? 'Share your location to start (this exam is on campus only).'
+                          : resuming
+                            ? 'Your timer kept running while you were away.'
+                            : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
                   </p>
                 </>
               ) : (

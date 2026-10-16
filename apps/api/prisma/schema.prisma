@@ -141,6 +141,8 @@ enum ProctorEventType {
   MULTIPLE_FACES // camera AI: someone else in view
   LOOKING_AWAY // camera AI: head/eyes turned away from the screen
   PHONE_DETECTED // camera AI: a phone in view
+  OUTSIDE_CAMPUS // location: outside the college's campus radius
+  LOCATION_OFF // location: the browser stopped sharing location
 }
 
 enum AttemptStatus {
@@ -191,6 +193,11 @@ model Organization {
   accessCodeCreatedAt DateTime?
   /// Students register with an email on one of these domains (e.g. mrec.edu.in). Empty = any.
   collegeEmailDomains String[]  @default([])
+  /// Campus location for exams that must be written on campus (geofence).
+  campusAddress  String?
+  campusLat      Float?
+  campusLng      Float?
+  campusRadiusM  Int       @default(300)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -607,6 +614,7 @@ model Quiz {
   blockCopyPaste    Boolean @default(true)
   maxViolations     Int     @default(3) // auto-submit when reached; 0 = never; 1 = leaving submits
   requireCamera     Boolean @default(true) // live camera preview on the student's screen; never recorded
+  requireOnCampus   Boolean @default(false) // students must be within the college's campus radius
   assignToAll       Boolean @default(false) // every active learner in the organization
   status           ContentStatus    @default(DRAFT)
   publishedAt      DateTime?
@@ -719,6 +727,11 @@ model QuizAttempt {
   voidReason     String?
   voidedById     String?       @db.Uuid
   reexamUntil    DateTime? // the fresh attempt may start until then (even after the exam closed)
+  // Where the student was when they started (exams with requireOnCampus).
+  startLat       Float?
+  startLng       Float?
+  startAccuracyM Float?
+  startDistanceM Float? // metres from the campus centre
   // Faculty set the final total by hand (e.g. proxy / malpractice): score, % and pass use it.
   totalOverride  Decimal?      @db.Decimal(7, 2)
   calculatedScore Decimal?     @db.Decimal(7, 2) // the marked total before the override

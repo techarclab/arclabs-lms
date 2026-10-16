@@ -163,7 +163,14 @@ export class ExamsService {
         departments: exam.audiences.flatMap((a) => (a.department ? [a.department] : [])),
         users: exam.audiences.flatMap((a) => (a.user ? [a.user] : [])),
       },
-      publishIssues: this.publishIssues(exam, summary),
+      publishIssues: [
+        ...this.publishIssues(exam, summary),
+        ...(exam.requireOnCampus && !(await this.hasCampus(orgId))
+          ? [
+              'Set the college’s campus location (People → Campus location), or turn off “Students must be on campus”',
+            ]
+          : []),
+      ],
       editable: exam.status === 'DRAFT' && attempts === 0,
     };
   }
@@ -195,6 +202,7 @@ export class ExamsService {
       blockCopyPaste: exam.blockCopyPaste,
       maxViolations: exam.maxViolations,
       requireCamera: exam.requireCamera,
+      requireOnCampus: exam.requireOnCampus,
       state: examState(exam),
       questionCount: exam.questions.length,
       totalMarks: exam.questions.reduce((s, q) => s + q.question.points, 0),
@@ -207,6 +215,14 @@ export class ExamsService {
       resultsReleasedAt: exam.resultsReleasedAt?.toISOString() ?? null,
       createdAt: exam.createdAt.toISOString(),
     };
+  }
+
+  private async hasCampus(orgId: string) {
+    const o = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { campusLat: true, campusLng: true },
+    });
+    return o?.campusLat != null && o?.campusLng != null;
   }
 
   private publishIssues(exam: ExamRow, s: ExamSummary): string[] {
@@ -255,6 +271,7 @@ export class ExamsService {
         // Strict by default: leaving the exam (full screen, tab, window) submits it.
         maxViolations: input.maxViolations ?? 1,
         requireCamera: input.requireCamera ?? true,
+        requireOnCampus: input.requireOnCampus ?? false,
       },
     });
     await this.audit.log({
@@ -274,7 +291,14 @@ export class ExamsService {
     const locked = exam.status === 'PUBLISHED' || attempts > 0;
     if (locked) {
       // Once published only wording, results policy and extending the close time are allowed.
-      const allowed = new Set(['title', 'instructions', 'resultVisibility', 'endsAt']);
+      // The campus check can be switched on or off any time (e.g. off if campus Wi-Fi location fails).
+      const allowed = new Set([
+        'title',
+        'instructions',
+        'resultVisibility',
+        'endsAt',
+        'requireOnCampus',
+      ]);
       const blocked = Object.keys(input).filter((k) => !allowed.has(k));
       if (blocked.length) {
         throw new ConflictException({

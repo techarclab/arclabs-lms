@@ -20,6 +20,8 @@ import {
   grantReexamSchema,
   setMarksSchema,
   setTotalSchema,
+  startAttemptSchema,
+  heartbeatSchema,
   checkCodingSchema,
   compileCheckSchema,
   createExamSchema,
@@ -28,6 +30,8 @@ import {
   type GrantReexamInput,
   type SetMarksInput,
   type SetTotalInput,
+  type GeoPosition,
+  type HeartbeatInput,
   type CheckCodingInput,
   type CompileCheckInput,
   type RunCodeInput,
@@ -518,10 +522,16 @@ export class MyExamsController {
 
   @Post('exams/:id/start')
   @HttpCode(200)
-  start(@CurrentUser() u: User, @Param('id', UuidPipe) id: string, @Req() req: Request) {
+  start(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(startAttemptSchema)) body: { location?: GeoPosition },
+  ) {
     return this.attempts.start(u, id, {
       ip: req.ip,
       userAgent: req.header('user-agent')?.slice(0, 300),
+      location: body?.location,
     });
   }
 
@@ -543,8 +553,9 @@ export class MyExamsController {
     @CurrentUser() u: User,
     @Param('id', UuidPipe) id: string,
     @Headers('x-attempt-session') session: string | undefined,
+    @Body(new ZodValidationPipe(heartbeatSchema)) body: HeartbeatInput,
   ) {
-    return this.attempts.heartbeat(u, id, session);
+    return this.attempts.heartbeat(u, id, session, body);
   }
 
   @Post('attempts/:id/events')

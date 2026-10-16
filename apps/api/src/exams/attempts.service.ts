@@ -14,6 +14,7 @@ import type {
   DeliveredQuestion,
   ExamLobby,
   ExamState,
+  HeartbeatResult,
   MyExamItem,
   ProctorEventResult,
   QuestionOption,
@@ -23,11 +24,14 @@ import type {
 } from '@arc/types';
 import {
   outputsMatch,
+  type GeoPosition,
+  type HeartbeatInput,
   type ProctorEventInput,
   type RunCodeInput,
   type SaveAnswerInput,
 } from '@arc/validation';
 import { ExpectedOutputs } from './expected-outputs';
+import { checkGeofence, formatDistance, type Campus } from './geofence';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -53,6 +57,7 @@ import {
  * never took effect, and a stray F12 on a laptop shouldn't end a strict exam.
  */
 const COUNTED = new Set([
+  'OUTSIDE_CAMPUS',
   'FULLSCREEN_EXIT',
   'TAB_HIDDEN',
   'WINDOW_BLUR',
@@ -71,6 +76,8 @@ const CAMERA_EVENTS = new Set(['FACE_MISSING', 'MULTIPLE_FACES', 'LOOKING_AWAY',
 const MAX_SNAPSHOTS = 30;
 /** A blur and a tab-hide usually fire together; count at most one violation per this many ms. */
 const VIOLATION_DEBOUNCE_MS = 2500;
+/** Leaving the campus is reported at most once per this many ms (the heartbeat runs every 15 s). */
+const LOCATION_EVENT_GAP_MS = 5 * 60_000;
 /** A session seen this recently is considered "still open" when another device starts. */
 const LIVE_SESSION_MS = 20_000;
 
@@ -162,6 +169,7 @@ export class AttemptsService {
       requireCamera: exam.requireCamera,
       resultVisibility: exam.resultVisibility,
       serverNow: new Date().toISOString(),
+      campus: await this.campusInfo(exam),
     };
   }
 
@@ -220,7 +228,7 @@ export class AttemptsService {
   async start(
     user: User,
     examId: string,
-    meta: { ip?: string; userAgent?: string },
+    meta: { ip?: string; userAgent?: string; location?: GeoPosition },
   ): Promise<AttemptSession> {
     const exam = await this.assignedExam(user, examId);
     const mine = await this.prisma.quizAttempt.findMany({
@@ -243,6 +251,8 @@ export class AttemptsService {
     const existing = await this.prisma.quizAttempt.findFirst({
       where: { quizId: examId, userId: user.id, status: 'IN_PROGRESS' },
     });
+    // On-campus exams: starting (or coming back) only from within the campus radius.
+    const where = await this.assertOnCampus(exam, meta.location, existing?.id);
 
     if (existing) {
       const takeover =
@@ -257,6 +267,7 @@ export class AttemptsService {
           lastSeenAt: now,
           ipAddress: meta.ip,
           userAgent: meta.userAgent,
+          ...(where && existing.startLat === null ? where : {}),
           ...(counts ? { violationCount: { increment: 1 } } : {}),
           events: {
             create: {
@@ -322,6 +333,7 @@ export class AttemptsService {
           lastSeenAt: now,
           ipAddress: meta.ip,
           userAgent: meta.userAgent,
+          ...(where ?? {}),
         },
       });
       return this.session(exam, attempt.id, sessionId, false);
@@ -397,6 +409,7 @@ export class AttemptsService {
       requireFullscreen: exam.requireFullscreen,
       blockCopyPaste: exam.blockCopyPaste,
       requireCamera: exam.requireCamera,
+      requireOnCampus: Boolean(await this.campusOf(exam)),
       negativeMarking: exam.negativeMarking,
       resumed,
     };
@@ -545,14 +558,145 @@ export class AttemptsService {
     }
   }
 
-  async heartbeat(user: User, attemptId: string, sessionId: string | undefined) {
+  async heartbeat(
+    user: User,
+    attemptId: string,
+    sessionId: string | undefined,
+    input: HeartbeatInput = {},
+  ): Promise<HeartbeatResult> {
     const attempt = await this.liveAttempt(user, attemptId, sessionId);
     const now = new Date();
     await this.prisma.quizAttempt.update({ where: { id: attemptId }, data: { lastSeenAt: now } });
-    return {
+    const result: HeartbeatResult = {
       serverNow: now.toISOString(),
       deadlineAt: attempt.deadlineAt!.toISOString(),
       violationCount: attempt.violationCount,
+      outsideCampus: null,
+      autoSubmitted: false,
+    };
+    const exam = await this.prisma.quiz.findUniqueOrThrow({
+      where: { id: attempt.quizId },
+      select: { organizationId: true, requireOnCampus: true },
+    });
+    const campus = await this.campusOf(exam);
+    if (!campus) return result;
+    const since = new Date(now.getTime() - LOCATION_EVENT_GAP_MS);
+    const recently = (type: 'OUTSIDE_CAMPUS' | 'LOCATION_OFF') =>
+      this.prisma.proctorEvent.findFirst({ where: { attemptId, type, occurredAt: { gt: since } } });
+
+    if (input.location) {
+      const v = checkGeofence(campus, input.location);
+      // A rough fix far away is not proof of leaving; only a clear "outside" counts.
+      if (!v.inside && v.reason === 'OFF_CAMPUS') {
+        result.outsideCampus = { distanceM: v.distanceM, radiusM: campus.radiusM };
+        if (!(await recently('OUTSIDE_CAMPUS'))) {
+          const r = await this.recordEvent(user, attemptId, sessionId, {
+            type: 'OUTSIDE_CAMPUS',
+            meta: {
+              distanceM: v.distanceM,
+              accuracyM: Math.round(input.location.accuracy),
+              lat: input.location.lat,
+              lng: input.location.lng,
+            },
+          } as unknown as ProctorEventInput);
+          result.violationCount = r.violationCount;
+          result.autoSubmitted = r.autoSubmitted;
+        }
+      }
+    } else if (input.locationError || input.location === null) {
+      if (!(await recently('LOCATION_OFF')))
+        await this.prisma.proctorEvent.create({
+          data: {
+            attemptId,
+            type: 'LOCATION_OFF',
+            counted: false,
+            meta: { reason: input.locationError ?? 'UNAVAILABLE' },
+          },
+        });
+    }
+    return result;
+  }
+
+  // ───────── Geofence (on-campus exams) ─────────
+
+  /** The campus to check against, or null when the exam isn't on-campus (or none is set). */
+  private async campusOf(exam: {
+    organizationId: string;
+    requireOnCampus: boolean;
+  }): Promise<(Campus & { address: string | null }) | null> {
+    if (!exam.requireOnCampus) return null;
+    const org = await this.prisma.organization.findUnique({
+      where: { id: exam.organizationId },
+      select: { campusLat: true, campusLng: true, campusRadiusM: true, campusAddress: true },
+    });
+    if (!org || org.campusLat === null || org.campusLng === null) return null;
+    return {
+      lat: org.campusLat,
+      lng: org.campusLng,
+      radiusM: org.campusRadiusM,
+      address: org.campusAddress,
+    };
+  }
+
+  private async campusInfo(exam: { organizationId: string; requireOnCampus: boolean }) {
+    const c = await this.campusOf(exam);
+    return c ? { radiusM: c.radiusM, address: c.address } : null;
+  }
+
+  /**
+   * Refuses to start (or resume) an on-campus exam from outside the campus radius. Returns the
+   * position to store on the attempt. A refused resume is logged on that attempt for faculty.
+   */
+  private async assertOnCampus(
+    exam: { organizationId: string; requireOnCampus: boolean },
+    location: GeoPosition | undefined,
+    attemptId?: string,
+  ) {
+    const campus = await this.campusOf(exam);
+    if (!campus) return null;
+    if (!location)
+      throw new ForbiddenException({
+        code: 'LOCATION_REQUIRED',
+        message:
+          'This exam must be written on campus. Allow location access in your browser and try again.',
+        details: { radiusM: campus.radiusM },
+      });
+    const v = checkGeofence(campus, location);
+    if (!v.inside) {
+      if (attemptId)
+        await this.prisma.proctorEvent.create({
+          data: {
+            attemptId,
+            type: 'OUTSIDE_CAMPUS',
+            counted: false,
+            meta: {
+              distanceM: v.distanceM,
+              accuracyM: Math.round(location.accuracy),
+              lat: location.lat,
+              lng: location.lng,
+              refused: true,
+            },
+          },
+        });
+      throw new ForbiddenException(
+        v.reason === 'LOCATION_IMPRECISE'
+          ? {
+              code: 'LOCATION_IMPRECISE',
+              message: `Your location isn’t precise enough (±${formatDistance(location.accuracy)}). Turn on Wi-Fi and precise location — or open the exam on your phone — and try again.`,
+              details: { distanceM: v.distanceM, radiusM: campus.radiusM },
+            }
+          : {
+              code: 'OFF_CAMPUS',
+              message: `This exam can only be written on campus. You are about ${formatDistance(v.distanceM)} from the college (allowed: within ${campus.radiusM} m).`,
+              details: { distanceM: v.distanceM, radiusM: campus.radiusM },
+            },
+      );
+    }
+    return {
+      startLat: location.lat,
+      startLng: location.lng,
+      startAccuracyM: Math.round(location.accuracy),
+      startDistanceM: v.distanceM,
     };
   }
 

@@ -1,12 +1,13 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Loader2, MonitorSmartphone } from 'lucide-react';
 import type { AttemptSession, ExamLobby as Lobby } from '@arc/types';
 import { Button, Card, EmptyState } from '@arc/ui';
 import { ExamLobby } from '@/components/exams/ExamLobby';
 import { ExamRunner } from '@/components/exams/ExamRunner';
+import type { LivePosition } from '@/components/exams/location';
 import { enterFullscreen, exitFullscreen } from '@/components/exams/useLockdown';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { api, ApiError } from '@/lib/api';
@@ -33,7 +34,12 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     if (!loading && !firebaseUser) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
   }, [loading, firebaseUser, router, pathname]);
 
-  async function start() {
+  // The last position from the lobby, reused for "Continue in this window" (on-campus exams).
+  const lastLocation = useRef<LivePosition | undefined>(undefined);
+
+  async function start(loc?: LivePosition) {
+    if (loc) lastLocation.current = loc;
+    const location = loc ?? lastLocation.current;
     setStarting(true);
     setStartError(null);
     // Must be called directly from the click so the browser allows full screen.
@@ -49,7 +55,9 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
     try {
       const s = await api<AttemptSession>(`/my/exams/${id}/start`, {
         method: 'POST',
-        body: {},
+        body: location
+          ? { location: { lat: location.lat, lng: location.lng, accuracy: location.accuracy } }
+          : {},
         token: await getToken(),
       });
       setReplaced(false);
@@ -78,7 +86,7 @@ export default function TakeExamPage({ params }: { params: Promise<{ id: string 
             title="This exam is open in another window"
             description="Only one window can be used at a time. Continuing here takes over from the other window and is recorded as a violation."
             action={
-              <Button onClick={start} loading={starting}>
+              <Button onClick={() => void start()} loading={starting}>
                 Continue in this window
               </Button>
             }
