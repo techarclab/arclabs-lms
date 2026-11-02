@@ -66,7 +66,6 @@ export const NAV: NavSection[] = [
       },
       { label: 'Study materials', href: '/my-materials', icon: Library, learnerOnly: true },
       { label: 'Lab marks', href: '/labs', icon: NotebookPen, permission: 'lab.view' },
-      { label: 'Lab marks', href: '/my-labs', icon: NotebookPen, learnerOnly: true },
       {
         label: 'Announcements',
         href: '/announcements',

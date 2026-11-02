@@ -1,12 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type {
-  LabCriterion,
-  LabSheet,
-  LabSheetRow,
-  LabStats,
-  LabSummary,
-  MyLabResult,
-} from '@arc/types';
+import type { LabCriterion, LabSheet, LabSheetRow, LabStats, LabSummary } from '@arc/types';
 import type { CreateLabInput, SaveLabMarksInput, UpdateLabInput } from '@arc/validation';
 import { AuditService } from '../audit/audit.service';
 import type { LabMark, Prisma, User } from '../generated/prisma/client';
@@ -465,49 +458,4 @@ export class LabsService {
   // ───────── Students ─────────
 
   /** Labs this student has been marked in, with the class average. */
-  async mine(user: User): Promise<MyLabResult[]> {
-    const marks = await this.prisma.labMark.findMany({
-      where: {
-        userId: user.id,
-        assessment: {
-          organization: {
-            status: 'ACTIVE',
-            members: { some: { userId: user.id, status: 'ACTIVE', roles: { has: 'LEARNER' } } },
-          },
-        },
-      },
-      include: {
-        assessment: {
-          include: {
-            organization: { select: { name: true } },
-            marks: { select: { absent: true, total: true } },
-          },
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-    return marks.map((m) => {
-      const a = m.assessment;
-      const criteria = criteriaOf(a);
-      const totals = a.marks.filter((x) => !x.absent && x.total !== null).map((x) => x.total!);
-      return {
-        id: a.id,
-        title: a.title,
-        description: a.description,
-        heldOn: a.heldOn?.toISOString() ?? null,
-        organizationName: a.organization.name,
-        criteria,
-        maxTotal: round2(criteria.reduce((s, c) => s + c.max, 0)),
-        scores: scoresOf(m),
-        absent: m.absent,
-        remarks: m.remarks,
-        total: totalOf(criteria, scoresOf(m), m.absent),
-        classAverage: totals.length
-          ? round2(totals.reduce((s, x) => s + x, 0) / totals.length)
-          : null,
-        highest: totals.length ? Math.max(...totals) : null,
-        updatedAt: m.updatedAt.toISOString(),
-      };
-    });
-  }
 }

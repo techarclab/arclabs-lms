@@ -110,20 +110,9 @@ describe('Lab marks (offline labs / project reviews)', () => {
     );
   });
 
-  it('students see their marks instantly, with the class average', async () => {
-    const mine = await api(app, students[0]!.token).get('/my/labs');
-    expect(mine.status).toBe(200);
-    expect(mine.body).toHaveLength(1);
-    expect(mine.body[0]).toMatchObject({
-      title: 'IoT mini project review',
-      total: 17,
-      maxTotal: 20,
-      scores: { pres: 4, contrib: 5, viva: 8 },
-      classAverage: 11.25,
-      highest: 17,
-      remarks: 'Great demo',
-    });
-    expect((await api(app, cseStudent.token).get('/my/labs')).body).toEqual([]);
+  it('students cannot see lab marks (faculty only)', async () => {
+    expect((await api(app, students[0]!.token).get('/my/labs')).status).toBe(404);
+    expect((await orgApi(app, students[0]!.token, orgId).get(`/labs/${labId}`)).status).toBe(403);
   });
 
   it('changing criteria recalculates totals; list shows stats; CSV exports', async () => {
@@ -153,6 +142,5 @@ describe('Lab marks (offline labs / project reviews)', () => {
     ).toBe(403);
     expect((await orgApi(app, students[0]!.token, orgId).get('/labs')).status).toBe(403);
     expect((await orgApi(app, staff, orgId).delete(`/labs/${labId}`)).status).toBe(204);
-    expect((await api(app, students[0]!.token).get('/my/labs')).body).toEqual([]);
   });
 });

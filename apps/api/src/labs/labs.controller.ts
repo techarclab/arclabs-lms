@@ -115,16 +115,3 @@ export class LabsController {
     await this.labs.remove(u, org.organizationId, id);
   }
 }
-
-/** Students: their lab marks, across colleges. */
-@ApiTags('my labs')
-@ApiBearerAuth()
-@Controller('my/labs')
-export class MyLabsController {
-  constructor(private readonly labs: LabsService) {}
-
-  @Get()
-  mine(@CurrentUser() u: User) {
-    return this.labs.mine(u);
-  }
-}
