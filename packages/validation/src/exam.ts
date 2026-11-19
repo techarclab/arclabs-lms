@@ -284,6 +284,8 @@ export const examSettingsSchema = z.object({
   requireCamera: z.boolean(),
   /** Students must be within the college's campus radius (geofence) to start and keep writing. */
   requireOnCampus: z.boolean(),
+  /** Exams with sections: students finish one section before the next opens, and can't go back. */
+  sectionsInOrder: z.boolean(),
 });
 
 export const createExamSchema = examSettingsSchema.partial().extend({

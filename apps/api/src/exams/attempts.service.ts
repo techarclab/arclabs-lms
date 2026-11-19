@@ -21,6 +21,7 @@ import type {
   ReviewItem,
   RunCodeResponse,
   CodingConfig,
+  NextSectionResult,
 } from '@arc/types';
 import {
   outputsMatch,
@@ -52,6 +53,7 @@ import {
   hasSections,
   sectionScores,
   UNSECTIONED,
+  isAnswered,
   type QuestionResult,
 } from './grading';
 
@@ -368,6 +370,7 @@ export class AttemptsService {
     }
     const byId = new Map(qs.map((q) => [q.id, q]));
     const sectionOf = await this.sectionsOf(exam.id);
+    const gate = exam.sectionsInOrder ? this.sectionGroups(order, sectionOf) : null;
     const questions: DeliveredQuestion[] = order.map(({ questionId, optionOrder }) => {
       const q = byId.get(questionId)!;
       const opts = new Map((q.options as unknown as QuestionOption[]).map((o) => [o.id, o]));
@@ -418,6 +421,8 @@ export class AttemptsService {
       requireCamera: exam.requireCamera,
       requireOnCampus: Boolean(await this.campusOf(exam)),
       negativeMarking: exam.negativeMarking,
+      sectionsInOrder: Boolean(gate),
+      sectionIndex: gate ? Math.min(attempt.sectionIndex, gate.groups.length - 1) : 0,
       resumed,
     };
   }
@@ -438,6 +443,18 @@ export class AttemptsService {
         code: 'INVALID_QUESTION',
         message: 'Question is not part of this exam',
       });
+    const quiz = await this.prisma.quiz.findUniqueOrThrow({
+      where: { id: attempt.quizId },
+      select: { sectionsInOrder: true },
+    });
+    if (quiz.sectionsInOrder) {
+      const gate = this.sectionGroups(order, await this.sectionsOf(attempt.quizId));
+      if (gate && gate.indexOf(input.questionId) !== attempt.sectionIndex)
+        throw new ConflictException({
+          code: 'SECTION_LOCKED',
+          message: 'This question is in another section. Finish the current section first.',
+        });
+    }
     const q = await this.prisma.question.findUniqueOrThrow({
       where: { id: input.questionId },
       select: { type: true, coding: true },
@@ -450,10 +467,10 @@ export class AttemptsService {
       answer === null
         ? await this.prisma
             .$executeRaw`UPDATE "quiz_attempts" SET "answers" = "answers" - ${input.questionId}, "lastSeenAt" = ${now}
-            WHERE "id" = ${attemptId}::uuid AND "status" = 'IN_PROGRESS' AND "sessionId" = ${sessionId}`
+            WHERE "id" = ${attemptId}::uuid AND "status" = 'IN_PROGRESS' AND "sessionId" = ${sessionId} AND "sectionIndex" = ${attempt.sectionIndex}`
         : await this.prisma
             .$executeRaw`UPDATE "quiz_attempts" SET "answers" = jsonb_set("answers", ARRAY[${input.questionId}], ${JSON.stringify(answer)}::jsonb, true), "lastSeenAt" = ${now}
-            WHERE "id" = ${attemptId}::uuid AND "status" = 'IN_PROGRESS' AND "sessionId" = ${sessionId}`;
+            WHERE "id" = ${attemptId}::uuid AND "status" = 'IN_PROGRESS' AND "sessionId" = ${sessionId} AND "sectionIndex" = ${attempt.sectionIndex}`;
     if (count !== 1)
       throw new ConflictException({
         code: 'ATTEMPT_CLOSED',
@@ -464,6 +481,71 @@ export class AttemptsService {
       serverNow: now.toISOString(),
       deadlineAt: attempt.deadlineAt!.toISOString(),
     };
+  }
+
+  /** Exams with sections in order: closes the current section and opens the next one. */
+  async nextSection(
+    user: User,
+    attemptId: string,
+    sessionId: string | undefined,
+  ): Promise<NextSectionResult> {
+    const attempt = await this.liveAttempt(user, attemptId, sessionId);
+    const quiz = await this.prisma.quiz.findUniqueOrThrow({
+      where: { id: attempt.quizId },
+      select: { sectionsInOrder: true },
+    });
+    const order = attempt.questionOrder as unknown as QuestionOrder;
+    const gate = quiz.sectionsInOrder
+      ? this.sectionGroups(order, await this.sectionsOf(attempt.quizId))
+      : null;
+    if (!gate)
+      throw new ConflictException({ code: 'NO_SECTIONS', message: 'This exam has no sections' });
+    const cur = attempt.sectionIndex;
+    if (cur >= gate.groups.length - 1)
+      throw new ConflictException({
+        code: 'LAST_SECTION',
+        message: 'This is the last section. Submit the exam when you are done.',
+      });
+    const answers = (attempt.answers ?? {}) as Record<string, unknown>;
+    const unanswered = gate.groups[cur]!.filter((id) => !isAnswered(answers[id])).length;
+    if (unanswered)
+      throw new ConflictException({
+        code: 'SECTION_INCOMPLETE',
+        message: `Answer all questions of this section first (${unanswered} left).`,
+        details: { unanswered },
+      });
+    const moved = await this.prisma.quizAttempt.updateMany({
+      where: { id: attemptId, status: 'IN_PROGRESS', sessionId, sectionIndex: cur },
+      data: { sectionIndex: cur + 1, lastSeenAt: new Date() },
+    });
+    if (moved.count !== 1)
+      throw new ConflictException({
+        code: 'ATTEMPT_CLOSED',
+        message: 'This attempt is no longer active',
+      });
+    return { sectionIndex: cur + 1 };
+  }
+
+  /**
+   * Sections of an attempt in the student's order (null when the exam has no sections):
+   * the question ids of each section and the section of a question.
+   */
+  private sectionGroups(
+    order: QuestionOrder,
+    sectionOf: (questionId: string) => string | null,
+  ): { groups: string[][]; indexOf: (questionId: string) => number } | null {
+    if (!order.some((o) => sectionOf(o.questionId))) return null;
+    const groups: string[][] = [];
+    const at = new Map<string, number>();
+    let last: string | null | undefined;
+    for (const { questionId } of order) {
+      const name = sectionOf(questionId);
+      if (!groups.length || name !== last) groups.push([]);
+      groups[groups.length - 1]!.push(questionId);
+      at.set(questionId, groups.length - 1);
+      last = name;
+    }
+    return { groups, indexOf: (id) => at.get(id) ?? -1 };
   }
 
   /** Student "Run": sample tests (or custom input) only — hidden tests run at submission. */

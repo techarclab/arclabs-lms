@@ -562,6 +562,17 @@ export class MyExamsController {
     return this.attempts.saveAnswer(u, id, session, body);
   }
 
+  @ApiHeader({ name: 'X-Attempt-Session', required: true })
+  @Post('attempts/:id/next-section')
+  @HttpCode(200)
+  nextSection(
+    @CurrentUser() u: User,
+    @Param('id', UuidPipe) id: string,
+    @Headers('x-attempt-session') session: string | undefined,
+  ) {
+    return this.attempts.nextSection(u, id, session);
+  }
+
   @Post('attempts/:id/heartbeat')
   @HttpCode(200)
   heartbeat(

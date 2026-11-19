@@ -150,6 +150,8 @@ export interface ExamSettings {
   maxViolations: number;
   requireCamera: boolean;
   requireOnCampus: boolean;
+  /** Exams with sections: one section at a time, no going back. */
+  sectionsInOrder: boolean;
 }
 
 export interface ExamSummary extends ExamSettings {
@@ -247,8 +249,15 @@ export interface AttemptSession {
   requireCamera: boolean;
   /** Location is checked during the exam (geofence). */
   requireOnCampus: boolean;
+  /** Sections one at a time: the student is on section sectionIndex (0-based) and can't go back. */
+  sectionsInOrder: boolean;
+  sectionIndex: number;
   negativeMarking: boolean;
   resumed: boolean;
+}
+
+export interface NextSectionResult {
+  sectionIndex: number;
 }
 
 export interface HeartbeatResult {

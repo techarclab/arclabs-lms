@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   AlertTriangle,
   Bookmark,
@@ -73,7 +74,27 @@ export function ExamRunner({
   const { getToken } = useAuth();
   const [session] = useState(initial);
   const qs = session.questions;
-  const [index, setIndex] = useState(0);
+  // Sections in exam order with the positions of their questions (one unnamed group when none).
+  const sections = useMemo(() => {
+    const out: { name: string | null; ids: number[] }[] = [];
+    qs.forEach((x, i) => {
+      const name = x.section ?? null;
+      const last = out[out.length - 1];
+      if (last && last.name === name) last.ids.push(i);
+      else out.push({ name, ids: [i] });
+    });
+    return out;
+  }, [qs]);
+  // One section at a time: only the current section's questions can be opened, no going back.
+  const inOrder = Boolean(session.sectionsInOrder) && sections.length > 1;
+  const [sectionNo, setSectionNo] = useState(() =>
+    Math.min(initial.sectionIndex ?? 0, Math.max(0, sections.length - 1)),
+  );
+  const [nextOpen, setNextOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const current = sections[sectionNo] ?? sections[0]!;
+  const lastSection = sectionNo >= sections.length - 1;
+  const [index, setIndex] = useState(() => (inOrder ? (current.ids[0] ?? 0) : 0));
   const [answers, setAnswers] = useState<Record<string, unknown>>(initial.answers);
   const [marked, setMarked] = useState<Set<string>>(() =>
     readSet(`arc.marked.${initial.attemptId}`),
@@ -179,6 +200,7 @@ export function ExamRunner({
           });
         } catch (e) {
           if (handleError(e)) return;
+          if (e instanceof ApiError && e.body?.error.code === 'SECTION_LOCKED') continue;
           if (!pending.current.has(questionId)) pending.current.set(questionId, answer);
           setSaveState('offline');
           await new Promise((r) => setTimeout(r, 2500));
@@ -331,10 +353,34 @@ export function ExamRunner({
   // ───────── Navigation state ─────────
   const q = qs[index]!;
   const go = (i: number) => {
-    const next = Math.max(0, Math.min(qs.length - 1, i));
+    const lo = inOrder ? current.ids[0]! : 0;
+    const hi = inOrder ? current.ids[current.ids.length - 1]! : qs.length - 1;
+    const next = Math.max(lo, Math.min(hi, i));
     setIndex(next);
     setVisited((v) => new Set(v).add(qs[next]!.id));
   };
+  /** Closes this section (server checks every question is answered) and opens the next one. */
+  async function nextSection() {
+    setMoving(true);
+    try {
+      await flush();
+      const r = await call<{ sectionIndex: number }>(
+        `/my/attempts/${session.attemptId}/next-section`,
+      );
+      const to = sections[r.sectionIndex];
+      setSectionNo(r.sectionIndex);
+      setNextOpen(false);
+      if (to) {
+        setIndex(to.ids[0]!);
+        setVisited((v) => new Set(v).add(qs[to.ids[0]!]!.id));
+      }
+    } catch (e) {
+      if (!handleError(e)) toast.error((e as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  }
+
   const toggleMark = () =>
     setMarked((m) => {
       const n = new Set(m);
@@ -396,14 +442,10 @@ export function ExamRunner({
 
   const answer = answers[q.id];
   const multi = q.type === 'MULTIPLE_CHOICE';
-  // Sections in exam order with the positions of their questions (one unnamed group when none).
-  const sections: { name: string | null; ids: number[] }[] = [];
-  qs.forEach((x, i) => {
-    const name = x.section ?? null;
-    const last = sections[sections.length - 1];
-    if (last && last.name === name) last.ids.push(i);
-    else sections.push({ name, ids: [i] });
-  });
+  const shownSections = inOrder ? [current] : sections;
+  const sectionLeft = current.ids.filter((i) => !isAnswered(qs[i]!.id));
+  const firstOfSection = inOrder && index === current.ids[0];
+  const endOfSection = inOrder && index === current.ids[current.ids.length - 1];
   const pct = qs.length ? Math.round((answeredCount / qs.length) * 100) : 0;
 
   return (
@@ -486,7 +528,11 @@ export function ExamRunner({
             <span className="text-sm text-ink-500">of {qs.length}</span>
             {q.section && (
               <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
-                Section {sections.findIndex((x) => x.name === q.section) + 1} · {q.section}
+                {sectionLabel(
+                  sections.findIndex((x) => x.name === q.section),
+                  q.section,
+                )}
+                {inOrder && ` of ${sections.length}`}
               </span>
             )}
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
@@ -619,7 +665,11 @@ export function ExamRunner({
           </div>
 
           <div className="flex items-center gap-2 border-t border-ink-100 bg-ink-50/50 px-6 py-4 sm:px-8">
-            <Button variant="secondary" disabled={index === 0} onClick={() => go(index - 1)}>
+            <Button
+              variant="secondary"
+              disabled={index === 0 || firstOfSection}
+              onClick={() => go(index - 1)}
+            >
               <ChevronLeft /> Previous
             </Button>
             {q.type !== 'CODING' && (
@@ -632,7 +682,11 @@ export function ExamRunner({
               </Button>
             )}
             <div className="ml-auto flex gap-2">
-              {index < qs.length - 1 ? (
+              {endOfSection && !lastSection ? (
+                <Button onClick={() => setNextOpen(true)}>
+                  Next section <ChevronRight />
+                </Button>
+              ) : index < qs.length - 1 ? (
                 <Button onClick={() => go(index + 1)}>
                   Save & next <ChevronRight />
                 </Button>
@@ -664,11 +718,16 @@ export function ExamRunner({
                 <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
               </p>
             </div>
-            {sections.map((sec) => (
+            {shownSections.map((sec) => (
               <div key={sec.name ?? 'all'} className="mt-4">
                 {sec.name && (
                   <p className="mb-2 flex items-baseline justify-between text-xs font-semibold text-ink-700">
-                    <span className="truncate">{sec.name}</span>
+                    <span className="truncate">
+                      {sectionLabel(sections.indexOf(sec), sec.name)}
+                      {inOrder && (
+                        <span className="font-normal text-ink-500"> of {sections.length}</span>
+                      )}
+                    </span>
                     <span className="tabular font-normal text-ink-500">
                       {sec.ids.filter((i) => isAnswered(qs[i]!.id)).length}/{sec.ids.length}
                     </span>
@@ -719,9 +778,20 @@ export function ExamRunner({
                 <span className="size-3 rounded bg-ink-100" /> Not visited
               </li>
             </ul>
-            <Button className="mt-5 w-full" size="lg" onClick={() => setConfirmOpen(true)}>
-              <Send /> Submit exam
-            </Button>
+            {inOrder && !lastSection ? (
+              <>
+                <Button className="mt-5 w-full" size="lg" onClick={() => setNextOpen(true)}>
+                  Next section <ChevronRight />
+                </Button>
+                <p className="mt-2 text-center text-xs text-ink-500">
+                  Answer every question of this section to move on. You can’t come back to it.
+                </p>
+              </>
+            ) : (
+              <Button className="mt-5 w-full" size="lg" onClick={() => setConfirmOpen(true)}>
+                <Send /> Submit exam
+              </Button>
+            )}
           </div>
 
           <div
@@ -867,6 +937,49 @@ export function ExamRunner({
         </DialogContent>
       </Dialog>
 
+      {/* Next section (one section at a time) */}
+      <Dialog open={nextOpen} onOpenChange={(o) => !moving && setNextOpen(o)}>
+        <DialogContent
+          title={
+            sectionLeft.length
+              ? `Finish ${sectionLabel(sectionNo, current.name)} first`
+              : `Go to ${sectionLabel(sectionNo + 1, sections[sectionNo + 1]?.name ?? null)}?`
+          }
+          description={
+            sectionLeft.length
+              ? `${sectionLeft.length} question${sectionLeft.length === 1 ? ' is' : 's are'} still unanswered in this section. Answer every question to move on.`
+              : `You can’t come back to ${sectionLabel(sectionNo, current.name)} after this.`
+          }
+          icon={<ChevronRight />}
+        >
+          <div className="flex gap-3 px-6 pt-2 pb-6">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              disabled={moving}
+              onClick={() => setNextOpen(false)}
+            >
+              Stay here
+            </Button>
+            {sectionLeft.length ? (
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  go(sectionLeft[0]!);
+                  setNextOpen(false);
+                }}
+              >
+                Go to question {sectionLeft[0]! + 1}
+              </Button>
+            ) : (
+              <Button className="flex-1" loading={moving} onClick={() => void nextSection()}>
+                Continue <ChevronRight />
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Submit confirmation */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent
@@ -907,4 +1020,12 @@ export function ExamRunner({
       </Dialog>
     </div>
   );
+}
+
+/** "Section 2 · IoT"; a section named only by its number ("2") is shown as "Section 2". */
+function sectionLabel(i: number, name: string | null) {
+  const n = `Section ${i + 1}`;
+  if (!name || /^\d+$/.test(name.trim()) || name.trim().toLowerCase() === n.toLowerCase()) return n;
+  if (/^section\b/i.test(name.trim())) return name.trim();
+  return `${n} · ${name}`;
 }

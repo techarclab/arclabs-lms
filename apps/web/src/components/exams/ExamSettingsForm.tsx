@@ -11,6 +11,7 @@ import {
   MapPin,
   Maximize,
   ShieldAlert,
+  Layers,
   Shuffle,
   TimerReset,
 } from 'lucide-react';
@@ -106,6 +107,7 @@ export function ExamSettingsForm({
           maxViolations: s.strict ? 1 : Number(s.maxViolations),
           requireCamera: s.requireCamera,
           requireOnCampus: s.requireOnCampus,
+          sectionsInOrder: s.sectionsInOrder,
         };
     setBusy(true);
     try {
@@ -237,6 +239,14 @@ export function ExamSettingsForm({
             description="Options of choice questions are reordered per student."
             checked={s.shuffleOptions}
             onCheckedChange={(v) => set('shuffleOptions', v)}
+            disabled={locked}
+          />
+          <SwitchRow
+            icon={<Layers />}
+            label="Sections one at a time"
+            description="For exams with sections: students see only the current section, must answer all its questions to open the next one, and can't go back. Off: they move freely between sections."
+            checked={s.sectionsInOrder}
+            onCheckedChange={(v) => set('sectionsInOrder', v)}
             disabled={locked}
           />
           <SwitchRow
@@ -400,6 +410,7 @@ function fromExam(e: ExamDetail) {
     maxViolations: String(e.maxViolations === 1 ? 3 : e.maxViolations),
     requireCamera: e.requireCamera,
     requireOnCampus: e.requireOnCampus,
+    sectionsInOrder: e.sectionsInOrder ?? true,
   };
 }
 

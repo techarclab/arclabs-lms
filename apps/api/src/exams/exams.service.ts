@@ -207,6 +207,7 @@ export class ExamsService {
       maxViolations: exam.maxViolations,
       requireCamera: exam.requireCamera,
       requireOnCampus: exam.requireOnCampus,
+      sectionsInOrder: exam.sectionsInOrder,
       state: examState(exam),
       questionCount: exam.questions.length,
       totalMarks: exam.questions.reduce((s, q) => s + q.question.points, 0),
@@ -276,6 +277,7 @@ export class ExamsService {
         maxViolations: input.maxViolations ?? 1,
         requireCamera: input.requireCamera ?? true,
         requireOnCampus: input.requireOnCampus ?? false,
+        sectionsInOrder: input.sectionsInOrder ?? true,
       },
     });
     await this.audit.log({

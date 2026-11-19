@@ -45,6 +45,7 @@ describe('Exam sections', () => {
         durationMinutes: 90,
         requireCamera: false,
         shuffleQuestions: true,
+        sectionsInOrder: false, // free movement; one-at-a-time is tested in sections-in-order
       })
     ).body.id;
   });

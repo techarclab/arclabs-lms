@@ -615,6 +615,7 @@ model Quiz {
   maxViolations     Int     @default(3) // auto-submit when reached; 0 = never; 1 = leaving submits
   requireCamera     Boolean @default(true) // live camera preview on the student's screen; never recorded
   requireOnCampus   Boolean @default(false) // students must be within the college's campus radius
+  sectionsInOrder   Boolean @default(true) // sections one at a time: finish one to open the next, no going back
   assignToAll       Boolean @default(false) // every active learner in the organization
   status           ContentStatus    @default(DRAFT)
   publishedAt      DateTime?
@@ -707,6 +708,7 @@ model QuizAttempt {
   answers        Json          @default("{}") // {questionId: answer}
   results        Json? // {questionId: {correct, marks}} written at grading
   codingPending  Boolean       @default(false) // coding answers waiting for the code runner
+  sectionIndex   Int           @default(0) // the section the student is on (exams with sections in order)
   score          Decimal?      @db.Decimal(7, 2)
   maxScore       Decimal?      @db.Decimal(7, 2)
   percentage     Decimal?      @db.Decimal(5, 2)
