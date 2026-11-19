@@ -277,7 +277,7 @@ export class ExamsService {
         maxViolations: input.maxViolations ?? 1,
         requireCamera: input.requireCamera ?? true,
         requireOnCampus: input.requireOnCampus ?? false,
-        sectionsInOrder: input.sectionsInOrder ?? true,
+        sectionsInOrder: input.sectionsInOrder ?? false,
       },
     });
     await this.audit.log({

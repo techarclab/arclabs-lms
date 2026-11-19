@@ -244,7 +244,7 @@ export function ExamSettingsForm({
           <SwitchRow
             icon={<Layers />}
             label="Sections one at a time"
-            description="For exams with sections: students see only the current section, must answer all its questions to open the next one, and can't go back. Off: they move freely between sections."
+            description="Off (default): students move freely between sections with the section tabs above the question. On: they must answer every question of a section to open the next one, and can't go back."
             checked={s.sectionsInOrder}
             onCheckedChange={(v) => set('sectionsInOrder', v)}
             disabled={locked}
@@ -410,7 +410,7 @@ function fromExam(e: ExamDetail) {
     maxViolations: String(e.maxViolations === 1 ? 3 : e.maxViolations),
     requireCamera: e.requireCamera,
     requireOnCampus: e.requireOnCampus,
-    sectionsInOrder: e.sectionsInOrder ?? true,
+    sectionsInOrder: e.sectionsInOrder ?? false,
   };
 }
 

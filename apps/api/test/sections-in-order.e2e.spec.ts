@@ -46,9 +46,12 @@ describe('Sections one at a time', () => {
         durationMinutes: 30,
         requireCamera: false,
         maxViolations: 3,
+        sectionsInOrder: true,
       })
     ).body.id;
     expect((await faculty().get(`/exams/${examId}`)).body.sectionsInOrder).toBe(true);
+    const plain = await faculty().post('/exams', { title: 'Free sections', durationMinutes: 30 });
+    expect(plain.body.sectionsInOrder).toBe(false); // students move freely by default
     await faculty().put(`/exams/${examId}/questions`, {
       questionIds: ids,
       sections: ['1', '1', '2', '2', '3'],

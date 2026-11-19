@@ -615,7 +615,7 @@ model Quiz {
   maxViolations     Int     @default(3) // auto-submit when reached; 0 = never; 1 = leaving submits
   requireCamera     Boolean @default(true) // live camera preview on the student's screen; never recorded
   requireOnCampus   Boolean @default(false) // students must be within the college's campus radius
-  sectionsInOrder   Boolean @default(true) // sections one at a time: finish one to open the next, no going back
+  sectionsInOrder   Boolean @default(false) // sections one at a time: finish one to open the next, no going back
   assignToAll       Boolean @default(false) // every active learner in the organization
   status           ContentStatus    @default(DRAFT)
   publishedAt      DateTime?

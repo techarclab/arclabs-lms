@@ -30,7 +30,7 @@ import type {
   ProctorEventResult,
   RunCodeResponse,
 } from '@arc/types';
-import { Button, cn, Dialog, DialogContent, Select } from '@arc/ui';
+import { Button, cn, Dialog, DialogContent } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
@@ -535,6 +535,49 @@ export function ExamRunner({
       <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-5 px-4 py-4 sm:px-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Question */}
         <section className="flex flex-col overflow-hidden rounded-3xl border border-ink-200/80 bg-white shadow-sm lg:min-h-0">
+          {sections.length > 1 && (
+            <nav
+              aria-label="Sections"
+              className="flex gap-1.5 overflow-x-auto border-b border-ink-100 bg-ink-50/70 px-3 py-2.5 sm:px-5"
+            >
+              {sections.map((sec, k) => {
+                const done = inOrder && k < sectionNo;
+                const locked = inOrder && k > sectionNo;
+                const answered = sec.ids.filter((i) => isAnswered(qs[i]!.id)).length;
+                const active = k === viewing;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => pickSection(k)}
+                    disabled={done || (locked && k !== sectionNo + 1)}
+                    aria-current={active ? 'step' : undefined}
+                    className={cn(
+                      'flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-left text-sm font-semibold transition',
+                      active
+                        ? 'bg-ink-950 text-white shadow-sm'
+                        : 'bg-white text-ink-700 ring-1 ring-ink-200 hover:bg-ink-100',
+                      (done || locked) && 'opacity-60',
+                    )}
+                  >
+                    {done ? (
+                      <Check className="size-4" />
+                    ) : locked ? (
+                      <Lock className="size-3.5" />
+                    ) : null}
+                    <span className="max-w-[220px] truncate">{sectionLabel(k, sec.name)}</span>
+                    <span
+                      className={cn(
+                        'tabular rounded-md px-1.5 py-0.5 text-[11px] font-medium',
+                        active ? 'bg-white/15 text-white' : 'bg-ink-100 text-ink-600',
+                      )}
+                    >
+                      {answered}/{sec.ids.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          )}
           <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-6 py-4 sm:px-8">
             <span className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-ink-950 px-2.5 text-sm font-semibold text-white">
               Q{index + 1}
@@ -735,29 +778,9 @@ export function ExamRunner({
                 <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
               </p>
             </div>
-            {sections.length > 1 && (
-              <Select
-                className="mt-3 h-10 font-medium"
-                value={String(viewing)}
-                onChange={(e) => pickSection(Number(e.target.value))}
-                aria-label="Section"
-              >
-                {sections.map((sec, k) => {
-                  const done = inOrder && k < sectionNo;
-                  const locked = inOrder && k > sectionNo;
-                  const answered = sec.ids.filter((i) => isAnswered(qs[i]!.id)).length;
-                  return (
-                    <option key={k} value={k} disabled={done || (locked && k !== sectionNo + 1)}>
-                      {done ? '✓ ' : locked ? '🔒 ' : ''}
-                      {sectionLabel(k, sec.name)} ({answered}/{sec.ids.length})
-                    </option>
-                  );
-                })}
-              </Select>
-            )}
             {shownSections.map((sec) => (
               <div key={sec.name ?? 'all'} className="mt-3">
-                {sec.name && sections.length < 2 && (
+                {sec.name && (
                   <p className="mb-2 flex items-baseline justify-between text-xs font-semibold text-ink-700">
                     <span className="truncate">
                       {sectionLabel(sections.indexOf(sec), sec.name)}
