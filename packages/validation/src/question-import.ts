@@ -81,8 +81,30 @@ function applyAnswer(q: ImportedQuestion, raw: string) {
   if (a && Number.isFinite(n)) q.value = n;
 }
 
+/** Collapses spacing in the text of a prompt but keeps ``` code blocks exactly. */
+function tidyPrompt(prompt: string) {
+  return prompt
+    .split(/(```[^\n]*\n[\s\S]*?\n```)/)
+    .map((part, i) => (i % 2 ? part : part.replace(/\s+/g, ' ').trim()))
+    .filter(Boolean)
+    .join('\n');
+}
+
+const FENCE_OPEN = /^```\s*([A-Za-z0-9_-]*)\s*$/;
+
+/** A ``` block: its lines without the common indentation (tabs as 4 spaces). */
+function codeBlock(raw: string[]) {
+  const lines = raw.map((l) => l.replace(/\t/g, '    ').replace(/\s+$/, ''));
+  const indents = lines.filter((l) => l.trim()).map((l) => l.length - l.trimStart().length);
+  const cut = indents.length ? Math.min(...indents) : 0;
+  return lines
+    .map((l) => l.slice(cut))
+    .join('\n')
+    .replace(/^\n+|\n+$/g, '');
+}
+
 function finish(q: ImportedQuestion): ImportedQuestion {
-  q.prompt = q.prompt.replace(/\s+/g, ' ').trim();
+  q.prompt = tidyPrompt(q.prompt);
   q.options = q.options
     .map((o) => ({ ...o, text: o.text.replace(/\s+/g, ' ').trim() }))
     .filter((o) => o.text);
@@ -114,24 +136,45 @@ function finish(q: ImportedQuestion): ImportedQuestion {
  * and an "Answer key" section at the end (1-B, 2-C …).
  */
 export function parseQuestionText(text: string): ImportedQuestion[] {
-  const lines = text
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((l) => l.replace(/\s+/g, ' ').trim())
-    .filter((l) => l && !/^page\s*\d+(\s*of\s*\d+)?$/i.test(l) && !/^\d+$/.test(l));
+  // Code between ``` lines is kept exactly (line breaks and indentation) as one item.
+  const raw = text.replace(/\r/g, '').split('\n');
+  const lines: (string | { code: string; lang: string })[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const open = FENCE_OPEN.exec(raw[i]!.trim());
+    if (open) {
+      let j = i + 1;
+      while (j < raw.length && raw[j]!.trim() !== '```') j++;
+      lines.push({ code: codeBlock(raw.slice(i + 1, j)), lang: open[1]!.toLowerCase() });
+      i = j;
+      continue;
+    }
+    const l = raw[i]!.replace(/\s+/g, ' ').trim();
+    if (l && !/^page\s*\d+(\s*of\s*\d+)?$/i.test(l) && !/^\d+$/.test(l)) lines.push(l);
+  }
 
   // Answer key at the end
   let key = new Map<number, string>();
-  const keyAt = lines.findIndex((l) => ANSWER_KEY_HEADING.test(l));
+  const keyAt = lines.findIndex((l) => typeof l === 'string' && ANSWER_KEY_HEADING.test(l));
   let body = lines;
   if (keyAt >= 0) {
-    key = parseKey(lines.slice(keyAt + 1).join(' '));
+    key = parseKey(
+      lines
+        .slice(keyAt + 1)
+        .filter((l) => typeof l === 'string')
+        .join(' '),
+    );
     body = lines.slice(0, keyAt);
   }
 
   const out: { n: number; q: ImportedQuestion; last: 'prompt' | 'option' | 'explanation' }[] = [];
   let cur: (typeof out)[number] | null = null;
   for (const line of body) {
+    if (typeof line !== 'string') {
+      if (!cur) continue;
+      cur.q.prompt = `${cur.q.prompt.trimEnd()}\n\`\`\`${line.lang}\n${line.code}\n\`\`\`\n`;
+      cur.last = 'prompt';
+      continue;
+    }
     const qm = QUESTION_START.exec(line);
     const om = OPTION.exec(line);
     // A new question number that isn't just an option like "a) 10"
@@ -180,7 +223,7 @@ export function parseQuestionText(text: string): ImportedQuestion[] {
     else if (cur.last === 'explanation')
       cur.q.explanation = `${cur.q.explanation ?? ''} ${line}`.trim();
     else {
-      cur.q.prompt += ` ${line}`;
+      cur.q.prompt += cur.q.prompt.endsWith('\n') ? line : ` ${line}`;
       splitInline(cur);
     }
   }
@@ -196,7 +239,9 @@ export function parseQuestionText(text: string): ImportedQuestion[] {
 function splitInline(cur: { q: ImportedQuestion; last: string }) {
   const target =
     cur.last === 'option' && cur.q.options.length ? cur.q.options.at(-1)!.text : cur.q.prompt;
-  const marks = [...target.matchAll(INLINE_OPTIONS)];
+  // Never look for options inside a code block.
+  const fenceEnd = cur.last === 'option' ? -1 : target.lastIndexOf('```');
+  const marks = [...target.matchAll(INLINE_OPTIONS)].filter((m) => m.index! > fenceEnd);
   // Needs consecutive letters starting where the options so far end (A, B, C…).
   const start = cur.last === 'option' ? cur.q.options.length : 0;
   const seq: RegExpMatchArray[] = [];
@@ -226,8 +271,10 @@ export function splitForImport(text: string, max = IMPORT_CHUNK_CHARS): string[]
   const keyAt = lines.findIndex((l) => ANSWER_KEY_HEADING.test(l.trim()));
   const keyText = keyAt >= 0 ? lines.slice(keyAt).join('\n') : '';
   const body = keyAt >= 0 ? lines.slice(0, keyAt) : lines;
+  let inCode = false;
   for (const l of body) {
-    const startsQuestion = QUESTION_START.test(l.trim());
+    if (inCode ? l.trim() === '```' : FENCE_OPEN.test(l.trim())) inCode = !inCode;
+    const startsQuestion = !inCode && QUESTION_START.test(l.trim());
     if (len + l.length > max && startsQuestion && cur.length) {
       parts.push(cur.join('\n'));
       cur = [];

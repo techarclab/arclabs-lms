@@ -77,6 +77,13 @@ export class QuestionImporter {
   async parse(input: ImportParseInput): Promise<ImportParseResult> {
     const rules = () => parseQuestionText(input.text);
     if (!input.useAi) return { method: 'rules', questions: rules(), note: null };
+    // AI rewrites spacing, so papers with ``` code blocks are read by the rules to keep code exact.
+    if (/^\s*```/m.test(input.text))
+      return {
+        method: 'rules',
+        questions: rules(),
+        note: 'The paper has code blocks, so the standard layout was read to keep the code exactly.',
+      };
     if (!this.ai.configured)
       return {
         method: 'rules',
