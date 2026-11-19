@@ -16,14 +16,14 @@ export function CameraAiStatus({ status, running }: { status: ProctorAiStatus; r
     status === 'loading'
       ? ['Camera AI starting…', 'muted']
       : status === 'unavailable'
-        ? ['Camera AI can’t run in this browser — use the latest Chrome or Edge.', 'warn']
+        ? ['Camera AI can’t run here — use the latest Chrome or Edge', 'warn']
         : running
           ? ['Camera AI watching (face, eyes, phone)', 'ok']
           : ['Camera AI waiting for the camera…', 'muted'];
   return (
     <p
       className={cn(
-        'mt-2 flex items-center gap-2 px-1 text-[11.5px] font-medium',
+        'mt-1.5 flex items-center gap-2 truncate px-1 text-[11.5px] font-medium',
         tone === 'ok' ? 'text-emerald-700' : tone === 'warn' ? 'text-amber-700' : 'text-ink-500',
       )}
     >

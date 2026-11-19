@@ -467,7 +467,7 @@ export function ExamRunner({
     <div className="flex min-h-screen flex-col bg-[#f4f6fb] select-none lg:h-screen lg:overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-20 bg-ink-950 text-white shadow-lg shadow-ink-950/10">
-        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6 [@media(max-height:720px)]:h-12">
           <LogoMark className="size-8 shrink-0" />
           <div className="min-w-0">
             <p className="truncate text-[15px] font-semibold">{session.title}</p>
@@ -533,7 +533,7 @@ export function ExamRunner({
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-5 px-4 py-4 sm:px-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-5 px-4 py-4 sm:px-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_360px] [@media(max-height:720px)]:gap-3 [@media(max-height:720px)]:py-2.5">
         {/* Question */}
         <section className="flex flex-col overflow-hidden rounded-3xl border border-ink-200/80 bg-white shadow-sm lg:min-h-0">
           {sections.length > 1 && (
@@ -724,7 +724,7 @@ export function ExamRunner({
         </section>
 
         {/* Side panel — fits the screen, never scrolls */}
-        <aside className="flex flex-col gap-3 lg:min-h-0 lg:overflow-hidden">
+        <aside className="flex flex-col gap-3 lg:min-h-0 lg:overflow-hidden [@media(max-height:720px)]:gap-2">
           {/* Navigation — always at the top */}
           <div className="shrink-0 rounded-2xl border border-ink-200/80 bg-white p-2.5 shadow-sm">
             <div className="flex items-center gap-2">
@@ -755,23 +755,33 @@ export function ExamRunner({
                 </Button>
               )}
             </div>
-            {index === qs.length - 1 && unansweredCount > 0 ? (
-              <p className="mt-1.5 text-center text-xs font-medium text-rose-600">
-                Answer all questions to submit · {unansweredCount} left
-              </p>
-            ) : (
-              q.type !== 'CODING' && (
+            <div className="mt-2 flex items-center gap-2">
+              {q.type !== 'CODING' && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="mt-1 h-7 w-full text-ink-500"
+                  className="h-8 flex-1 text-ink-500"
                   disabled={!isAnswered(q.id)}
                   onClick={() => setAnswer(q.id, null)}
                 >
-                  <Eraser /> Clear my answer
+                  <Eraser /> Clear answer
                 </Button>
-              )
-            )}
+              )}
+              <Button
+                size="sm"
+                className={cn(
+                  'h-8 flex-[1.4]',
+                  unansweredCount === 0 && 'bg-emerald-600 hover:bg-emerald-700',
+                )}
+                variant={unansweredCount ? 'secondary' : 'primary'}
+                disabled={unansweredCount > 0}
+                title={unansweredCount ? 'Answer every question to submit' : undefined}
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Send />
+                {unansweredCount ? `Submit (${unansweredCount} left)` : 'Submit exam'}
+              </Button>
+            </div>
           </div>
 
           {session.requireCamera && (
@@ -779,7 +789,7 @@ export function ExamRunner({
               <CameraView
                 stream={camera.stream}
                 state={camera.state}
-                className="mx-auto max-w-[230px]"
+                className="aspect-auto h-[20vh] min-h-[110px] w-full"
               />
               {camera.state === 'on' && (
                 <CameraAiStatus status={cameraAi.status} running={cameraAi.running} />
@@ -801,7 +811,13 @@ export function ExamRunner({
             </div>
             <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto">
               {shownSections.map((sec) => (
-                <div key={sec.name ?? 'all'} className="grid grid-cols-8 gap-1.5 p-0.5">
+                <div
+                  key={sec.name ?? 'all'}
+                  className="grid h-full grid-cols-8 gap-1.5 p-0.5"
+                  style={{
+                    gridTemplateRows: `repeat(${Math.max(5, Math.ceil(sec.ids.length / 8))}, minmax(22px, 40px))`,
+                  }}
+                >
                   {sec.ids.map((i) => {
                     const x = qs[i]!;
                     const ans = isAnswered(x.id);
@@ -811,7 +827,7 @@ export function ExamRunner({
                         key={x.id}
                         onClick={() => go(i)}
                         className={cn(
-                          'tabular relative flex h-8 items-center justify-center rounded-lg text-xs font-semibold transition',
+                          'tabular relative flex h-full min-h-[22px] items-center justify-center rounded-lg text-xs font-semibold transition',
                           i === index && 'ring-2 ring-brand-500 ring-offset-1',
                           mk
                             ? 'bg-amber-400 text-amber-950'
@@ -855,7 +871,7 @@ export function ExamRunner({
 
           <p
             className={cn(
-              'flex shrink-0 items-start gap-2 px-1 text-[11px] leading-snug',
+              'flex shrink-0 items-start gap-2 px-1 text-[11px] leading-snug [@media(max-height:720px)]:hidden',
               strict ? 'text-rose-700' : 'text-ink-500',
             )}
           >

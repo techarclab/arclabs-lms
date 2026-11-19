@@ -127,12 +127,40 @@ function observe(models: Models, video: HTMLVideoElement, t: number, withPhone: 
     }
   }
   if (withPhone && models.objects) {
-    const d = models.objects.detectForVideo(video, t + 0.001);
-    const best = Math.max(0, ...d.detections.map((x) => x.categories[0]?.score ?? 0));
+    const best = phoneScore(models.objects, video, t);
     obs.phone = best >= PHONE_MIN_SCORE;
     obs.phoneScore = Math.round(best * 100) / 100;
   }
   return obs;
+}
+
+/**
+ * The detector shrinks the frame to 320 px, so a phone held up to a laptop camera becomes tiny.
+ * Besides the whole frame it also looks at two zoomed-in corners per check (taking turns, so all
+ * four corners are covered every second check), where the phone is about 1.5x bigger.
+ */
+let tileCanvas: HTMLCanvasElement | null = null;
+let tileTurn = 0;
+const TILE_SIDE = 0.65; // share of the shorter side
+function phoneScore(objects: ObjectDetector, video: HTMLVideoElement, t: number) {
+  const top = (d: ReturnType<ObjectDetector['detectForVideo']>) =>
+    Math.max(0, ...d.detections.map((x) => x.categories[0]?.score ?? 0));
+  let best = top(objects.detectForVideo(video, t + 0.001));
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h || typeof document === 'undefined') return best;
+  tileCanvas ??= Object.assign(document.createElement('canvas'), { width: 320, height: 320 });
+  const ctx = tileCanvas.getContext('2d');
+  if (!ctx) return best;
+  const side = Math.min(w, h) * TILE_SIDE;
+  for (let k = 0; k < 2; k++) {
+    const corner = tileTurn++ % 4;
+    const sx = corner % 2 ? w - side : 0;
+    const sy = corner >= 2 ? h - side : 0;
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, 320, 320);
+    best = Math.max(best, top(objects.detectForVideo(tileCanvas, t + 0.002 + k * 0.001)));
+  }
+  return best;
 }
 
 // ───────── Warn first, then report (pure logic — unit-tested) ─────────
