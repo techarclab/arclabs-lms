@@ -404,6 +404,31 @@ export class ExamsService {
     return this.get(orgId, id);
   }
 
+  /** Sets the pass mark (any time) and marks every submitted attempt pass / fail again. */
+  async setPassMark(actor: User, orgId: string, id: string, passPct: number) {
+    const exam = await this.row(orgId, id);
+    const [, passed, failed] = await this.prisma.$transaction([
+      this.prisma.quiz.update({ where: { id }, data: { passPct } }),
+      this.prisma.quizAttempt.updateMany({
+        where: { quizId: id, status: 'GRADED', percentage: { gte: passPct } },
+        data: { passed: true },
+      }),
+      this.prisma.quizAttempt.updateMany({
+        where: { quizId: id, status: 'GRADED', percentage: { lt: passPct } },
+        data: { passed: false },
+      }),
+    ]);
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: 'exam.pass_mark_set',
+      entityType: 'exam',
+      entityId: id,
+      meta: { from: exam.passPct, to: passPct, passed: passed.count, failed: failed.count },
+    });
+    return this.get(orgId, id);
+  }
+
   async setAudience(
     actor: User,
     orgId: string,

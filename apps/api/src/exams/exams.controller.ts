@@ -50,6 +50,8 @@ import {
   type ImportParseInput,
   setExamAudienceSchema,
   setExamQuestionsSchema,
+  setPassMarkSchema,
+  type SetPassMarkInput,
   updateExamSchema,
   type CreateExamParsed,
   type ListExamsQuery,
@@ -288,6 +290,18 @@ export class ExamsController {
   ) {
     await this.exams.assertAccess(org, u.id, id, true);
     return this.exams.setQuestions(u, org.organizationId, id, body.questionIds, body.sections);
+  }
+
+  /** The pass mark can be set after the exam (cut-off); every result is marked pass / fail again. */
+  @Put(':id/pass-mark')
+  async setPassMark(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Param('id', UuidPipe) id: string,
+    @Body(new ZodValidationPipe(setPassMarkSchema)) body: SetPassMarkInput,
+  ) {
+    await this.exams.assertAccess(org, u.id, id, true);
+    return this.exams.setPassMark(u, org.organizationId, id, body.passPct);
   }
 
   @Put(':id/audience')

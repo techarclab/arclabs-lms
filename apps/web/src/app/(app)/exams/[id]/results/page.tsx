@@ -13,6 +13,7 @@ import {
   Pencil,
   RotateCcw,
   Search,
+  Send,
   ShieldAlert,
   Target,
   Timer,
@@ -38,6 +39,7 @@ import {
 } from '@arc/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { PromptText, ReviewCard } from '@/components/exams/AnswerView';
+import { NextRoundDialog } from '@/components/exams/NextRoundDialog';
 import { StopExamButton } from '@/components/exams/StopExamButton';
 import { DifficultyBadge, ExamStateBadge } from '@/components/exams/badges';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -130,8 +132,19 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
     refreshInterval: (d) => (d?.exam.state === 'LIVE' ? 10_000 : 0),
   });
   const [filter, setFilter] = useState<
-    'ALL' | 'SUBMITTED' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FLAGGED'
+    'ALL' | 'SUBMITTED' | 'IN_PROGRESS' | 'NOT_STARTED' | 'FLAGGED' | 'PASSED' | 'FAILED'
   >('ALL');
+  // Pass mark being tried out (null = the exam's saved pass mark).
+  const [cutText, setCutText] = useState<string | null>(null);
+  const [savingCut, setSavingCut] = useState(false);
+  const [nextOpen, setNextOpen] = useState(false);
+  const savedCut = data?.exam.passPct ?? 0;
+  const cutValue = cutText === null ? savedCut : Number(cutText);
+  const cutValid = cutText === null || (cutText.trim() !== '' && cutValue >= 0 && cutValue <= 100);
+  const cut = cutValid ? cutValue : savedCut;
+  /** Pass / fail at the pass mark shown in the box (submitted candidates only). */
+  const passesAt = (x: CandidateRow, c: number) =>
+    x.status === 'SUBMITTED' && x.percentage !== null ? x.percentage >= c : null;
   const [search, setSearch] = useState('');
   const [openQ, setOpenQ] = useState<string | null>(null);
   // Long lists are shown 10 at a time.
@@ -175,6 +188,8 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
   const candidates = useMemo(() => {
     let c = data?.candidates ?? [];
     if (filter === 'FLAGGED') c = c.filter((x) => x.violationCount > 0);
+    else if (filter === 'PASSED') c = c.filter((x) => passesAt(x, cut) === true);
+    else if (filter === 'FAILED') c = c.filter((x) => passesAt(x, cut) === false);
     else if (filter !== 'ALL') c = c.filter((x) => x.status === filter);
     if (search) {
       const s = search.toLowerCase();
@@ -186,7 +201,22 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
       );
     }
     return c;
-  }, [data, filter, search]);
+  }, [data, filter, search, cut]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Saves the pass mark: every submitted result is marked pass / fail again. */
+  async function saveCut() {
+    setSavingCut(true);
+    try {
+      await mutate(`/exams/${id}/pass-mark`, 'PUT', { passPct: Math.round(cut) }, orgId);
+      await reload();
+      setCutText(null);
+      toast.success(`Pass mark set to ${Math.round(cut)}%. Results are marked again.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingCut(false);
+    }
+  }
 
   if (isLoading || !data) {
     return (
@@ -203,6 +233,9 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
   }
 
   const { exam, stats } = data;
+  const passedIds = data.candidates.filter((x) => passesAt(x, cut) === true).map((x) => x.userId);
+  const passCount = passedIds.length;
+  const failCount = data.candidates.filter((x) => passesAt(x, cut) === false).length;
   const candPaged = paginate(candidates, candPage);
   const qPaged = paginate(data.questions, qPage);
   const topicPaged = paginate(data.topics, topicPage);
@@ -297,6 +330,15 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
         </DialogContent>
       </Dialog>
 
+      <NextRoundDialog
+        open={nextOpen}
+        onOpenChange={setNextOpen}
+        orgId={orgId}
+        fromExamId={id}
+        userIds={passedIds}
+        label={`who scored ${cut}% or more in ${exam.title}`}
+      />
+
       {stats.codingPending > 0 && (
         <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center">
           <p className="flex-1 text-sm text-amber-900">
@@ -350,6 +392,59 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
       </div>
 
       <Card className="mt-6 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-ink-100 bg-ink-50/50 px-4 py-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-ink-800">
+            Pass mark
+            <span className="relative">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={cutText ?? String(savedCut)}
+                onChange={(e) => {
+                  setCutText(e.target.value);
+                  setCandPage(0);
+                }}
+                className={cn('h-9 w-20 pr-7', !cutValid && 'border-rose-400')}
+                aria-label="Pass mark in percent"
+              />
+              <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-ink-400">
+                %
+              </span>
+            </span>
+          </label>
+          <span className="text-sm text-ink-600">
+            <b className="text-emerald-700">{passCount}</b> pass ·{' '}
+            <b className="text-rose-700">{failCount}</b> fail
+            {cut !== savedCut && (
+              <span className="ml-1.5 text-amber-700">
+                (preview — saved pass mark is {savedCut}%)
+              </span>
+            )}
+          </span>
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
+            {!viewOnly && cutValid && cut !== savedCut && (
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={savingCut}
+                onClick={() => void saveCut()}
+              >
+                Save pass mark
+              </Button>
+            )}
+            {!viewOnly && (
+              <Button
+                size="sm"
+                disabled={!passCount}
+                onClick={() => setNextOpen(true)}
+                title="Give another exam (e.g. the next round) only to the students who passed"
+              >
+                <Send /> Give next round to {passCount} passed
+              </Button>
+            )}
+          </div>
+        </div>
         <div className="flex flex-col gap-3 border-b border-ink-100 px-4 py-3.5 lg:flex-row lg:items-center">
           <div className="flex flex-wrap rounded-lg bg-ink-100/80 p-0.5">
             {(
@@ -358,6 +453,8 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
                 ['SUBMITTED', `Submitted ${stats.submitted}`],
                 ['IN_PROGRESS', `Writing ${stats.inProgress}`],
                 ['NOT_STARTED', `Absent ${stats.notStarted}`],
+                ['PASSED', `Pass ${passCount}`],
+                ['FAILED', `Fail ${failCount}`],
                 ['FLAGGED', `Flagged ${stats.withViolations}`],
               ] as const
             ).map(([v, label]) => (

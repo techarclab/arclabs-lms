@@ -319,6 +319,12 @@ export const setExamQuestionsSchema = z
   });
 export type SetExamQuestionsInput = z.infer<typeof setExamQuestionsSchema>;
 
+/** Changes an exam's pass mark at any time (e.g. the cut-off decided after the exam). */
+export const setPassMarkSchema = z.object({
+  passPct: z.coerce.number().int('Use a whole number').min(0).max(100),
+});
+export type SetPassMarkInput = z.infer<typeof setPassMarkSchema>;
+
 export const setExamAudienceSchema = z.object({
   assignToAll: z.boolean(),
   departmentIds: z.array(z.uuid()).max(200).default([]),
