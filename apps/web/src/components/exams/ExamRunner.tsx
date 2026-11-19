@@ -448,6 +448,7 @@ export function ExamRunner({
     sections.findIndex((x) => x.ids.includes(index)),
   );
   const shownSections = [sections[viewing] ?? sections[0]!];
+  const unansweredCount = qs.length - answeredCount;
   /** Section dropdown: free exams jump there; one-at-a-time exams can only ask for the next one. */
   const pickSection = (k: number) => {
     if (k === viewing || !sections[k]) return;
@@ -722,10 +723,10 @@ export function ExamRunner({
           </div>
         </section>
 
-        {/* Side panel */}
-        <aside className="space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+        {/* Side panel — fits the screen, never scrolls */}
+        <aside className="flex flex-col gap-3 lg:min-h-0 lg:overflow-hidden">
           {/* Navigation — always at the top */}
-          <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
+          <div className="shrink-0 rounded-2xl border border-ink-200/80 bg-white p-2.5 shadow-sm">
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
@@ -744,26 +745,42 @@ export function ExamRunner({
                   Save & next <ChevronRight />
                 </Button>
               ) : (
-                <Button className="flex-[1.4]" onClick={() => setConfirmOpen(true)}>
-                  <Send /> Finish & submit
+                <Button
+                  className="flex-[1.4]"
+                  disabled={unansweredCount > 0}
+                  onClick={() => setConfirmOpen(true)}
+                  title={unansweredCount ? 'Answer every question to submit' : undefined}
+                >
+                  <Send /> Submit exam
                 </Button>
               )}
             </div>
-            {q.type !== 'CODING' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-1.5 w-full text-ink-500"
-                disabled={!isAnswered(q.id)}
-                onClick={() => setAnswer(q.id, null)}
-              >
-                <Eraser /> Clear my answer
-              </Button>
+            {index === qs.length - 1 && unansweredCount > 0 ? (
+              <p className="mt-1.5 text-center text-xs font-medium text-rose-600">
+                Answer all questions to submit · {unansweredCount} left
+              </p>
+            ) : (
+              q.type !== 'CODING' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 h-7 w-full text-ink-500"
+                  disabled={!isAnswered(q.id)}
+                  onClick={() => setAnswer(q.id, null)}
+                >
+                  <Eraser /> Clear my answer
+                </Button>
+              )
             )}
           </div>
+
           {session.requireCamera && (
-            <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
-              <CameraView stream={camera.stream} state={camera.state} compact />
+            <div className="shrink-0 rounded-2xl border border-ink-200/80 bg-white p-2 shadow-sm">
+              <CameraView
+                stream={camera.stream}
+                state={camera.state}
+                className="mx-auto max-w-[230px]"
+              />
               {camera.state === 'on' && (
                 <CameraAiStatus status={cameraAi.status} running={cameraAi.running} />
               )}
@@ -771,29 +788,20 @@ export function ExamRunner({
             </div>
           )}
 
-          <div className="rounded-3xl border border-ink-200/80 bg-white p-5 shadow-sm">
-            <div className="flex items-baseline justify-between">
-              <p className="text-sm font-semibold text-ink-900">Questions</p>
-              <p className="tabular text-xs text-ink-500">
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-ink-200/80 bg-white p-3.5 shadow-sm">
+            <div className="flex shrink-0 items-baseline justify-between">
+              <p className="truncate text-sm font-semibold text-ink-900">
+                {shownSections[0]?.name
+                  ? sectionLabel(sections.indexOf(shownSections[0]), shownSections[0].name)
+                  : 'Questions'}
+              </p>
+              <p className="tabular shrink-0 text-xs text-ink-500">
                 <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
               </p>
             </div>
-            {shownSections.map((sec) => (
-              <div key={sec.name ?? 'all'} className="mt-3">
-                {sec.name && (
-                  <p className="mb-2 flex items-baseline justify-between text-xs font-semibold text-ink-700">
-                    <span className="truncate">
-                      {sectionLabel(sections.indexOf(sec), sec.name)}
-                      {inOrder && (
-                        <span className="font-normal text-ink-500"> of {sections.length}</span>
-                      )}
-                    </span>
-                    <span className="tabular font-normal text-ink-500">
-                      {sec.ids.filter((i) => isAnswered(qs[i]!.id)).length}/{sec.ids.length}
-                    </span>
-                  </p>
-                )}
-                <div className="grid grid-cols-6 gap-2 lg:grid-cols-5">
+            <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto">
+              {shownSections.map((sec) => (
+                <div key={sec.name ?? 'all'} className="grid grid-cols-8 gap-1.5 p-0.5">
                   {sec.ids.map((i) => {
                     const x = qs[i]!;
                     const ans = isAnswered(x.id);
@@ -803,8 +811,8 @@ export function ExamRunner({
                         key={x.id}
                         onClick={() => go(i)}
                         className={cn(
-                          'tabular relative flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition',
-                          i === index && 'ring-2 ring-brand-500 ring-offset-2',
+                          'tabular relative flex h-8 items-center justify-center rounded-lg text-xs font-semibold transition',
+                          i === index && 'ring-2 ring-brand-500 ring-offset-1',
                           mk
                             ? 'bg-amber-400 text-amber-950'
                             : ans
@@ -816,61 +824,50 @@ export function ExamRunner({
                       >
                         {i + 1}
                         {mk && ans && (
-                          <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                          <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-white" />
                         )}
                       </button>
                     );
                   })}
                 </div>
-              </div>
-            ))}
-            <ul className="mt-5 grid grid-cols-2 gap-2 text-xs text-ink-600">
-              <li className="flex items-center gap-2">
-                <span className="size-3 rounded bg-emerald-500" /> Answered
+              ))}
+            </div>
+            <ul className="mt-2.5 flex shrink-0 flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-600">
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-emerald-500" /> Answered
               </li>
-              <li className="flex items-center gap-2">
-                <span className="size-3 rounded bg-amber-400" /> For review ({marked.size})
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-amber-400" /> Review ({marked.size})
               </li>
-              <li className="flex items-center gap-2">
-                <span className="size-3 rounded bg-white ring-1 ring-rose-300" /> Skipped
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-white ring-1 ring-rose-300" /> Skipped
               </li>
-              <li className="flex items-center gap-2">
-                <span className="size-3 rounded bg-ink-100" /> Not visited
+              <li className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm bg-ink-100" /> Not visited
               </li>
             </ul>
-            {inOrder && !lastSection ? (
-              <>
-                <Button className="mt-5 w-full" size="lg" onClick={() => setNextOpen(true)}>
-                  Next section <ChevronRight />
-                </Button>
-                <p className="mt-2 text-center text-xs text-ink-500">
-                  Answer every question of this section to move on. You can’t come back to it.
-                </p>
-              </>
-            ) : (
-              <Button className="mt-5 w-full" size="lg" onClick={() => setConfirmOpen(true)}>
-                <Send /> Submit exam
+            {inOrder && !lastSection && (
+              <Button className="mt-2.5 w-full shrink-0" onClick={() => setNextOpen(true)}>
+                Next section <ChevronRight />
               </Button>
             )}
           </div>
 
-          <div
+          <p
             className={cn(
-              'flex gap-2.5 rounded-2xl px-4 py-3 text-xs leading-relaxed',
-              strict ? 'bg-rose-50 text-rose-800 ring-1 ring-rose-100' : 'text-ink-500',
+              'flex shrink-0 items-start gap-2 px-1 text-[11px] leading-snug',
+              strict ? 'text-rose-700' : 'text-ink-500',
             )}
           >
             {strict ? (
-              <DoorOpen className="mt-0.5 size-4 shrink-0" />
+              <DoorOpen className="size-3.5 shrink-0" />
             ) : (
-              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+              <ShieldAlert className="size-3.5 shrink-0" />
             )}
-            <span>
-              {strict
-                ? 'Stay in this window. Leaving full screen, switching tab/window or closing the page submits your exam.'
-                : `Answers save automatically. The exam submits itself when time runs out${session.maxViolations > 0 ? ` or after ${session.maxViolations} violations` : ''}.`}
-            </span>
-          </div>
+            {strict
+              ? 'Stay in this window. Leaving full screen, switching tab/window or closing the page submits your exam.'
+              : `Answers save automatically. The exam submits itself when time runs out${session.maxViolations > 0 ? ` or after ${session.maxViolations} violations` : ''}.`}
+          </p>
         </aside>
       </div>
 
@@ -1043,8 +1040,8 @@ export function ExamRunner({
       {/* Submit confirmation */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent
-          title="Submit your exam?"
-          description="You won’t be able to change your answers after submitting."
+          title="Are you ready to submit the exam?"
+          description="After submitting you can’t change any answer."
           icon={<Send />}
         >
           <div className="px-6 pt-2 pb-6">
@@ -1071,8 +1068,12 @@ export function ExamRunner({
               <Button variant="secondary" className="flex-1" onClick={() => setConfirmOpen(false)}>
                 Keep working
               </Button>
-              <Button className="flex-1" onClick={() => void finish('manual')}>
-                Submit now
+              <Button
+                className="flex-1"
+                disabled={unansweredCount > 0}
+                onClick={() => void finish('manual')}
+              >
+                Yes, submit
               </Button>
             </div>
           </div>
