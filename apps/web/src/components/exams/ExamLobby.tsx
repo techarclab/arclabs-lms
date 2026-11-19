@@ -94,7 +94,7 @@ export function ExamLobby({
   return (
     <div className="min-h-screen bg-ink-50">
       <header className="border-b border-ink-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-4xl items-center gap-3 px-6">
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
           <Link
             href="/my-exams"
             className="flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900"
@@ -106,15 +106,15 @@ export function ExamLobby({
           </span>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-sm">
-          <div className="relative bg-ink-950 px-8 py-9 text-white">
+          <div className="relative bg-ink-950 px-6 py-5 text-white sm:px-8">
             <div className="bg-grid absolute inset-0 opacity-60" />
             <div className="absolute -top-20 -right-20 size-72 rounded-full bg-brand-600/30 blur-3xl" />
             <div className="relative">
               <p className="text-sm font-medium text-cyan-300">Examination</p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight">{lobby.title}</h1>
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight">{lobby.title}</h1>
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 {[
                   { icon: Timer, k: 'Duration', v: `${lobby.durationMinutes} min` },
                   { icon: FileQuestion, k: 'Questions', v: lobby.questionCount },
@@ -123,108 +123,26 @@ export function ExamLobby({
                 ].map(({ icon: Icon, k, v }) => (
                   <div
                     key={k}
-                    className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur"
+                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 backdrop-blur"
                   >
-                    <Icon className="size-4 text-cyan-300" />
-                    <p className="mt-2 text-xl font-semibold">{v}</p>
-                    <p className="text-xs text-ink-300">{k}</p>
+                    <Icon className="size-4 shrink-0 text-cyan-300" />
+                    <div>
+                      <p className="text-lg leading-tight font-semibold">{v}</p>
+                      <p className="text-xs text-ink-300">{k}</p>
+                    </div>
                   </div>
                 ))}
               </div>
-              <p className="mt-5 flex items-center gap-2 text-sm text-ink-300">
+              <p className="mt-3 flex items-center gap-2 text-sm text-ink-300">
                 <CalendarClock className="size-4" /> Window: {formatDateTime(lobby.startsAt)} →{' '}
                 {formatDateTime(lobby.endsAt)}
               </p>
             </div>
           </div>
 
-          <div className="grid gap-8 p-8 lg:grid-cols-[1fr_300px]">
-            <div>
-              <h2 className="text-lg font-semibold">Instructions</h2>
-              <ol className="mt-4 space-y-3">
-                {rules.map((r, i) => (
-                  <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-ink-700">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-600">
-                      {i + 1}
-                    </span>
-                    {r}
-                  </li>
-                ))}
-                {lobby.negativeMarking && (
-                  <li className="flex gap-3 text-[15px] leading-relaxed font-medium text-rose-700">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold">
-                      !
-                    </span>
-                    Negative marking applies: wrong answers reduce your score. Leave a question
-                    blank if you’re unsure.
-                  </li>
-                )}
-              </ol>
-            </div>
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
-                  <ShieldAlert className="size-4" /> Proctoring rules
-                </p>
-                <ul className="mt-3 space-y-2 text-[13px] text-rose-900/80">
-                  {lobby.requireFullscreen && (
-                    <li className="flex gap-2">
-                      <Maximize className="mt-0.5 size-3.5 shrink-0" /> The exam runs in full
-                      screen.
-                    </li>
-                  )}
-                  <li className="flex gap-2">
-                    <Keyboard className="mt-0.5 size-3.5 shrink-0" /> Keyboard shortcuts, copy,
-                    paste and right-click are disabled.
-                  </li>
-                  {strict ? (
-                    <li className="flex gap-2 font-semibold text-rose-800">
-                      <DoorOpen className="mt-0.5 size-3.5 shrink-0" /> Leaving full screen,
-                      switching tab/window or closing the page submits your exam immediately.
-                    </li>
-                  ) : (
-                    <>
-                      <li className="flex gap-2">
-                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs,
-                        windows or apps is recorded.
-                      </li>
-                      {lobby.maxViolations > 0 && (
-                        <li className="flex gap-2 font-semibold">
-                          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
-                          {lobby.maxViolations} violations your exam is submitted automatically.
-                        </li>
-                      )}
-                    </>
-                  )}
-                  <li className="flex gap-2">
-                    <Bot className="mt-0.5 size-3.5 shrink-0" /> No AI tools: second screens, AI
-                    apps and browser extensions (ChatGPT, Gemini, AI sidebars) are detected and
-                    count as a violation.
-                  </li>
-                  {lobby.requireCamera && (
-                    <li className="flex gap-2">
-                      <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
-                      the whole exam.
-                    </li>
-                  )}
-                  {campus && (
-                    <li className="flex gap-2 font-semibold">
-                      <MapPin className="mt-0.5 size-3.5 shrink-0" /> This exam must be written on
-                      campus{campus.address ? ` (${campus.address})` : ''}. Your location is checked
-                      when you start and during the exam; leaving the campus counts as a violation.
-                    </li>
-                  )}
-                  {lobby.requireCamera && (
-                    <li className="flex gap-2">
-                      <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
-                      you are in view, that you look at your screen and that no phone is used. You
-                      are warned first; if it continues it counts as a violation and a photo is
-                      saved for your instructor.
-                    </li>
-                  )}
-                </ul>
-              </div>
-
+          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,380px)_1fr]">
+            {/* Get ready: camera, location and Start come first */}
+            <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
               {canTake && !leftStrict && lobby.requireCamera && (
                 <div className="rounded-2xl border border-ink-200 p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
@@ -233,8 +151,7 @@ export function ExamLobby({
                   <CameraView
                     stream={camera.stream}
                     state={camera.state}
-                    compact
-                    className="mt-3"
+                    className="mx-auto mt-3 max-w-[260px]"
                   />
                   {camera.state !== 'on' && (
                     <Button
@@ -431,6 +348,93 @@ export function ExamLobby({
                   )}
                 </div>
               )}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Instructions</h2>
+              <ol className="mt-4 space-y-3">
+                {rules.map((r, i) => (
+                  <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-ink-700">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-600">
+                      {i + 1}
+                    </span>
+                    {r}
+                  </li>
+                ))}
+                {lobby.negativeMarking && (
+                  <li className="flex gap-3 text-[15px] leading-relaxed font-medium text-rose-700">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold">
+                      !
+                    </span>
+                    Negative marking applies: wrong answers reduce your score. Leave a question
+                    blank if you’re unsure.
+                  </li>
+                )}
+              </ol>
+              <div className="mt-6">
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                    <ShieldAlert className="size-4" /> Proctoring rules
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[13px] text-rose-900/80">
+                    {lobby.requireFullscreen && (
+                      <li className="flex gap-2">
+                        <Maximize className="mt-0.5 size-3.5 shrink-0" /> The exam runs in full
+                        screen.
+                      </li>
+                    )}
+                    <li className="flex gap-2">
+                      <Keyboard className="mt-0.5 size-3.5 shrink-0" /> Keyboard shortcuts, copy,
+                      paste and right-click are disabled.
+                    </li>
+                    {strict ? (
+                      <li className="flex gap-2 font-semibold text-rose-800">
+                        <DoorOpen className="mt-0.5 size-3.5 shrink-0" /> Leaving full screen,
+                        switching tab/window or closing the page submits your exam immediately.
+                      </li>
+                    ) : (
+                      <>
+                        <li className="flex gap-2">
+                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs,
+                          windows or apps is recorded.
+                        </li>
+                        {lobby.maxViolations > 0 && (
+                          <li className="flex gap-2 font-semibold">
+                            <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
+                            {lobby.maxViolations} violations your exam is submitted automatically.
+                          </li>
+                        )}
+                      </>
+                    )}
+                    <li className="flex gap-2">
+                      <Bot className="mt-0.5 size-3.5 shrink-0" /> No AI tools: second screens, AI
+                      apps and browser extensions (ChatGPT, Gemini, AI sidebars) are detected and
+                      count as a violation.
+                    </li>
+                    {lobby.requireCamera && (
+                      <li className="flex gap-2">
+                        <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
+                        the whole exam.
+                      </li>
+                    )}
+                    {campus && (
+                      <li className="flex gap-2 font-semibold">
+                        <MapPin className="mt-0.5 size-3.5 shrink-0" /> This exam must be written on
+                        campus{campus.address ? ` (${campus.address})` : ''}. Your location is
+                        checked when you start and during the exam; leaving the campus counts as a
+                        violation.
+                      </li>
+                    )}
+                    {lobby.requireCamera && (
+                      <li className="flex gap-2">
+                        <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
+                        you are in view, that you look at your screen and that no phone is used. You
+                        are warned first; if it continues it counts as a violation and a photo is
+                        saved for your instructor.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>

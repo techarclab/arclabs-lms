@@ -30,7 +30,7 @@ import type {
   ProctorEventResult,
   RunCodeResponse,
 } from '@arc/types';
-import { Button, cn, Dialog, DialogContent } from '@arc/ui';
+import { Button, cn, Dialog, DialogContent, Select } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { ApiError } from '@/lib/api';
@@ -442,14 +442,28 @@ export function ExamRunner({
 
   const answer = answers[q.id];
   const multi = q.type === 'MULTIPLE_CHOICE';
-  const shownSections = inOrder ? [current] : sections;
+  // The question grid shows one section: the one with the current question.
+  const viewing = Math.max(
+    0,
+    sections.findIndex((x) => x.ids.includes(index)),
+  );
+  const shownSections = [sections[viewing] ?? sections[0]!];
+  /** Section dropdown: free exams jump there; one-at-a-time exams can only ask for the next one. */
+  const pickSection = (k: number) => {
+    if (k === viewing || !sections[k]) return;
+    if (inOrder) {
+      if (k === sectionNo + 1) setNextOpen(true);
+      return;
+    }
+    go(sections[k]!.ids[0]!);
+  };
   const sectionLeft = current.ids.filter((i) => !isAnswered(qs[i]!.id));
   const firstOfSection = inOrder && index === current.ids[0];
   const endOfSection = inOrder && index === current.ids[current.ids.length - 1];
   const pct = qs.length ? Math.round((answeredCount / qs.length) * 100) : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f4f6fb] select-none">
+    <div className="flex min-h-screen flex-col bg-[#f4f6fb] select-none lg:h-screen lg:overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-20 bg-ink-950 text-white shadow-lg shadow-ink-950/10">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
@@ -518,9 +532,9 @@ export function ExamRunner({
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mx-auto grid w-full max-w-[1440px] flex-1 gap-5 px-4 py-4 sm:px-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Question */}
-        <section className="flex flex-col overflow-hidden rounded-3xl border border-ink-200/80 bg-white shadow-sm">
+        <section className="flex flex-col overflow-hidden rounded-3xl border border-ink-200/80 bg-white shadow-sm lg:min-h-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-6 py-4 sm:px-8">
             <span className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-ink-950 px-2.5 text-sm font-semibold text-white">
               Q{index + 1}
@@ -561,7 +575,7 @@ export function ExamRunner({
             </button>
           </div>
 
-          <div className="flex-1 px-6 py-8 sm:px-8">
+          <div className="flex-1 px-6 py-6 sm:px-8 lg:min-h-0 lg:overflow-y-auto">
             <PromptText text={q.prompt} className="text-[17px] leading-relaxed text-ink-900" />
             <p className="mt-4 text-xs font-semibold tracking-wide text-ink-400 uppercase">
               {multi
@@ -663,44 +677,47 @@ export function ExamRunner({
               </ul>
             )}
           </div>
+        </section>
 
-          <div className="flex items-center gap-2 border-t border-ink-100 bg-ink-50/50 px-6 py-4 sm:px-8">
-            <Button
-              variant="secondary"
-              disabled={index === 0 || firstOfSection}
-              onClick={() => go(index - 1)}
-            >
-              <ChevronLeft /> Previous
-            </Button>
-            {q.type !== 'CODING' && (
+        {/* Side panel */}
+        <aside className="space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+          {/* Navigation — always at the top */}
+          <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
+            <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                disabled={!isAnswered(q.id)}
-                onClick={() => setAnswer(q.id, null)}
+                variant="secondary"
+                className="flex-1"
+                disabled={index === 0 || (inOrder && firstOfSection)}
+                onClick={() => go(index - 1)}
               >
-                <Eraser /> Clear
+                <ChevronLeft /> Previous
               </Button>
-            )}
-            <div className="ml-auto flex gap-2">
-              {endOfSection && !lastSection ? (
-                <Button onClick={() => setNextOpen(true)}>
+              {endOfSection && !lastSection && inOrder ? (
+                <Button className="flex-[1.4]" onClick={() => setNextOpen(true)}>
                   Next section <ChevronRight />
                 </Button>
               ) : index < qs.length - 1 ? (
-                <Button onClick={() => go(index + 1)}>
+                <Button className="flex-[1.4]" onClick={() => go(index + 1)}>
                   Save & next <ChevronRight />
                 </Button>
               ) : (
-                <Button onClick={() => setConfirmOpen(true)}>
+                <Button className="flex-[1.4]" onClick={() => setConfirmOpen(true)}>
                   <Send /> Finish & submit
                 </Button>
               )}
             </div>
+            {q.type !== 'CODING' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-1.5 w-full text-ink-500"
+                disabled={!isAnswered(q.id)}
+                onClick={() => setAnswer(q.id, null)}
+              >
+                <Eraser /> Clear my answer
+              </Button>
+            )}
           </div>
-        </section>
-
-        {/* Side panel */}
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           {session.requireCamera && (
             <div className="rounded-3xl border border-ink-200/80 bg-white p-3 shadow-sm">
               <CameraView stream={camera.stream} state={camera.state} compact />
@@ -718,9 +735,29 @@ export function ExamRunner({
                 <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
               </p>
             </div>
+            {sections.length > 1 && (
+              <Select
+                className="mt-3 h-10 font-medium"
+                value={String(viewing)}
+                onChange={(e) => pickSection(Number(e.target.value))}
+                aria-label="Section"
+              >
+                {sections.map((sec, k) => {
+                  const done = inOrder && k < sectionNo;
+                  const locked = inOrder && k > sectionNo;
+                  const answered = sec.ids.filter((i) => isAnswered(qs[i]!.id)).length;
+                  return (
+                    <option key={k} value={k} disabled={done || (locked && k !== sectionNo + 1)}>
+                      {done ? '✓ ' : locked ? '🔒 ' : ''}
+                      {sectionLabel(k, sec.name)} ({answered}/{sec.ids.length})
+                    </option>
+                  );
+                })}
+              </Select>
+            )}
             {shownSections.map((sec) => (
-              <div key={sec.name ?? 'all'} className="mt-4">
-                {sec.name && (
+              <div key={sec.name ?? 'all'} className="mt-3">
+                {sec.name && sections.length < 2 && (
                   <p className="mb-2 flex items-baseline justify-between text-xs font-semibold text-ink-700">
                     <span className="truncate">
                       {sectionLabel(sections.indexOf(sec), sec.name)}
