@@ -92,9 +92,9 @@ export function ExamLobby({
   const attemptsLeft = lobby.maxAttempts - lobby.attemptsUsed;
 
   return (
-    <div className="min-h-screen bg-ink-50">
-      <header className="border-b border-ink-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
+    <div className="min-h-screen bg-ink-50 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden">
+      <header className="shrink-0 border-b border-ink-200 bg-white">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
           <Link
             href="/my-exams"
             className="flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-900"
@@ -106,9 +106,214 @@ export function ExamLobby({
           </span>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        <div className="overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-sm">
-          <div className="relative bg-ink-950 px-6 py-5 text-white sm:px-8">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-4 sm:px-6 lg:grid lg:min-h-0 lg:grid-cols-[400px_minmax(0,1fr)] lg:gap-5">
+        {/* Get ready: camera, agreement and Start */}
+        <section className="space-y-4 rounded-3xl border border-ink-200 bg-white p-5 shadow-sm lg:min-h-0 lg:overflow-y-auto [@media(max-height:700px)]:space-y-3 [@media(max-height:700px)]:p-4">
+          <h2 className="text-base font-semibold text-ink-900">Get ready</h2>
+          {canTake && !leftStrict && lobby.requireCamera && (
+            <div className="rounded-2xl border border-ink-200 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                <Camera className="size-4 text-brand-600" /> Camera check
+              </p>
+              <CameraView
+                stream={camera.stream}
+                state={camera.state}
+                className="mt-3 aspect-auto h-[clamp(120px,25vh,200px)] w-full"
+              />
+              {camera.state !== 'on' && (
+                <Button
+                  variant="secondary"
+                  className="mt-3 w-full"
+                  loading={camera.state === 'requesting'}
+                  onClick={() => void camera.start()}
+                >
+                  <Camera /> Turn on camera
+                </Button>
+              )}
+              {(camera.state === 'denied' || camera.state === 'unavailable') && (
+                <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+                  {camera.state === 'denied'
+                    ? 'Camera is blocked. Click the camera (or lock) icon at the left of the address bar → Camera → Allow. It turns on by itself once allowed; if not, press “Turn on camera” again or reload the page.'
+                    : 'No camera found, or another app (Zoom, Teams, Camera) is using it. Close that app or connect a webcam, then press “Turn on camera”.'}
+                </p>
+              )}
+              {camera.state === 'on' && (
+                <p
+                  className={cn(
+                    'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] font-medium',
+                    faceCheck.status === 'loading'
+                      ? 'bg-ink-50 text-ink-600'
+                      : faceCheck.status === 'unavailable' || faceOk
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-rose-50 text-rose-800',
+                  )}
+                >
+                  <ScanFace className="size-4 shrink-0" />
+                  {faceCheck.status === 'loading'
+                    ? 'Starting the camera check…'
+                    : faceCheck.status === 'unavailable'
+                      ? 'Camera on. (Camera AI can’t run in this browser — use the latest Chrome or Edge.)'
+                      : faceCheck.faces === 1
+                        ? 'Face detected — you’re ready.'
+                        : faceCheck.faces === 0 || faceCheck.faces === null
+                          ? 'We can’t see your face. Sit facing the camera in good light.'
+                          : 'More than one person is in view. Only you may be in the camera.'}
+                </p>
+              )}
+              {camCheck && camera.state === 'on' && <CameraAiNumbers info={faceCheck.debugInfo} />}
+              <p className="mt-3 text-[12px] leading-relaxed text-ink-500 [@media(max-height:700px)]:hidden">
+                Keep your face clearly visible. The camera must stay on until you submit.
+              </p>
+            </div>
+          )}
+
+          {canTake && !leftStrict && campus && (
+            <div className="rounded-2xl border border-ink-200 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                <MapPin className="size-4 text-brand-600" /> Location check
+              </p>
+              <p
+                className={cn(
+                  'mt-3 rounded-lg px-3 py-2 text-[12.5px] font-medium',
+                  location.state === 'on'
+                    ? 'bg-emerald-50 text-emerald-800'
+                    : location.state === 'requesting' || location.state === 'idle'
+                      ? 'bg-ink-50 text-ink-600'
+                      : 'bg-rose-50 text-rose-800',
+                )}
+              >
+                {location.state === 'on' && location.position
+                  ? `Location found (${accuracyText(location.position.accuracy)}). It is checked against the campus when you start.`
+                  : location.state === 'denied'
+                    ? 'Location is blocked. Click the lock (or location) icon at the left of the address bar → Location → Allow, then press “Share my location”.'
+                    : location.state === 'unavailable' || location.state === 'timeout'
+                      ? 'Couldn’t find your location. Turn on Wi-Fi and location (Windows: Settings → Privacy → Location), then press “Share my location”.'
+                      : 'Finding your location… allow it when the browser asks.'}
+              </p>
+              {location.state !== 'on' && location.state !== 'requesting' && (
+                <Button variant="secondary" className="mt-3 w-full" onClick={location.start}>
+                  <MapPin /> Share my location
+                </Button>
+              )}
+              <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
+                You must be within {campus.radiusM} m of the college. Laptops find their location
+                through Wi-Fi, so keep Wi-Fi on.
+              </p>
+            </div>
+          )}
+
+          {canTake && !leftStrict && !integrityOk && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                <ShieldAlert className="size-4" /> Fix this before you start
+              </p>
+              <ul className="mt-2 space-y-2 text-[13px] leading-relaxed text-rose-900/85">
+                {extraScreen && (
+                  <li>
+                    <b>A second screen is connected.</b> Disconnect the extra monitor or TV (or
+                    switch Windows to “PC screen only” with Win + P). Only one screen is allowed.
+                  </li>
+                )}
+                {injected.length > 0 && (
+                  <li>
+                    <b>A browser extension is running on this page</b> (for example an AI assistant,
+                    grammar or translate tool). Open this exam in an Incognito / InPrivate window,
+                    or turn off extensions, then reload.
+                    <span className="mt-1 block font-mono text-[11px] text-rose-700/80">
+                      Detected: {injected.slice(0, 3).join(', ')}
+                    </span>
+                  </li>
+                )}
+              </ul>
+              <p className="mt-2 text-[12px] text-rose-800/80">
+                This updates automatically once fixed. AI tools are not allowed in this exam.
+              </p>
+            </div>
+          )}
+
+          {leftStrict ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                <DoorOpen className="size-4" /> You left this exam
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-rose-900/80">
+                The exam window was closed or left while it was running. Under this exam’s rules it
+                is submitted with the answers you had saved.
+              </p>
+              {error && <p className="mt-2 text-[13px] text-rose-700">{error}</p>}
+              <Button className="mt-4 w-full" loading={starting} onClick={() => onStart()}>
+                See my result
+              </Button>
+            </div>
+          ) : canTake ? (
+            <>
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-brand-600"
+                  checked={agree}
+                  onChange={(e) => setAgree(e.target.checked)}
+                />
+                I have read the instructions and agree to follow the exam rules.
+              </label>
+              {error && (
+                <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</p>
+              )}
+              <Button
+                size="lg"
+                className="w-full"
+                disabled={!agree || !cameraReady || !integrityOk || !locationReady}
+                loading={starting}
+                onClick={begin}
+              >
+                {resuming ? 'Resume exam' : 'Start exam'}
+              </Button>
+              <p className="text-center text-xs text-ink-500">
+                {!cameraReady
+                  ? camera.state === 'on'
+                    ? 'Your face must be clearly visible, alone, to start.'
+                    : 'Turn on your camera to start.'
+                  : !integrityOk
+                    ? 'Fix the problems above to start.'
+                    : !locationReady
+                      ? 'Share your location to start (this exam is on campus only).'
+                      : resuming
+                        ? 'Your timer kept running while you were away.'
+                        : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
+              </p>
+            </>
+          ) : (
+            <div
+              className={cn(
+                'rounded-2xl p-4 text-center',
+                lobby.state === 'SCHEDULED' ? 'bg-brand-50' : 'bg-ink-100',
+              )}
+            >
+              {lobby.state === 'SCHEDULED' && lobby.startsAt ? (
+                <>
+                  <p className="text-sm text-ink-600">Opens in</p>
+                  <p className="tabular mt-1 text-2xl font-semibold text-brand-700">
+                    {timeUntil(lobby.startsAt)}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-500">This page unlocks automatically.</p>
+                </>
+              ) : lobby.lastAttempt ? (
+                <>
+                  <CheckCircle2 className="mx-auto size-6 text-emerald-600" />
+                  <p className="mt-2 text-sm font-medium">You’ve completed this exam</p>
+                  <Button asChild className="mt-3 w-full" variant="secondary">
+                    <Link href={`/my-exams/result/${lobby.lastAttempt.id}`}>View result</Link>
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-ink-600">This exam has closed.</p>
+              )}
+            </div>
+          )}
+        </section>
+
+        <div className="mt-4 flex flex-col gap-4 lg:mt-0 lg:min-h-0">
+          <div className="relative shrink-0 overflow-hidden rounded-3xl bg-ink-950 px-6 py-5 text-white shadow-sm sm:px-7">
             <div className="bg-grid absolute inset-0 opacity-60" />
             <div className="absolute -top-20 -right-20 size-72 rounded-full bg-brand-600/30 blur-3xl" />
             <div className="relative">
@@ -139,217 +344,8 @@ export function ExamLobby({
               </p>
             </div>
           </div>
-
-          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,380px)_1fr]">
-            {/* Get ready: camera, location and Start come first */}
-            <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-              {canTake && !leftStrict && lobby.requireCamera && (
-                <div className="rounded-2xl border border-ink-200 p-4">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
-                    <Camera className="size-4 text-brand-600" /> Camera check
-                  </p>
-                  <CameraView
-                    stream={camera.stream}
-                    state={camera.state}
-                    className="mx-auto mt-3 max-w-[260px]"
-                  />
-                  {camera.state !== 'on' && (
-                    <Button
-                      variant="secondary"
-                      className="mt-3 w-full"
-                      loading={camera.state === 'requesting'}
-                      onClick={() => void camera.start()}
-                    >
-                      <Camera /> Turn on camera
-                    </Button>
-                  )}
-                  {(camera.state === 'denied' || camera.state === 'unavailable') && (
-                    <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
-                      {camera.state === 'denied'
-                        ? 'Camera is blocked. Click the camera (or lock) icon at the left of the address bar → Camera → Allow. It turns on by itself once allowed; if not, press “Turn on camera” again or reload the page.'
-                        : 'No camera found, or another app (Zoom, Teams, Camera) is using it. Close that app or connect a webcam, then press “Turn on camera”.'}
-                    </p>
-                  )}
-                  {camera.state === 'on' && (
-                    <p
-                      className={cn(
-                        'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px] font-medium',
-                        faceCheck.status === 'loading'
-                          ? 'bg-ink-50 text-ink-600'
-                          : faceCheck.status === 'unavailable' || faceOk
-                            ? 'bg-emerald-50 text-emerald-800'
-                            : 'bg-rose-50 text-rose-800',
-                      )}
-                    >
-                      <ScanFace className="size-4 shrink-0" />
-                      {faceCheck.status === 'loading'
-                        ? 'Starting the camera check…'
-                        : faceCheck.status === 'unavailable'
-                          ? 'Camera on. (Camera AI can’t run in this browser — use the latest Chrome or Edge.)'
-                          : faceCheck.faces === 1
-                            ? 'Face detected — you’re ready.'
-                            : faceCheck.faces === 0 || faceCheck.faces === null
-                              ? 'We can’t see your face. Sit facing the camera in good light.'
-                              : 'More than one person is in view. Only you may be in the camera.'}
-                    </p>
-                  )}
-                  {camCheck && camera.state === 'on' && (
-                    <CameraAiNumbers info={faceCheck.debugInfo} />
-                  )}
-                  <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
-                    Keep your face clearly visible. The camera must stay on until you submit.
-                  </p>
-                </div>
-              )}
-
-              {canTake && !leftStrict && campus && (
-                <div className="rounded-2xl border border-ink-200 p-4">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
-                    <MapPin className="size-4 text-brand-600" /> Location check
-                  </p>
-                  <p
-                    className={cn(
-                      'mt-3 rounded-lg px-3 py-2 text-[12.5px] font-medium',
-                      location.state === 'on'
-                        ? 'bg-emerald-50 text-emerald-800'
-                        : location.state === 'requesting' || location.state === 'idle'
-                          ? 'bg-ink-50 text-ink-600'
-                          : 'bg-rose-50 text-rose-800',
-                    )}
-                  >
-                    {location.state === 'on' && location.position
-                      ? `Location found (${accuracyText(location.position.accuracy)}). It is checked against the campus when you start.`
-                      : location.state === 'denied'
-                        ? 'Location is blocked. Click the lock (or location) icon at the left of the address bar → Location → Allow, then press “Share my location”.'
-                        : location.state === 'unavailable' || location.state === 'timeout'
-                          ? 'Couldn’t find your location. Turn on Wi-Fi and location (Windows: Settings → Privacy → Location), then press “Share my location”.'
-                          : 'Finding your location… allow it when the browser asks.'}
-                  </p>
-                  {location.state !== 'on' && location.state !== 'requesting' && (
-                    <Button variant="secondary" className="mt-3 w-full" onClick={location.start}>
-                      <MapPin /> Share my location
-                    </Button>
-                  )}
-                  <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
-                    You must be within {campus.radiusM} m of the college. Laptops find their
-                    location through Wi-Fi, so keep Wi-Fi on.
-                  </p>
-                </div>
-              )}
-
-              {canTake && !leftStrict && !integrityOk && (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
-                    <ShieldAlert className="size-4" /> Fix this before you start
-                  </p>
-                  <ul className="mt-2 space-y-2 text-[13px] leading-relaxed text-rose-900/85">
-                    {extraScreen && (
-                      <li>
-                        <b>A second screen is connected.</b> Disconnect the extra monitor or TV (or
-                        switch Windows to “PC screen only” with Win + P). Only one screen is
-                        allowed.
-                      </li>
-                    )}
-                    {injected.length > 0 && (
-                      <li>
-                        <b>A browser extension is running on this page</b> (for example an AI
-                        assistant, grammar or translate tool). Open this exam in an Incognito /
-                        InPrivate window, or turn off extensions, then reload.
-                        <span className="mt-1 block font-mono text-[11px] text-rose-700/80">
-                          Detected: {injected.slice(0, 3).join(', ')}
-                        </span>
-                      </li>
-                    )}
-                  </ul>
-                  <p className="mt-2 text-[12px] text-rose-800/80">
-                    This updates automatically once fixed. AI tools are not allowed in this exam.
-                  </p>
-                </div>
-              )}
-
-              {leftStrict ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
-                    <DoorOpen className="size-4" /> You left this exam
-                  </p>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-rose-900/80">
-                    The exam window was closed or left while it was running. Under this exam’s rules
-                    it is submitted with the answers you had saved.
-                  </p>
-                  {error && <p className="mt-2 text-[13px] text-rose-700">{error}</p>}
-                  <Button className="mt-4 w-full" loading={starting} onClick={() => onStart()}>
-                    See my result
-                  </Button>
-                </div>
-              ) : canTake ? (
-                <>
-                  <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-700">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 size-4 accent-brand-600"
-                      checked={agree}
-                      onChange={(e) => setAgree(e.target.checked)}
-                    />
-                    I have read the instructions and agree to follow the exam rules.
-                  </label>
-                  {error && (
-                    <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">
-                      {error}
-                    </p>
-                  )}
-                  <Button
-                    size="lg"
-                    className="w-full"
-                    disabled={!agree || !cameraReady || !integrityOk || !locationReady}
-                    loading={starting}
-                    onClick={begin}
-                  >
-                    {resuming ? 'Resume exam' : 'Start exam'}
-                  </Button>
-                  <p className="text-center text-xs text-ink-500">
-                    {!cameraReady
-                      ? camera.state === 'on'
-                        ? 'Your face must be clearly visible, alone, to start.'
-                        : 'Turn on your camera to start.'
-                      : !integrityOk
-                        ? 'Fix the problems above to start.'
-                        : !locationReady
-                          ? 'Share your location to start (this exam is on campus only).'
-                          : resuming
-                            ? 'Your timer kept running while you were away.'
-                            : `The timer starts immediately · ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} left`}
-                  </p>
-                </>
-              ) : (
-                <div
-                  className={cn(
-                    'rounded-2xl p-4 text-center',
-                    lobby.state === 'SCHEDULED' ? 'bg-brand-50' : 'bg-ink-100',
-                  )}
-                >
-                  {lobby.state === 'SCHEDULED' && lobby.startsAt ? (
-                    <>
-                      <p className="text-sm text-ink-600">Opens in</p>
-                      <p className="tabular mt-1 text-2xl font-semibold text-brand-700">
-                        {timeUntil(lobby.startsAt)}
-                      </p>
-                      <p className="mt-1 text-xs text-ink-500">This page unlocks automatically.</p>
-                    </>
-                  ) : lobby.lastAttempt ? (
-                    <>
-                      <CheckCircle2 className="mx-auto size-6 text-emerald-600" />
-                      <p className="mt-2 text-sm font-medium">You’ve completed this exam</p>
-                      <Button asChild className="mt-3 w-full" variant="secondary">
-                        <Link href={`/my-exams/result/${lobby.lastAttempt.id}`}>View result</Link>
-                      </Button>
-                    </>
-                  ) : (
-                    <p className="text-sm text-ink-600">This exam has closed.</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
+          <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+            <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-sm lg:min-h-0 lg:overflow-y-auto">
               <h2 className="text-lg font-semibold">Instructions</h2>
               <ol className="mt-4 space-y-3">
                 {rules.map((r, i) => (
@@ -370,72 +366,71 @@ export function ExamLobby({
                   </li>
                 )}
               </ol>
-              <div className="mt-6">
-                <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
-                    <ShieldAlert className="size-4" /> Proctoring rules
-                  </p>
-                  <ul className="mt-3 space-y-2 text-[13px] text-rose-900/80">
-                    {lobby.requireFullscreen && (
-                      <li className="flex gap-2">
-                        <Maximize className="mt-0.5 size-3.5 shrink-0" /> The exam runs in full
-                        screen.
-                      </li>
-                    )}
+            </section>
+            <section className="lg:min-h-0 lg:overflow-y-auto">
+              <div className="h-full rounded-3xl border border-rose-200 bg-rose-50/60 p-6">
+                <p className="flex items-center gap-2 text-sm font-semibold text-rose-800">
+                  <ShieldAlert className="size-4" /> Proctoring rules
+                </p>
+                <ul className="mt-3 space-y-2 text-[13px] text-rose-900/80">
+                  {lobby.requireFullscreen && (
                     <li className="flex gap-2">
-                      <Keyboard className="mt-0.5 size-3.5 shrink-0" /> Keyboard shortcuts, copy,
-                      paste and right-click are disabled.
+                      <Maximize className="mt-0.5 size-3.5 shrink-0" /> The exam runs in full
+                      screen.
                     </li>
-                    {strict ? (
-                      <li className="flex gap-2 font-semibold text-rose-800">
-                        <DoorOpen className="mt-0.5 size-3.5 shrink-0" /> Leaving full screen,
-                        switching tab/window or closing the page submits your exam immediately.
+                  )}
+                  <li className="flex gap-2">
+                    <Keyboard className="mt-0.5 size-3.5 shrink-0" /> Keyboard shortcuts, copy,
+                    paste and right-click are disabled.
+                  </li>
+                  {strict ? (
+                    <li className="flex gap-2 font-semibold text-rose-800">
+                      <DoorOpen className="mt-0.5 size-3.5 shrink-0" /> Leaving full screen,
+                      switching tab/window or closing the page submits your exam immediately.
+                    </li>
+                  ) : (
+                    <>
+                      <li className="flex gap-2">
+                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs,
+                        windows or apps is recorded.
                       </li>
-                    ) : (
-                      <>
-                        <li className="flex gap-2">
-                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Switching tabs,
-                          windows or apps is recorded.
+                      {lobby.maxViolations > 0 && (
+                        <li className="flex gap-2 font-semibold">
+                          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
+                          {lobby.maxViolations} violations your exam is submitted automatically.
                         </li>
-                        {lobby.maxViolations > 0 && (
-                          <li className="flex gap-2 font-semibold">
-                            <ShieldAlert className="mt-0.5 size-3.5 shrink-0" /> After{' '}
-                            {lobby.maxViolations} violations your exam is submitted automatically.
-                          </li>
-                        )}
-                      </>
-                    )}
+                      )}
+                    </>
+                  )}
+                  <li className="flex gap-2">
+                    <Bot className="mt-0.5 size-3.5 shrink-0" /> No AI tools: second screens, AI
+                    apps and browser extensions (ChatGPT, Gemini, AI sidebars) are detected and
+                    count as a violation.
+                  </li>
+                  {lobby.requireCamera && (
                     <li className="flex gap-2">
-                      <Bot className="mt-0.5 size-3.5 shrink-0" /> No AI tools: second screens, AI
-                      apps and browser extensions (ChatGPT, Gemini, AI sidebars) are detected and
-                      count as a violation.
+                      <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
+                      the whole exam.
                     </li>
-                    {lobby.requireCamera && (
-                      <li className="flex gap-2">
-                        <Camera className="mt-0.5 size-3.5 shrink-0" /> Your camera must stay on for
-                        the whole exam.
-                      </li>
-                    )}
-                    {campus && (
-                      <li className="flex gap-2 font-semibold">
-                        <MapPin className="mt-0.5 size-3.5 shrink-0" /> This exam must be written on
-                        campus{campus.address ? ` (${campus.address})` : ''}. Your location is
-                        checked when you start and during the exam; leaving the campus counts as a
-                        violation.
-                      </li>
-                    )}
-                    {lobby.requireCamera && (
-                      <li className="flex gap-2">
-                        <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
-                        you are in view, that you look at your screen and that no phone is used. You
-                        are warned first; if it continues it counts as a violation and a photo is
-                        saved for your instructor.
-                      </li>
-                    )}
-                  </ul>
-                </div>
+                  )}
+                  {campus && (
+                    <li className="flex gap-2 font-semibold">
+                      <MapPin className="mt-0.5 size-3.5 shrink-0" /> This exam must be written on
+                      campus{campus.address ? ` (${campus.address})` : ''}. Your location is checked
+                      when you start and during the exam; leaving the campus counts as a violation.
+                    </li>
+                  )}
+                  {lobby.requireCamera && (
+                    <li className="flex gap-2">
+                      <ScanFace className="mt-0.5 size-3.5 shrink-0" /> Camera AI checks that only
+                      you are in view, that you look at your screen and that no phone is used. You
+                      are warned first; if it continues it counts as a violation and a photo is
+                      saved for your instructor.
+                    </li>
+                  )}
+                </ul>
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </main>
