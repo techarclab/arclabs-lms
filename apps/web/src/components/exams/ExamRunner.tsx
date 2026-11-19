@@ -396,6 +396,14 @@ export function ExamRunner({
 
   const answer = answers[q.id];
   const multi = q.type === 'MULTIPLE_CHOICE';
+  // Sections in exam order with the positions of their questions (one unnamed group when none).
+  const sections: { name: string | null; ids: number[] }[] = [];
+  qs.forEach((x, i) => {
+    const name = x.section ?? null;
+    const last = sections[sections.length - 1];
+    if (last && last.name === name) last.ids.push(i);
+    else sections.push({ name, ids: [i] });
+  });
   const pct = qs.length ? Math.round((answeredCount / qs.length) * 100) : 0;
 
   return (
@@ -476,6 +484,11 @@ export function ExamRunner({
               Q{index + 1}
             </span>
             <span className="text-sm text-ink-500">of {qs.length}</span>
+            {q.section && (
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">
+                Section {sections.findIndex((x) => x.name === q.section) + 1} · {q.section}
+              </span>
+            )}
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
               +{q.points} {q.points === 1 ? 'mark' : 'marks'}
             </span>
@@ -651,34 +664,47 @@ export function ExamRunner({
                 <b className="text-ink-900">{answeredCount}</b>/{qs.length} answered
               </p>
             </div>
-            <div className="mt-4 grid grid-cols-6 gap-2 lg:grid-cols-5">
-              {qs.map((x, i) => {
-                const ans = isAnswered(x.id);
-                const mk = marked.has(x.id);
-                return (
-                  <button
-                    key={x.id}
-                    onClick={() => go(i)}
-                    className={cn(
-                      'tabular relative flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition',
-                      i === index && 'ring-2 ring-brand-500 ring-offset-2',
-                      mk
-                        ? 'bg-amber-400 text-amber-950'
-                        : ans
-                          ? 'bg-emerald-500 text-white'
-                          : visited.has(x.id)
-                            ? 'bg-white text-rose-600 ring-1 ring-rose-300 ring-inset'
-                            : 'bg-ink-100 text-ink-600 hover:bg-ink-200',
-                    )}
-                  >
-                    {i + 1}
-                    {mk && ans && (
-                      <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {sections.map((sec) => (
+              <div key={sec.name ?? 'all'} className="mt-4">
+                {sec.name && (
+                  <p className="mb-2 flex items-baseline justify-between text-xs font-semibold text-ink-700">
+                    <span className="truncate">{sec.name}</span>
+                    <span className="tabular font-normal text-ink-500">
+                      {sec.ids.filter((i) => isAnswered(qs[i]!.id)).length}/{sec.ids.length}
+                    </span>
+                  </p>
+                )}
+                <div className="grid grid-cols-6 gap-2 lg:grid-cols-5">
+                  {sec.ids.map((i) => {
+                    const x = qs[i]!;
+                    const ans = isAnswered(x.id);
+                    const mk = marked.has(x.id);
+                    return (
+                      <button
+                        key={x.id}
+                        onClick={() => go(i)}
+                        className={cn(
+                          'tabular relative flex h-10 items-center justify-center rounded-xl text-sm font-semibold transition',
+                          i === index && 'ring-2 ring-brand-500 ring-offset-2',
+                          mk
+                            ? 'bg-amber-400 text-amber-950'
+                            : ans
+                              ? 'bg-emerald-500 text-white'
+                              : visited.has(x.id)
+                                ? 'bg-white text-rose-600 ring-1 ring-rose-300 ring-inset'
+                                : 'bg-ink-100 text-ink-600 hover:bg-ink-200',
+                        )}
+                      >
+                        {i + 1}
+                        {mk && ans && (
+                          <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             <ul className="mt-5 grid grid-cols-2 gap-2 text-xs text-ink-600">
               <li className="flex items-center gap-2">
                 <span className="size-3 rounded bg-emerald-500" /> Answered

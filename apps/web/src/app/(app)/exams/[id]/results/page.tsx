@@ -399,6 +399,15 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
                 <th className="px-3 py-2.5 font-medium">Candidate</th>
                 <th className="px-3 py-2.5 font-medium">Department</th>
                 <th className="px-3 py-2.5 text-right font-medium">Score</th>
+                {(data.sections ?? []).map((x) => (
+                  <th
+                    key={x.name}
+                    className="max-w-28 truncate px-3 py-2.5 text-right font-medium"
+                    title={`${x.name} — ${x.questions} questions, ${x.maxMarks} marks`}
+                  >
+                    {x.name} <span className="text-ink-400">/{x.maxMarks}</span>
+                  </th>
+                ))}
                 <th className="px-3 py-2.5 font-medium">Result</th>
                 <th className="px-3 py-2.5 font-medium">Time</th>
                 <th className="px-3 py-2.5 font-medium">Integrity</th>
@@ -410,6 +419,7 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
                 <CandidateTr
                   key={c.userId}
                   c={c}
+                  sectionCount={data.sections?.length ?? 0}
                   maxViolations={exam.maxViolations}
                   onOpen={() => {
                     const open = c.attemptId ?? c.reexam?.attemptId;
@@ -724,10 +734,12 @@ function Results({ id, orgId }: { id: string; orgId: string }) {
 
 function CandidateTr({
   c,
+  sectionCount,
   maxViolations,
   onOpen,
 }: {
   c: CandidateRow;
+  sectionCount: number;
   maxViolations: number;
   onOpen: () => void;
 }) {
@@ -790,6 +802,11 @@ function CandidateTr({
           <span className="text-ink-300">—</span>
         )}
       </td>
+      {Array.from({ length: sectionCount }, (_, i) => (
+        <td key={i} className="tabular px-3 py-3 text-right text-ink-700">
+          {c.sectionMarks?.[i] ?? <span className="text-ink-300">—</span>}
+        </td>
+      ))}
       <td className="px-3 py-3">
         {c.passed === null ? (
           <span className="text-ink-300">—</span>
@@ -1124,34 +1141,40 @@ function AttemptDialog({
               )}
               <div className="space-y-3">
                 {data.review.map((r, i) => (
-                  <ReviewCard
-                    key={r.questionId}
-                    item={r}
-                    index={i}
-                    onSetMarks={
-                      !viewOnly && data.candidate.status === 'SUBMITTED'
-                        ? async (marks) => {
-                            try {
-                              await reload(
-                                await mutate<AttemptDetail>(
-                                  `/exams/${examId}/attempts/${attemptId}/marks`,
-                                  'PUT',
-                                  { questionId: r.questionId, marks },
-                                  orgId,
-                                ),
-                                { revalidate: false },
-                              );
-                              onChanged?.();
-                              toast.success(
-                                marks === null ? 'Automatic marks restored' : 'Marks updated',
-                              );
-                            } catch (e) {
-                              toast.error((e as Error).message);
+                  <Fragment key={r.questionId}>
+                    {r.section && r.section !== data.review[i - 1]?.section && (
+                      <p className="pt-2 text-xs font-semibold tracking-wide text-brand-700 uppercase">
+                        {r.section}
+                      </p>
+                    )}
+                    <ReviewCard
+                      item={r}
+                      index={i}
+                      onSetMarks={
+                        !viewOnly && data.candidate.status === 'SUBMITTED'
+                          ? async (marks) => {
+                              try {
+                                await reload(
+                                  await mutate<AttemptDetail>(
+                                    `/exams/${examId}/attempts/${attemptId}/marks`,
+                                    'PUT',
+                                    { questionId: r.questionId, marks },
+                                    orgId,
+                                  ),
+                                  { revalidate: false },
+                                );
+                                onChanged?.();
+                                toast.success(
+                                  marks === null ? 'Automatic marks restored' : 'Marks updated',
+                                );
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              }
                             }
-                          }
-                        : undefined
-                    }
-                  />
+                          : undefined
+                      }
+                    />
+                  </Fragment>
                 ))}
               </div>
             </div>

@@ -261,7 +261,7 @@ export class ExamEngine {
       orderBy: { position: 'asc' },
       include: { question: true },
     });
-    return rows.map((r) => r.question);
+    return rows.map((r) => ({ ...r.question, section: r.section }));
   }
 
   /**

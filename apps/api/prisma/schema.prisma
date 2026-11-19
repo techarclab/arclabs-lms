@@ -683,8 +683,10 @@ model Question {
 
 model QuizQuestion {
   quizId     String @db.Uuid
-  questionId String @db.Uuid
+  questionId String  @db.Uuid
   position   Int
+  /// Section of the exam this question belongs to (e.g. "Aptitude"); null = no sections.
+  section    String?
 
   quiz     Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)

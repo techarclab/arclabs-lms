@@ -283,10 +283,11 @@ export class ExamsController {
     @CurrentUser() u: User,
     @OrgContext() org: OrgContextInfo,
     @Param('id', UuidPipe) id: string,
-    @Body(new ZodValidationPipe(setExamQuestionsSchema)) body: { questionIds: string[] },
+    @Body(new ZodValidationPipe(setExamQuestionsSchema))
+    body: { questionIds: string[]; sections?: (string | null)[] },
   ) {
     await this.exams.assertAccess(org, u.id, id, true);
-    return this.exams.setQuestions(u, org.organizationId, id, body.questionIds);
+    return this.exams.setQuestions(u, org.organizationId, id, body.questionIds, body.sections);
   }
 
   @Put(':id/audience')

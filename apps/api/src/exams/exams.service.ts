@@ -18,6 +18,7 @@ import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExamEngine, examState, type ExamRow } from './exam-engine.service';
 import { questionInclude, toQuestionItem } from './questions.service';
+import { attemptOrder, hasSections, sectionGroups } from './grading';
 
 type ExamWithCounts = ExamRow & { questions: { question: { points: number } }[] };
 
@@ -153,7 +154,10 @@ export class ExamsService {
     });
     if (!exam) throw new NotFoundException();
     const summary = await this.summarize(exam);
-    const questions = exam.questions.map((qq) => toQuestionItem(qq.question));
+    const questions = exam.questions.map((qq) => ({
+      ...toQuestionItem(qq.question),
+      section: qq.section,
+    }));
     const attempts = await this.prisma.quizAttempt.count({ where: { quizId: id } });
     return {
       ...summary,
@@ -334,9 +338,35 @@ export class ExamsService {
     return this.get(orgId, id);
   }
 
-  async setQuestions(actor: User, orgId: string, id: string, questionIds: string[]) {
+  async setQuestions(
+    actor: User,
+    orgId: string,
+    id: string,
+    questionIds: string[],
+    sections?: (string | null)[],
+  ) {
     await this.assertEditable(orgId, id);
     const unique = [...new Set(questionIds)];
+    // Section of each question: as given, else the one it already had in this exam.
+    const given = new Map<string, string | null>();
+    if (sections) questionIds.forEach((q, i) => given.set(q, sections[i] ?? null));
+    const before = sections
+      ? new Map<string, string | null>()
+      : new Map(
+          (
+            await this.prisma.quizQuestion.findMany({
+              where: { quizId: id },
+              select: { questionId: true, section: true },
+            })
+          ).map((r) => [r.questionId, r.section]),
+        );
+    const rows = attemptOrder(
+      unique.map((questionId) => ({
+        questionId,
+        section: (sections ? given.get(questionId) : before.get(questionId))?.trim() || null,
+      })),
+      false,
+    );
     const found = await this.prisma.question.findMany({
       where: {
         id: { in: unique },
@@ -355,7 +385,12 @@ export class ExamsService {
     await this.prisma.$transaction([
       this.prisma.quizQuestion.deleteMany({ where: { quizId: id } }),
       this.prisma.quizQuestion.createMany({
-        data: unique.map((questionId, position) => ({ quizId: id, questionId, position })),
+        data: rows.map((r, position) => ({
+          quizId: id,
+          questionId: r.questionId,
+          position,
+          section: r.section,
+        })),
       }),
     ]);
     await this.audit.log({
@@ -364,7 +399,7 @@ export class ExamsService {
       action: 'exam.questions_set',
       entityType: 'exam',
       entityId: id,
-      meta: { count: unique.length },
+      meta: { count: unique.length, sections: hasSections(rows) ? sectionGroups(rows).length : 0 },
     });
     return this.get(orgId, id);
   }

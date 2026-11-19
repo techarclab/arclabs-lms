@@ -180,6 +180,62 @@ export function breakdown(
   }));
 }
 
+// ───────── Exam sections ─────────
+
+/** Name used for questions left out of every section in an exam that has sections. */
+export const UNSECTIONED = 'General';
+
+/** True when at least one question of the exam is in a section. */
+export function hasSections(items: readonly { section?: string | null }[]): boolean {
+  return items.some((q) => Boolean(q.section));
+}
+
+/**
+ * Sections in exam order, each with its questions (kept in their order). Sections are ordered by
+ * where their first question appears, so a section is never split up.
+ */
+export function sectionGroups<T extends { section?: string | null }>(
+  items: readonly T[],
+): { name: string; items: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const q of items) {
+    const name = q.section || UNSECTIONED;
+    const g = groups.get(name);
+    if (g) g.push(q);
+    else groups.set(name, [q]);
+  }
+  return [...groups.entries()].map(([name, list]) => ({ name, items: list }));
+}
+
+/** Question order for a new attempt: shuffled within each section, sections stay in order. */
+export function attemptOrder<T extends { section?: string | null }>(
+  items: readonly T[],
+  shuffleOn: boolean,
+  shuffleFn: <U>(xs: readonly U[]) => U[] = shuffle,
+): T[] {
+  if (!hasSections(items)) return shuffleOn ? shuffleFn(items) : [...items];
+  return sectionGroups(items).flatMap((g) => (shuffleOn ? shuffleFn(g.items) : g.items));
+}
+
+/** Marks per section for one attempt (empty when the exam has no sections). */
+export function sectionScores(
+  questions: readonly { id: string; points: number; section?: string | null }[],
+  results: Record<string, { marks?: number } | undefined>,
+): { name: string; questions: number; marks: number; maxMarks: number; pct: number }[] {
+  if (!hasSections(questions)) return [];
+  return sectionGroups(questions).map((g) => {
+    const maxMarks = g.items.reduce((s, q) => s + q.points, 0);
+    const marks = round2(g.items.reduce((s, q) => s + Number(results[q.id]?.marks ?? 0), 0));
+    return {
+      name: g.name,
+      questions: g.items.length,
+      marks,
+      maxMarks,
+      pct: maxMarks > 0 ? round2((Math.max(0, marks) / maxMarks) * 100) : 0,
+    };
+  });
+}
+
 /** Deterministic-free Fisher–Yates shuffle (uses Math.random). */
 export function shuffle<T>(items: readonly T[]): T[] {
   const a = [...items];

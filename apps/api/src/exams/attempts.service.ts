@@ -48,6 +48,10 @@ import {
   percentileOf,
   round2,
   shuffle,
+  attemptOrder,
+  hasSections,
+  sectionScores,
+  UNSECTIONED,
   type QuestionResult,
 } from './grading';
 
@@ -309,7 +313,8 @@ export class AttemptsService {
     const questions = await this.engine.gradableQuestions(examId);
     if (!questions.length)
       throw new ConflictException({ code: 'EXAM_EMPTY', message: 'This exam has no questions' });
-    const ordered = exam.shuffleQuestions ? shuffle(questions) : questions;
+    // Sections stay in order; questions are shuffled only within their section.
+    const ordered = attemptOrder(questions, exam.shuffleQuestions, shuffle);
     const order: QuestionOrder = ordered.map((q) => {
       const ids = (q.options as unknown as QuestionOption[]).map((o) => o.id);
       const shuffleable =
@@ -362,6 +367,7 @@ export class AttemptsService {
         q.coding = (await this.expected.ensure(q.id, c)) as unknown as typeof q.coding;
     }
     const byId = new Map(qs.map((q) => [q.id, q]));
+    const sectionOf = await this.sectionsOf(exam.id);
     const questions: DeliveredQuestion[] = order.map(({ questionId, optionOrder }) => {
       const q = byId.get(questionId)!;
       const opts = new Map((q.options as unknown as QuestionOption[]).map((o) => [o.id, o]));
@@ -372,6 +378,7 @@ export class AttemptsService {
         options: optionOrder.map((id) => opts.get(id)!).filter(Boolean),
         points: q.points,
         negativeMarks: exam.negativeMarking ? Number(q.negativeMarks) : 0,
+        section: sectionOf(questionId),
         ...(q.type === 'CODING' && q.coding
           ? {
               coding: (() => {
@@ -812,6 +819,7 @@ export class AttemptsService {
 
     const order = attempt.questionOrder as unknown as QuestionOrder;
     const qById = new Map(questions.map((q) => [q.id, q]));
+    const sections = hasSections(questions);
     const answers = (attempt.answers ?? {}) as Record<string, unknown>;
     const review: ReviewItem[] | null = reviewVisible
       ? order.map(({ questionId }) => {
@@ -819,6 +827,7 @@ export class AttemptsService {
           const r = results[questionId] ?? { answered: false, correct: false, marks: 0 };
           return {
             questionId,
+            section: sections ? q.section || UNSECTIONED : null,
             type: q.type,
             prompt: q.prompt,
             options: q.options as unknown as QuestionOption[],
@@ -877,6 +886,7 @@ export class AttemptsService {
       byDifficulty: scoreVisible
         ? breakdown(gradable, results, (q) => q.difficulty).map(toRow)
         : [],
+      bySection: scoreVisible ? sectionScores(questions, results) : [],
       review,
       reviewAvailableAt:
         !reviewVisible && exam.resultVisibility === 'SCORE_NOW_ANSWERS_AFTER_CLOSE'
@@ -884,6 +894,17 @@ export class AttemptsService {
           : null,
       codingPending: attempt.codingPending,
     };
+  }
+
+  /** Section of each question of an exam (null for all when the exam has no sections). */
+  private async sectionsOf(quizId: string) {
+    const rows = await this.prisma.quizQuestion.findMany({
+      where: { quizId },
+      select: { questionId: true, section: true },
+    });
+    const map = new Map(rows.map((r) => [r.questionId, r.section]));
+    const any = hasSections(rows);
+    return (questionId: string) => (any ? map.get(questionId) || UNSECTIONED : null);
   }
 
   /** Best graded percentage per candidate. */

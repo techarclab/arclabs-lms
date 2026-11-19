@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Circle,
   FileQuestion,
+  Layers,
   Library,
   ListChecks,
   MoreHorizontal,
@@ -46,6 +47,13 @@ import {
 } from '@arc/ui';
 import { AddQuestionsDialog } from '@/components/exams/AddQuestionsDialog';
 import { AudiencePicker } from '@/components/exams/AudiencePicker';
+import {
+  entriesOf,
+  ExamQuestionList,
+  sectionNames,
+  UNSECTIONED,
+  type ExamEntry,
+} from '@/components/exams/ExamQuestionList';
 import { DifficultyBadge, ExamStateBadge, QuestionTypeBadge } from '@/components/exams/badges';
 import { StopExamButton } from '@/components/exams/StopExamButton';
 import { ExamSettingsForm } from '@/components/exams/ExamSettingsForm';
@@ -96,14 +104,35 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
   const update = (e: ExamDetail) => void setExam(e, { revalidate: false });
   const ids = exam.questions.map((q) => q.id);
 
-  async function setQuestions(next: string[]) {
+  const entries = entriesOf(exam);
+  const sections = sectionNames(entries);
+
+  async function save(list: ExamEntry[]) {
     try {
       update(
-        await mutate<ExamDetail>(`/exams/${id}/questions`, 'PUT', { questionIds: next }, orgId),
+        await mutate<ExamDetail>(
+          `/exams/${id}/questions`,
+          'PUT',
+          { questionIds: list.map((e) => e.id), sections: list.map((e) => e.section) },
+          orgId,
+        ),
       );
     } catch (e) {
       toast.error((e as Error).message);
     }
+  }
+
+  /** Adds questions at the end; in an exam with sections they go into `section` (default: the last one). */
+  async function addQuestions(add: string[], section?: string | null) {
+    const into = section?.trim() || (sections.length ? sections[sections.length - 1]! : null);
+    await save([...entries, ...add.map((qid) => ({ id: qid, section: into }))]);
+  }
+
+  /** Puts every question into a section named after its question-bank folder. */
+  async function sectionsFromFolders() {
+    const folderOf = new Map(exam!.questions.map((q) => [q.id, q.folder]));
+    await save(entries.map((e) => ({ ...e, section: folderOf.get(e.id) || UNSECTIONED })));
+    toast.success('Sections made from the question folders');
   }
 
   async function action(path: string, ok: string) {
@@ -117,12 +146,6 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
       setBusy(false);
     }
   }
-
-  const move = (i: number, d: -1 | 1) => {
-    const next = [...ids];
-    [next[i], next[i + d]] = [next[i + d]!, next[i]!];
-    void setQuestions(next);
-  };
 
   const checklist = [
     { label: 'Questions added', done: exam.questionCount > 0, tab: 'questions' },
@@ -288,6 +311,34 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
                   <Button size="sm" variant="secondary" onClick={() => setEditorOpen(true)}>
                     <Plus /> Write new question
                   </Button>
+                  {exam.questions.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="secondary">
+                          <Layers /> Sections
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-w-72">
+                        <DropdownMenuItem onSelect={() => void sectionsFromFolders()}>
+                          <div>
+                            <p>{sections.length ? 'Remake' : 'Make'} sections from folders</p>
+                            <p className="text-xs text-ink-500">
+                              One section per question-bank folder, e.g. Aptitude, Technical
+                            </p>
+                          </div>
+                        </DropdownMenuItem>
+                        {sections.length > 0 && (
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              void save(entries.map((e) => ({ ...e, section: null })))
+                            }
+                          >
+                            Remove sections
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   <span className="ml-auto text-sm text-ink-500">
                     Total <b className="font-semibold text-ink-900">{exam.totalMarks}</b> marks
                   </span>
@@ -307,58 +358,7 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
                   }
                 />
               ) : (
-                <ol className="divide-y divide-ink-100">
-                  {exam.questions.map((q: QuestionItem, i) => (
-                    <li key={q.id} className="group flex items-start gap-4 px-5 py-4">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-xs font-semibold text-ink-600">
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="line-clamp-2 text-sm leading-relaxed text-ink-900">
-                          {plainPrompt(q.prompt)}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <QuestionTypeBadge type={q.type} />
-                          <DifficultyBadge difficulty={q.difficulty} />
-                          {q.topic && <span className="text-xs text-ink-500">{q.topic}</span>}
-                        </div>
-                      </div>
-                      <span className="tabular shrink-0 text-sm font-medium text-ink-700">
-                        {q.points}
-                        {exam.negativeMarking && q.negativeMarks > 0 && (
-                          <span className="ml-1 text-xs text-rose-600">/−{q.negativeMarks}</span>
-                        )}
-                      </span>
-                      {exam.editable && (
-                        <div className="flex shrink-0 items-center gap-0.5 opacity-50 transition group-hover:opacity-100">
-                          <button
-                            disabled={i === 0}
-                            onClick={() => move(i, -1)}
-                            className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-30"
-                            aria-label="Move up"
-                          >
-                            <ArrowUp className="size-4" />
-                          </button>
-                          <button
-                            disabled={i === exam.questions.length - 1}
-                            onClick={() => move(i, 1)}
-                            className="rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700 disabled:opacity-30"
-                            aria-label="Move down"
-                          >
-                            <ArrowDown className="size-4" />
-                          </button>
-                          <button
-                            onClick={() => setQuestions(ids.filter((x) => x !== q.id))}
-                            className="rounded p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-600"
-                            aria-label="Remove"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ol>
+                <ExamQuestionList exam={exam} onSave={save} />
               )}
             </Card>
           </TabsContent>
@@ -497,14 +497,15 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
         onOpenChange={setAddOpen}
         orgId={orgId}
         existing={ids}
-        onAdd={(add) => setQuestions([...ids, ...add])}
+        sections={sections}
+        onAdd={addQuestions}
       />
       <QuestionEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
         orgId={orgId}
         topics={topics.map((t) => t.topic)}
-        onSaved={(q) => void setQuestions([...ids, q.id])}
+        onSaved={(q) => void addQuestions([q.id])}
       />
     </>
   );

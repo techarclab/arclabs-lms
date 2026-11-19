@@ -14,14 +14,18 @@ export function AddQuestionsDialog({
   onOpenChange,
   orgId,
   existing,
+  sections = [],
   onAdd,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   orgId: string;
   existing: string[];
-  onAdd: (ids: string[]) => Promise<void>;
+  /** The exam's sections (empty when it has none). */
+  sections?: string[];
+  onAdd: (ids: string[], section?: string | null) => Promise<void>;
 }) {
+  const [section, setSection] = useState('');
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [topic, setTopic] = useState('');
@@ -35,7 +39,12 @@ export function AddQuestionsDialog({
   }, [search]);
   useEffect(() => {
     if (!open) setPicked([]);
-  }, [open]);
+    else setSection(sections[sections.length - 1] ?? '');
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // In an exam with sections, picking a folder suggests a section of the same name.
+  useEffect(() => {
+    if (sections.length && folder && folder !== NO_FOLDER) setSection(folder);
+  }, [folder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const query = useMemo(() => {
     const sp = new URLSearchParams({ pageSize: '100' });
@@ -177,9 +186,28 @@ export function AddQuestionsDialog({
           )}
         </div>
         <div className="flex items-center justify-between rounded-b-2xl border-t border-ink-100 bg-ink-50/60 px-6 py-4">
-          <span className="text-sm text-ink-600">
-            <b className="font-semibold text-ink-900">{picked.length}</b> selected · {marks} marks
-          </span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-sm text-ink-600">
+              <b className="font-semibold text-ink-900">{picked.length}</b> selected · {marks} marks
+            </span>
+            <label className="flex items-center gap-2 text-sm text-ink-600">
+              Section
+              <Input
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                list="exam-sections"
+                maxLength={60}
+                placeholder={sections.length ? sections[sections.length - 1] : 'None (optional)'}
+                className="h-8 w-44"
+                aria-label="Add to section"
+              />
+              <datalist id="exam-sections">
+                {sections.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </label>
+          </div>
           <div className="flex gap-3">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancel
@@ -190,7 +218,7 @@ export function AddQuestionsDialog({
               onClick={async () => {
                 setBusy(true);
                 try {
-                  await onAdd(picked);
+                  await onAdd(picked, section.trim() || null);
                   onOpenChange(false);
                 } finally {
                   setBusy(false);

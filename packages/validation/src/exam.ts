@@ -297,9 +297,27 @@ export const updateExamSchema = examSettingsSchema
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 export type UpdateExamInput = z.infer<typeof updateExamSchema>;
 
-export const setExamQuestionsSchema = z.object({
-  questionIds: z.array(z.uuid()).max(300, 'Up to 300 questions per exam'),
-});
+export const setExamQuestionsSchema = z
+  .object({
+    questionIds: z.array(z.uuid()).max(300, 'Up to 300 questions per exam'),
+    /** Section of each question, in the same order as questionIds (null = none). Omitted = keep. */
+    sections: z
+      .array(
+        z
+          .string()
+          .trim()
+          .max(60, 'Section names are up to 60 characters')
+          .nullable()
+          .transform((v) => v || null),
+      )
+      .max(300)
+      .optional(),
+  })
+  .refine((v) => !v.sections || v.sections.length === v.questionIds.length, {
+    message: 'Give one section per question',
+    path: ['sections'],
+  });
+export type SetExamQuestionsInput = z.infer<typeof setExamQuestionsSchema>;
 
 export const setExamAudienceSchema = z.object({
   assignToAll: z.boolean(),

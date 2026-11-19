@@ -123,6 +123,8 @@ export interface QuestionItem {
   usedInExams: number;
   locked: boolean; // used by a published exam → read-only
   createdAt: string;
+  /** In an exam's question list: the section it belongs to (null = no sections). */
+  section?: string | null;
 }
 
 /** GET /questions/folders */
@@ -225,6 +227,8 @@ export interface DeliveredQuestion {
   points: number;
   negativeMarks: number;
   coding?: DeliveredCoding;
+  /** Exam section (e.g. "Aptitude"); null when the exam has no sections. */
+  section?: string | null;
 }
 
 export interface AttemptSession {
@@ -276,6 +280,15 @@ export interface ProctorEventResult {
   autoSubmitted: boolean;
 }
 
+/** Marks in one section of an exam. */
+export interface SectionScore {
+  name: string;
+  questions: number;
+  marks: number;
+  maxMarks: number;
+  pct: number;
+}
+
 export interface BreakdownRow {
   key: string;
   correct: number;
@@ -285,6 +298,7 @@ export interface BreakdownRow {
 
 export interface ReviewItem {
   questionId: string;
+  section?: string | null;
   type: QuestionTypeName;
   prompt: string;
   options: QuestionOption[];
@@ -329,6 +343,8 @@ export interface AttemptResult {
   percentile: number | null;
   byTopic: BreakdownRow[];
   byDifficulty: BreakdownRow[];
+  /** Marks per exam section, in exam order (empty when the exam has no sections). */
+  bySection?: SectionScore[];
   review: ReviewItem[] | null;
   reviewAvailableAt: string | null;
   codingPending: boolean; // some coding answers are still waiting to be evaluated
@@ -356,6 +372,8 @@ export interface CandidateRow {
   reexam?: ReexamInfo | null;
   /** Set when faculty changed the final total by hand (e.g. proxy). score/percentage already use it. */
   adjusted?: TotalAdjustment | null;
+  /** Marks per exam section (same order as ExamAnalytics.sections); empty when not submitted. */
+  sectionMarks?: number[];
 }
 
 export interface TotalAdjustment {
@@ -419,6 +437,8 @@ export interface ExamAnalytics {
   departments: { department: string; submitted: number; avgPct: number; passRate: number }[];
   violationsByType: Record<string, number>;
   candidates: CandidateRow[];
+  /** The exam's sections in order (empty when it has none). */
+  sections?: { name: string; questions: number; maxMarks: number }[];
 }
 
 export interface AttemptDetail {

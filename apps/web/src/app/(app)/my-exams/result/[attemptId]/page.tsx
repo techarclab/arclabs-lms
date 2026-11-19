@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { Fragment, use, useState } from 'react';
 import Link from 'next/link';
 import {
   Loader2,
@@ -217,6 +217,37 @@ export default function ResultPage({ params }: { params: Promise<{ attemptId: st
         )}
       </div>
 
+      {r.scoreVisible && (r.bySection?.length ?? 0) > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div>
+              <CardTitle>By section</CardTitle>
+              <CardDescription>Your marks in each section of the exam</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {r.bySection!.map((x) => (
+                <li key={x.name}>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
+                    <span className="truncate font-medium text-ink-800">{x.name}</span>
+                    <span className="tabular shrink-0 text-ink-600">
+                      <b className="text-ink-900">{x.marks}</b> / {x.maxMarks}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-ink-100">
+                    <div
+                      className="h-full rounded-full bg-brand-500"
+                      style={{ width: `${x.pct}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {r.scoreVisible && (
         <div className="mt-6 grid gap-6 md:grid-cols-2">
           <Card>
@@ -262,7 +293,14 @@ export default function ResultPage({ params }: { params: Promise<{ attemptId: st
               <>
                 <div className="space-y-4">
                   {pg.rows.map((item, i) => (
-                    <ReviewCard key={item.questionId} item={item} index={pg.from + i} />
+                    <Fragment key={item.questionId}>
+                      {item.section && item.section !== r.review![pg.from + i - 1]?.section && (
+                        <p className="pt-2 text-xs font-semibold tracking-wide text-brand-700 uppercase">
+                          {item.section}
+                        </p>
+                      )}
+                      <ReviewCard item={item} index={pg.from + i} />
+                    </Fragment>
                   ))}
                 </div>
                 {pg.pages > 1 && (

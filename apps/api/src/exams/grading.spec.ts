@@ -9,6 +9,11 @@ import {
   percentileOf,
   type GradableQuestion,
   withTotalOverride,
+  attemptOrder,
+  hasSections,
+  sectionGroups,
+  sectionScores,
+  UNSECTIONED,
 } from './grading';
 
 const q = (over: Partial<GradableQuestion>): GradableQuestion => ({
@@ -156,5 +161,50 @@ describe('withTotalOverride', () => {
   it('never goes above full marks or below 0', () => {
     expect(withTotalOverride(g, 80, 40).score).toBe(50);
     expect(withTotalOverride(g, -5, 40).score).toBe(0);
+  });
+});
+
+describe('exam sections', () => {
+  const q = (id: string, section: string | null, points = 1) => ({ id, section, points });
+
+  it('keeps an exam without sections as one list', () => {
+    const qs = [q('a', null), q('b', null)];
+    expect(hasSections(qs)).toBe(false);
+    expect(attemptOrder(qs, false).map((x) => x.id)).toEqual(['a', 'b']);
+    expect(sectionScores(qs, {})).toEqual([]);
+  });
+
+  it('groups sections in order of their first question and never splits one', () => {
+    const qs = [q('a1', 'Aptitude'), q('t1', 'Technical'), q('a2', 'Aptitude'), q('g', null)];
+    expect(sectionGroups(qs).map((g) => [g.name, g.items.map((x) => x.id)])).toEqual([
+      ['Aptitude', ['a1', 'a2']],
+      ['Technical', ['t1']],
+      [UNSECTIONED, ['g']],
+    ]);
+  });
+
+  it('shuffles only within each section', () => {
+    const qs = [
+      q('a1', 'Aptitude'),
+      q('a2', 'Aptitude'),
+      q('t1', 'Technical'),
+      q('t2', 'Technical'),
+    ];
+    const reverse = <U>(xs: readonly U[]) => [...xs].reverse();
+    expect(attemptOrder(qs, true, reverse).map((x) => x.id)).toEqual(['a2', 'a1', 't2', 't1']);
+    for (let i = 0; i < 20; i++) {
+      const order = attemptOrder(qs, true).map((x) => x.section);
+      expect(order).toEqual(['Aptitude', 'Aptitude', 'Technical', 'Technical']);
+    }
+  });
+
+  it('adds up marks per section', () => {
+    const qs = [q('a1', 'Aptitude', 1), q('a2', 'Aptitude', 1), q('t1', 'Technical', 2)];
+    expect(sectionScores(qs, { a1: { marks: 1 }, a2: { marks: -0.25 }, t1: { marks: 2 } })).toEqual(
+      [
+        { name: 'Aptitude', questions: 2, marks: 0.75, maxMarks: 2, pct: 37.5 },
+        { name: 'Technical', questions: 1, marks: 2, maxMarks: 2, pct: 100 },
+      ],
+    );
   });
 });

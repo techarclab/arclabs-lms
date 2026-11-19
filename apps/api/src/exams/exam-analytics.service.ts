@@ -27,6 +27,9 @@ import {
   median,
   round2,
   type QuestionResult,
+  hasSections,
+  sectionScores,
+  UNSECTIONED,
 } from './grading';
 
 @Injectable()
@@ -126,6 +129,14 @@ export class ExamAnalyticsService {
       graded.map((a) => ({ id: a.userId, value: Number(a.percentage) })),
     );
 
+    const sectioned = hasSections(questions);
+    const sectionMarksOf = (a: (typeof attempts)[number]) =>
+      sectioned && a.status !== 'IN_PROGRESS'
+        ? sectionScores(
+            questions,
+            (a.results ?? {}) as unknown as Record<string, QuestionResult>,
+          ).map((x) => x.marks)
+        : [];
     const rowFor = (a: (typeof attempts)[number]): CandidateRow => ({
       userId: a.userId,
       fullName: a.user.fullName,
@@ -144,6 +155,7 @@ export class ExamAnalyticsService {
       submittedAt: a.submittedAt?.toISOString() ?? null,
       reexam: reexams.get(a.userId) ?? null,
       adjusted: adjustmentOf(a),
+      sectionMarks: sectionMarksOf(a),
     });
     const candidates: CandidateRow[] = [...byUser.values()].map(rowFor);
     for (const m of assigned) {
@@ -272,6 +284,11 @@ export class ExamAnalyticsService {
         .sort((a, b) => b.avgPct - a.avgPct),
       violationsByType,
       candidates,
+      sections: sectionScores(questions, {}).map((x) => ({
+        name: x.name,
+        questions: x.questions,
+        maxMarks: x.maxMarks,
+      })),
     };
   }
 
@@ -387,6 +404,7 @@ export class ExamAnalyticsService {
         };
         return {
           questionId,
+          section: hasSections(questions) ? q.section || UNSECTIONED : null,
           type: q.type,
           prompt: q.prompt,
           options: q.options as unknown as QuestionOption[],
@@ -752,6 +770,7 @@ export class ExamAnalyticsService {
       'Submitted by',
       'Submitted at',
       'Marks changed by faculty',
+      ...(a.sections ?? []).map((x) => `${x.name} (out of ${x.maxMarks})`),
     ];
     const lines = a.candidates.map((c) =>
       [
@@ -772,6 +791,7 @@ export class ExamAnalyticsService {
         c.adjusted
           ? `${c.adjusted.calculated ?? ''} -> ${c.adjusted.marks}: ${c.adjusted.reason}`
           : '',
+        ...(a.sections ?? []).map((_, i) => c.sectionMarks?.[i] ?? ''),
       ]
         .map(esc)
         .join(','),
