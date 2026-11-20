@@ -15,6 +15,7 @@ import {
   Library,
   ListChecks,
   MoreHorizontal,
+  Pencil,
   Plus,
   Rocket,
   Settings2,
@@ -57,6 +58,7 @@ import {
 } from '@/components/exams/ExamQuestionList';
 import { DifficultyBadge, ExamStateBadge, QuestionTypeBadge } from '@/components/exams/badges';
 import { StopExamButton } from '@/components/exams/StopExamButton';
+import { RenameExamDialog } from '@/components/exams/RenameExamDialog';
 import { ExamSettingsForm } from '@/components/exams/ExamSettingsForm';
 import { QuestionEditor } from '@/components/exams/QuestionEditor';
 import { OrgRequired } from '@/components/shell/OrgRequired';
@@ -83,6 +85,7 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const [tab, setTab] = useState('questions');
   // Highlights the publish card after the last setup step.
   const [pulse, setPulse] = useState(false);
@@ -206,9 +209,20 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
               <span className="text-sm text-ink-500">closes in {timeUntil(exam.endsAt)}</span>
             )}
           </div>
-          <h1 className="truncate text-[26px] font-semibold tracking-tight text-ink-900">
-            {exam.title}
-          </h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-[26px] font-semibold tracking-tight text-ink-900">
+              {exam.title}
+            </h1>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-ink-500 hover:text-ink-900"
+              onClick={() => setRenameOpen(true)}
+              aria-label="Rename exam"
+            >
+              <Pencil /> Rename
+            </Button>
+          </div>
           <p className="mt-1 text-sm text-ink-500">
             {exam.questionCount} questions · {exam.totalMarks} marks · {exam.durationMinutes} min ·{' '}
             {exam.assignedCount} candidates
@@ -258,6 +272,9 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              <DropdownMenuItem icon={<Pencil />} onSelect={() => setRenameOpen(true)}>
+                Rename exam
+              </DropdownMenuItem>
               {exam.state !== 'DRAFT' && exam.submittedCount + exam.inProgressCount === 0 && (
                 <DropdownMenuItem
                   icon={<Undo2 />}
@@ -547,6 +564,14 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
         </div>
       </div>
 
+      <RenameExamDialog
+        examId={id}
+        orgId={orgId}
+        title={exam.title}
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        onRenamed={update}
+      />
       <AddQuestionsDialog
         open={addOpen}
         onOpenChange={setAddOpen}
