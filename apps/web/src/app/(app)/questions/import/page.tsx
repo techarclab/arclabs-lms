@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardPaste,
+  Code2,
   Copy,
   FileText,
   FileUp,
@@ -25,7 +26,7 @@ import type {
   ImportableType,
   QuestionFolders,
 } from '@arc/types';
-import { splitForImport } from '@arc/validation';
+import { codingConfigSchema, splitForImport } from '@arc/validation';
 import { Badge, Button, Card, cn, Field, Input, Select, Textarea } from '@arc/ui';
 import { extractText } from '@/components/exams/import/extract-text';
 import { folderFromFileName } from '@/components/exams/QuestionFolders';
@@ -62,6 +63,15 @@ const newKey = () => `d${++seq}`;
 function problem(d: Draft): string | null {
   if (d.type === 'UNSUPPORTED') return 'Descriptive question — can’t be auto-marked';
   if (d.prompt.trim().length < 3) return 'Write the question';
+  if (d.type === 'CODING') {
+    if (!d.coding) return 'Coding details missing';
+    if (d.coding.mode === 'tests') {
+      const empty = d.coding.testCases.findIndex((t) => !t.output.trim());
+      if (empty >= 0) return `Test ${empty + 1} has no expected output`;
+    }
+    const r = codingConfigSchema.safeParse(d.coding);
+    return r.success ? null : (r.error.issues[0]?.message ?? 'Check the coding details');
+  }
   if (d.type === 'SINGLE_CHOICE' || d.type === 'MULTIPLE_CHOICE') {
     const opts = d.options.filter((o) => o.text.trim());
     if (opts.length < 2) return 'Needs at least two options';
@@ -103,6 +113,10 @@ function toInput(
       return { ...base, type: d.type, answer: d.answer };
     case 'NUMERIC':
       return { ...base, type: d.type, value: d.value, tolerance: 0 };
+    case 'CODING': {
+      const { warnings: _w, solutionLanguages: _s, ...coding } = d.coding!;
+      return { ...base, type: d.type, negativeMarks: 0, coding };
+    }
     default:
       return null;
   }
@@ -352,7 +366,7 @@ function Importer({ orgId }: { orgId: string }) {
                     Drop the question paper here or <span className="text-brand-600">browse</span>
                   </span>
                   <span className="text-[13px] text-ink-500">
-                    PDF or Word (.docx) · read in your browser
+                    PDF, Word (.docx) or text (.txt) · read in your browser
                   </span>
                 </button>
               </>
@@ -480,6 +494,20 @@ function Importer({ orgId }: { orgId: string }) {
                   />
                 </Field>
               </div>
+            </Card>
+            <Card className="space-y-2 p-5">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+                <Code2 className="size-4 text-brand-600" /> Coding questions
+              </p>
+              <p className="text-[13px] leading-relaxed text-ink-600">
+                Start each one with <b>CODING QUESTION 1</b>, then lines like <b>Marks: 5</b>,{' '}
+                <b>Languages: C, Python</b>, <b>Statement:</b>, <b>Sample test 1</b> /{' '}
+                <b>Hidden test 3</b> with <b>Input:</b> and <b>Output:</b> in ``` blocks, and{' '}
+                <b>Reference solution (Python):</b>. End with <b>END CODING QUESTION</b>.
+              </p>
+              <p className="text-[12.5px] text-ink-500">
+                Upload coding papers as a .txt file — PDF and Word change spaces and line breaks.
+              </p>
             </Card>
             <p className="px-1 text-[12.5px] leading-relaxed text-ink-500">
               Works with text PDFs made from Word / Google Docs. Scanned papers (photos) have no
@@ -679,6 +707,10 @@ function DraftCard({
             <span className="tabular text-sm font-semibold text-ink-400">Q{n}</span>
             {unsupported ? (
               <Badge tone="neutral">Descriptive — can’t be auto-marked</Badge>
+            ) : d.type === 'CODING' ? (
+              <Badge tone="info">
+                <Code2 className="size-3" /> Coding · {d.points ?? 1} marks
+              </Badge>
             ) : (
               <Select
                 value={d.type}
@@ -716,7 +748,11 @@ function DraftCard({
           <Textarea
             value={d.prompt}
             onChange={(e) => onChange({ prompt: e.target.value })}
-            rows={Math.min(6, Math.max(2, Math.ceil(d.prompt.length / 90)))}
+            rows={
+              d.type === 'CODING'
+                ? Math.min(14, d.prompt.split('\n').length + 1)
+                : Math.min(6, Math.max(2, Math.ceil(d.prompt.length / 90)))
+            }
             className="text-[14px]"
             aria-label={`Question ${n}`}
           />
@@ -784,6 +820,7 @@ function DraftCard({
               )}
             </div>
           )}
+          {d.type === 'CODING' && d.coding && <CodingSummary c={d.coding} />}
           {d.type === 'TRUE_FALSE' && (
             <div className="flex gap-2">
               {[true, false].map((v) => (
@@ -826,5 +863,83 @@ function DraftCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+const LANG: Record<string, string> = { c: 'C', python: 'Python 3', arduino: 'Arduino' };
+
+/** What a coding question from the file will be set up with (tests are shown, not edited here). */
+function CodingSummary({ c }: { c: NonNullable<Draft['coding']> }) {
+  const [open, setOpen] = useState(false);
+  const samples = c.testCases.filter((t) => t.sample).length;
+  return (
+    <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-3 text-[13px] text-ink-700">
+      <div className="flex flex-wrap gap-x-5 gap-y-1">
+        <span>
+          <b className="font-medium text-ink-900">Languages:</b>{' '}
+          {c.languages.map((l) => LANG[l]).join(', ')}
+        </span>
+        <span>
+          <b className="font-medium text-ink-900">Marking:</b>{' '}
+          {c.mode === 'ai' ? `AI · ${c.rubric.length} rubric items` : 'Test cases'}
+        </span>
+        {c.mode === 'tests' && (
+          <span>
+            <b className="font-medium text-ink-900">Tests:</b> {c.testCases.length} ({samples}{' '}
+            sample, {c.testCases.length - samples} hidden)
+          </span>
+        )}
+        <span>
+          <b className="font-medium text-ink-900">Output check:</b>{' '}
+          {c.compare === 'exact' ? 'Exact' : 'Flexible'} · {c.timeLimitMs} ms
+        </span>
+        <span>
+          <b className="font-medium text-ink-900">Reference solution:</b>{' '}
+          {c.solution ? LANG[c.solution.language] : 'none'}
+          {c.solutionLanguages.length > 1 &&
+            ` (kept; ${c.solutionLanguages
+              .slice(1)
+              .map((l) => LANG[l])
+              .join(', ')} also in the file)`}
+        </span>
+      </div>
+      {c.warnings.length > 0 && (
+        <p className="mt-2 text-amber-700">
+          {c.warnings.length} line{c.warnings.length === 1 ? '' : 's'} not understood:{' '}
+          {c.warnings.slice(0, 3).join(' · ')}
+        </p>
+      )}
+      {c.testCases.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mt-2 text-[12.5px] font-medium text-brand-600 hover:underline"
+        >
+          {open ? 'Hide test cases' : 'Show test cases'}
+        </button>
+      )}
+      {open && (
+        <div className="mt-2 grid gap-2">
+          {c.testCases.map((t, i) => (
+            <div key={i} className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[11.5px] font-semibold text-ink-500">
+                  Test {i + 1} · {t.sample ? 'Sample' : 'Hidden'} · input
+                </p>
+                <pre className="max-h-40 overflow-auto rounded-lg bg-white px-3 py-2 font-mono text-[12px] ring-1 ring-ink-200">
+                  {t.input || '(no input)'}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-1 text-[11.5px] font-semibold text-ink-500">Expected output</p>
+                <pre className="max-h-40 overflow-auto rounded-lg bg-white px-3 py-2 font-mono text-[12px] ring-1 ring-ink-200">
+                  {t.output}
+                </pre>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

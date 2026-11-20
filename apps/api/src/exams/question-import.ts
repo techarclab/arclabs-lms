@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ImportedQuestion, ImportParseResult } from '@arc/types';
-import { parseQuestionText, type ImportParseInput } from '@arc/validation';
+import { hasCodingQuestions, parseQuestionText, type ImportParseInput } from '@arc/validation';
 import { AiGrader, AiGraderUnavailableError } from './ai-grader';
 
 const SYSTEM = `You turn a question paper (text copied from a PDF or Word file) into structured exam questions.
@@ -77,6 +77,8 @@ export class QuestionImporter {
   async parse(input: ImportParseInput): Promise<ImportParseResult> {
     const rules = () => parseQuestionText(input.text);
     if (!input.useAi) return { method: 'rules', questions: rules(), note: null };
+    // Coding questions have their own layout (tests, solutions), read exactly by the rules.
+    if (hasCodingQuestions(input.text)) return { method: 'rules', questions: rules(), note: null };
     // AI rewrites spacing, so papers with ``` code blocks are read by the rules to keep code exact.
     if (/^\s*```/m.test(input.text))
       return {
