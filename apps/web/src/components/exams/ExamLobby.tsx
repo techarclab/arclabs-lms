@@ -24,7 +24,7 @@ import {
 import type { ExamLobby as Lobby } from '@arc/types';
 import { Button, cn } from '@arc/ui';
 import { LogoMark } from '@/components/brand/Logo';
-import { formatDateTime, timeUntil } from '@/lib/format';
+import { formatDateTime, sectionLabel, timeUntil } from '@/lib/format';
 import { CameraView, useCamera } from './camera';
 import { useProctorAi } from './proctor-ai';
 import { CameraAiNumbers, cameraCheckEnabled } from './CameraAiStatus';
@@ -51,10 +51,13 @@ export function ExamLobby({
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const rules = (lobby.instructions ?? '')
-    .split('\n')
-    .map((r) => r.trim())
-    .filter(Boolean);
+  // Faculty's own notes (the built-in default text is replaced by the list below).
+  const notes = lobby.defaultInstructions
+    ? []
+    : (lobby.instructions ?? '')
+        .split('\n')
+        .map((r) => r.trim())
+        .filter(Boolean);
   const resuming = Boolean(lobby.inProgressAttemptId);
   const leftStrict = canTake && strict && resuming;
   // Ask for the camera as soon as the student opens an exam they can take.
@@ -345,27 +348,39 @@ export function ExamLobby({
             </div>
           </div>
           <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
-            <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-sm lg:min-h-0 lg:overflow-y-auto">
-              <h2 className="text-lg font-semibold">Instructions</h2>
-              <ol className="mt-4 space-y-3">
-                {rules.map((r, i) => (
-                  <li key={i} className="flex gap-3 text-[15px] leading-relaxed text-ink-700">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink-100 text-xs font-semibold text-ink-600">
+            <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-sm lg:min-h-0 lg:overflow-y-auto">
+              <h2 className="text-base font-semibold">How this exam works</h2>
+              <ol className="mt-3 space-y-2">
+                {howItWorks(lobby, strict).map((r, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      'flex gap-2.5 text-[13.5px] leading-snug text-ink-700',
+                      r.tone === 'warn' && 'font-medium text-rose-700',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold',
+                        r.tone === 'warn' ? 'bg-rose-100' : 'bg-ink-100 text-ink-600',
+                      )}
+                    >
                       {i + 1}
                     </span>
-                    {r}
+                    <span>{r.text}</span>
                   </li>
                 ))}
-                {lobby.negativeMarking && (
-                  <li className="flex gap-3 text-[15px] leading-relaxed font-medium text-rose-700">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-semibold">
-                      !
-                    </span>
-                    Negative marking applies: wrong answers reduce your score. Leave a question
-                    blank if you’re unsure.
-                  </li>
-                )}
               </ol>
+              {notes.length > 0 && (
+                <div className="mt-6 rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
+                  <p className="text-sm font-semibold text-ink-900">From your instructor</p>
+                  <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-ink-700">
+                    {notes.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
             <section className="lg:min-h-0 lg:overflow-y-auto">
               <div className="h-full rounded-3xl border border-rose-200 bg-rose-50/60 p-6">
@@ -436,4 +451,64 @@ export function ExamLobby({
       </main>
     </div>
   );
+}
+
+/** The start-page instructions, written from the exam's own settings so they always match. */
+function howItWorks(lobby: Lobby, strict: boolean): { text: string; tone?: 'warn' }[] {
+  const out: { text: string; tone?: 'warn' }[] = [];
+  const sections = lobby.sections ?? [];
+  out.push({
+    text: `You have ${lobby.durationMinutes} minutes. The timer starts when you click “Start exam” and can’t be paused; the exam submits itself when time runs out.`,
+  });
+  if (sections.length > 1) {
+    const names = sections.map((n, i) => sectionLabel(i, n)).join(', ');
+    out.push({
+      text: lobby.sectionsInOrder
+        ? `The exam has ${sections.length} sections (${names}). Answer every question of a section to open the next one — you can’t go back to a finished section.`
+        : `The exam has ${sections.length} sections (${names}). Use the section tabs above the question to move between sections at any time.`,
+    });
+  }
+  out.push({
+    text: 'Use “Save & next” and “Previous” at the top right, or click a question number. Green = answered, orange = marked for review.',
+  });
+  out.push({
+    text: 'Your answers are saved automatically. You can change any answer until you submit.',
+  });
+  if (lobby.codingCount)
+    out.push({
+      text: `There ${lobby.codingCount === 1 ? 'is 1 coding question' : `are ${lobby.codingCount} coding questions`}: write your program in the editor and press “Run” to test it on the sample input. Hidden test cases are checked after you submit.`,
+    });
+  if (lobby.negativeMarking)
+    out.push({
+      text: 'Negative marking applies: a wrong answer reduces your score.',
+      tone: 'warn',
+    });
+  out.push({
+    text: '“Submit exam” turns on only after you have answered every question. You’ll be asked “Are you ready to submit the exam?” — after that, answers can’t be changed.',
+  });
+  if (lobby.campus)
+    out.push({
+      text: `Write this exam on campus: allow location when the browser asks. You can start only within ${lobby.campus.radiusM} m of the campus, and leaving it during the exam is recorded.`,
+    });
+  if (lobby.requireCamera)
+    out.push({
+      text: 'Keep your camera on with your face clearly visible and only you in view. A phone or another person in the camera is detected and recorded.',
+    });
+  if (lobby.requireFullscreen || strict)
+    out.push({
+      text: strict
+        ? 'Stay in full screen. Leaving full screen, switching tab or window, or closing the page submits your exam immediately.'
+        : 'Stay in full screen and on this tab; leaving is recorded as a violation.',
+      tone: strict ? 'warn' : undefined,
+    });
+  out.push({
+    text: `${lobby.maxAttempts === 1 ? 'You have 1 attempt' : `You have ${lobby.maxAttempts} attempts`} · pass mark ${lobby.passPct}%. ${
+      lobby.resultVisibility === 'MANUAL_RELEASE'
+        ? 'Results are published later by your institution.'
+        : lobby.resultVisibility === 'IMMEDIATE'
+          ? 'You see your score and answers right after submitting.'
+          : 'You see your score after submitting; correct answers after the exam closes.'
+    }`,
+  });
+  return out;
 }

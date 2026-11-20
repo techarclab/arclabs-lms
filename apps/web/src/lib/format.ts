@@ -108,3 +108,12 @@ export function plainPrompt(text: string) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/** "Section 2 · IoT"; a section named only by its number ("2") is shown as "Section 2". */
+export function sectionLabel(i: number, name: string | null) {
+  const n = `Section ${i + 1}`;
+  const t = (name ?? '').trim();
+  if (!t || /^\d+$/.test(t) || t.toLowerCase() === n.toLowerCase()) return n;
+  if (/^section\b/i.test(t)) return t;
+  return `${n} · ${t}`;
+}

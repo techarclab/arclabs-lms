@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { sectionLabel } from '@/lib/format';
 import { toast } from 'sonner';
 import {
   AlertTriangle,
@@ -1097,12 +1098,4 @@ export function ExamRunner({
       </Dialog>
     </div>
   );
-}
-
-/** "Section 2 · IoT"; a section named only by its number ("2") is shown as "Section 2". */
-function sectionLabel(i: number, name: string | null) {
-  const n = `Section ${i + 1}`;
-  if (!name || /^\d+$/.test(name.trim()) || name.trim().toLowerCase() === n.toLowerCase()) return n;
-  if (/^section\b/i.test(name.trim())) return name.trim();
-  return `${n} · ${name}`;
 }

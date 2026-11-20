@@ -218,6 +218,13 @@ export interface ExamLobby extends MyExamItem {
   serverNow: string;
   /** Set when the exam must be written on campus. */
   campus: { radiusM: number; address: string | null } | null;
+  /** Section names in order (empty when the exam has no sections). */
+  sections?: string[];
+  sectionsInOrder?: boolean;
+  /** Number of coding questions. */
+  codingCount?: number;
+  /** True when `instructions` is still the built-in default text (nothing written by faculty). */
+  defaultInstructions?: boolean;
 }
 
 /** A question as delivered to a student — no answer key. */

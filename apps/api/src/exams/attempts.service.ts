@@ -36,6 +36,7 @@ import { checkGeofence, formatDistance, type Campus } from './geofence';
 import { CodeRunner, RunnerUnavailableError } from './code-runner';
 import type { Prisma, User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_INSTRUCTIONS } from './exams.service';
 import {
   ExamEngine,
   examState,
@@ -51,6 +52,7 @@ import {
   shuffle,
   attemptOrder,
   hasSections,
+  sectionGroups,
   sectionScores,
   UNSECTIONED,
   isAnswered,
@@ -176,6 +178,25 @@ export class AttemptsService {
       resultVisibility: exam.resultVisibility,
       serverNow: new Date().toISOString(),
       campus: await this.campusInfo(exam),
+      ...(await this.lobbyExtras(exam.id)),
+      sectionsInOrder: exam.sectionsInOrder,
+      defaultInstructions:
+        !exam.instructions ||
+        exam.instructions.replace(/\s+/g, ' ').trim() ===
+          DEFAULT_INSTRUCTIONS.replace(/\s+/g, ' ').trim(),
+    };
+  }
+
+  /** What the start page explains: the exam's sections and how many coding questions it has. */
+  private async lobbyExtras(quizId: string) {
+    const rows = await this.prisma.quizQuestion.findMany({
+      where: { quizId },
+      orderBy: { position: 'asc' },
+      select: { section: true, question: { select: { type: true } } },
+    });
+    return {
+      sections: hasSections(rows) ? sectionGroups(rows).map((g) => g.name) : [],
+      codingCount: rows.filter((r) => r.question.type === 'CODING').length,
     };
   }
 
