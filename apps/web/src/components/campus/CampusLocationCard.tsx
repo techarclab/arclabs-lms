@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import 'leaflet/dist/leaflet.css';
 import { Crosshair, MapPin, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CampusSettings, GeocodeResult } from '@arc/types';
@@ -16,37 +17,128 @@ import {
 } from '@arc/ui';
 import { useApi, useApiMutation } from '@/lib/use-api';
 
-/** OpenStreetMap preview with a pin, zoomed so the whole radius fits. */
+/** Where to start when no campus is set yet (Hyderabad). */
+const DEFAULT_CENTER: [number, number] = [17.385, 78.4867];
+
+/**
+ * OpenStreetMap with the campus pin and its radius. With `onPick`, clicking the map (or dragging
+ * the pin) moves the campus there.
+ */
 export function CampusMap({
   lat,
   lng,
   radiusM,
+  onPick,
   className,
 }: {
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   radiusM: number;
+  onPick?: (lat: number, lng: number) => void;
   className?: string;
 }) {
-  const dLat = (radiusM * 1.8) / 111_195;
-  const dLng = dLat / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
-  const bbox = [lng - dLng, lat - dLat, lng + dLng, lat + dLat].map((n) => n.toFixed(5)).join(',');
+  const box = useRef<HTMLDivElement>(null);
+  const map = useRef<import('leaflet').Map | null>(null);
+  const layer = useRef<{ pin: import('leaflet').Marker; ring: import('leaflet').Circle } | null>(
+    null,
+  );
+  const pickRef = useRef(onPick);
+  pickRef.current = onPick;
+  const [L, setL] = useState<typeof import('leaflet') | null>(null);
+
+  // Leaflet needs the browser, so it is loaded here rather than imported at the top.
+  useEffect(() => {
+    let alive = true;
+    void import('leaflet').then((m) => alive && setL(m.default ?? m));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!L || !box.current || map.current) return;
+    const m = L.map(box.current, { zoomControl: true, attributionControl: true }).setView(
+      lat !== null && lng !== null ? [lat, lng] : DEFAULT_CENTER,
+      lat !== null ? 16 : 11,
+    );
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(m);
+    m.attributionControl.setPrefix(false);
+    m.on('click', (e: import('leaflet').LeafletMouseEvent) =>
+      pickRef.current?.(e.latlng.lat, e.latlng.lng),
+    );
+    map.current = m;
+    return () => {
+      m.remove();
+      map.current = null;
+      layer.current = null;
+    };
+  }, [L]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pin + radius follow the chosen point.
+  useEffect(() => {
+    const m = map.current;
+    if (!L || !m) return;
+    if (lat === null || lng === null) {
+      layer.current?.pin.remove();
+      layer.current?.ring.remove();
+      layer.current = null;
+      return;
+    }
+    const at: [number, number] = [lat, lng];
+    if (!layer.current) {
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:#4f46e5;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);transform:rotate(-45deg)"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 22],
+      });
+      const pin = L.marker(at, { icon, draggable: Boolean(pickRef.current) }).addTo(m);
+      pin.on('dragend', () => {
+        const p = pin.getLatLng();
+        pickRef.current?.(p.lat, p.lng);
+      });
+      const ring = L.circle(at, {
+        radius: radiusM,
+        color: '#4f46e5',
+        weight: 2,
+        fillColor: '#6366f1',
+        fillOpacity: 0.12,
+      }).addTo(m);
+      layer.current = { pin, ring };
+      m.fitBounds(ring.getBounds(), { padding: [20, 20] });
+    } else {
+      layer.current.pin.setLatLng(at);
+      layer.current.ring.setLatLng(at);
+      layer.current.ring.setRadius(radiusM);
+      // A point found by search / current location may be off-screen: bring it into view.
+      if (!m.getBounds().contains(at))
+        m.fitBounds(layer.current.ring.getBounds(), { padding: [20, 20] });
+    }
+  }, [L, lat, lng, radiusM]);
+
   return (
     <div className={cn('overflow-hidden rounded-xl border border-ink-200', className)}>
-      <iframe
-        title="Campus location"
-        className="block h-56 w-full"
-        loading="lazy"
-        src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`}
-      />
-      <a
-        href={`https://www.google.com/maps?q=${lat},${lng}`}
-        target="_blank"
-        rel="noreferrer"
-        className="block border-t border-ink-100 bg-ink-50/60 px-3 py-1.5 text-xs text-brand-700 hover:underline"
-      >
-        {lat.toFixed(5)}, {lng.toFixed(5)} · open in Google Maps
-      </a>
+      <div className="relative">
+        <div ref={box} className="z-0 h-64 w-full bg-ink-100" />
+        {onPick && (
+          <span className="pointer-events-none absolute top-2 left-1/2 z-[500] -translate-x-1/2 rounded-full bg-ink-950/80 px-3 py-1 text-[11.5px] font-medium whitespace-nowrap text-white">
+            Click the map or drag the pin to set the campus
+          </span>
+        )}
+      </div>
+      {lat !== null && lng !== null && (
+        <a
+          href={`https://www.google.com/maps?q=${lat},${lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="block border-t border-ink-100 bg-ink-50/60 px-3 py-1.5 text-xs text-brand-700 hover:underline"
+        >
+          {lat.toFixed(5)}, {lng.toFixed(5)} · {radiusM} m radius · open in Google Maps
+        </a>
+      )}
     </div>
   );
 }
@@ -258,12 +350,21 @@ export function CampusLocationCard({ orgId }: { orgId: string }) {
                 )}
               </ul>
             )}
-            <Button variant="ghost" loading={busy === 'here'} onClick={useHere}>
-              <Crosshair /> Use my current location (stand on campus)
+            <Button
+              variant="secondary"
+              className="h-auto w-full py-2 whitespace-normal"
+              loading={busy === 'here'}
+              onClick={useHere}
+            >
+              <Crosshair className="shrink-0" /> Use my current location
+              <span className="font-normal text-ink-500">(when you are on campus)</span>
             </Button>
-            {draft.lat !== null && draft.lng !== null && (
-              <CampusMap lat={draft.lat} lng={draft.lng} radiusM={radiusOk ? radius : 300} />
-            )}
+            <CampusMap
+              lat={draft.lat}
+              lng={draft.lng}
+              radiusM={radiusOk ? radius : 300}
+              onPick={(lat, lng) => setDraft((d) => ({ ...d, lat, lng }))}
+            />
             <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
               <label className="text-[13px] text-ink-600">
                 Name shown to students
