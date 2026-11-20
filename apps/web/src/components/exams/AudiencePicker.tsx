@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Building, Check, Search, Users, X } from 'lucide-react';
+import { Building, Check, CheckCircle2, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
   DepartmentSummary,
@@ -30,10 +30,12 @@ export function AudiencePicker({
   exam,
   orgId,
   onSaved,
+  saveLabel = 'Save audience',
 }: {
   exam: ExamDetail;
   orgId: string;
   onSaved: (e: ExamDetail) => void;
+  saveLabel?: string;
 }) {
   const mutate = useApiMutation();
   const scope = useDepartmentScope();
@@ -58,6 +60,25 @@ export function AudiencePicker({
     q ? `/members?search=${encodeURIComponent(q)}&pageSize=8` : null,
     { orgId },
   );
+
+  const savedAudience = exam.audience;
+  const hasSaved =
+    savedAudience.assignToAll ||
+    savedAudience.departments.length > 0 ||
+    savedAudience.users.length > 0;
+  const same = (a: string[], b: string[]) =>
+    a.length === b.length && [...a].sort().join() === [...b].sort().join();
+  const dirty =
+    all !== savedAudience.assignToAll ||
+    (!all &&
+      (!same(
+        depts,
+        savedAudience.departments.map((d) => d.id),
+      ) ||
+        !same(
+          people.map((p) => p.id),
+          savedAudience.users.map((u) => u.id),
+        )));
 
   async function save() {
     setBusy(true);
@@ -250,10 +271,22 @@ export function AudiencePicker({
       </CardContent>
       <CardFooter>
         <span className="mr-auto text-sm text-ink-500">
-          Currently assigned: <b className="font-semibold text-ink-900">{exam.assignedCount}</b>
+          {hasSaved && !dirty ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+              <CheckCircle2 className="size-4" /> Saved ·{' '}
+            </span>
+          ) : dirty && hasSaved ? (
+            <span className="font-medium text-amber-700">Unsaved changes · </span>
+          ) : null}{' '}
+          Assigned: <b className="font-semibold text-ink-900">{exam.assignedCount}</b> candidate
+          {exam.assignedCount === 1 ? '' : 's'}
         </span>
-        <Button loading={busy} onClick={save}>
-          Save audience
+        <Button
+          loading={busy}
+          onClick={save}
+          variant={hasSaved && !dirty ? 'secondary' : 'primary'}
+        >
+          {hasSaved && !dirty ? 'Save again' : saveLabel}
         </Button>
       </CardFooter>
     </Card>

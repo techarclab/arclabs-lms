@@ -26,6 +26,8 @@ import { NO_FOLDER } from '@arc/validation';
 import {
   Button,
   Card,
+  Dialog,
+  DialogContent,
   cn,
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +73,9 @@ function Bank({ orgId }: { orgId: string }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [moveOpen, setMoveOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  // Delete confirmation: the open folder, or the selected questions.
+  const [toDelete, setToDelete] = useState<'folder' | 'selected' | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [page, setPage] = useState(1);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<QuestionItem | null>(null);
@@ -166,6 +171,33 @@ function Bank({ orgId }: { orgId: string }) {
     }
   }
 
+  /** Deletes the open folder or the selected questions (ones used in an exam are archived). */
+  async function deleteNow() {
+    setDeleting(true);
+    try {
+      const r = await mutate<{ deleted: number; archived: number }>(
+        '/questions/delete',
+        'POST',
+        toDelete === 'folder' ? { folder: namedFolder } : { ids: selected },
+        orgId,
+      );
+      toast.success(
+        `${r.deleted} question${r.deleted === 1 ? '' : 's'} deleted` +
+          (r.archived
+            ? ` · ${r.archived} used in an exam ${r.archived === 1 ? 'was' : 'were'} archived instead`
+            : ''),
+      );
+      if (toDelete === 'folder') setFolder('');
+      setSelected([]);
+      setToDelete(null);
+      refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function act(path: string, method: 'POST' | 'DELETE', ok: string) {
     try {
       await mutate(path, method, undefined, orgId);
@@ -253,6 +285,14 @@ function Bank({ orgId }: { orgId: string }) {
             <Button variant="ghost" size="sm" onClick={() => setRenameOpen(true)}>
               <Pencil /> Rename
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              onClick={() => setToDelete('folder')}
+            >
+              <Trash2 /> Delete folder
+            </Button>
           </div>
         )}
         {selected.length > 0 && (
@@ -262,6 +302,14 @@ function Bank({ orgId }: { orgId: string }) {
             </p>
             <Button size="sm" onClick={() => setMoveOpen(true)}>
               <FolderInput /> Move to folder
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="text-rose-600"
+              onClick={() => setToDelete('selected')}
+            >
+              <Trash2 /> Delete
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
               <X /> Clear
@@ -550,6 +598,38 @@ function Bank({ orgId }: { orgId: string }) {
         allowEmpty
         onSubmit={moveSelected}
       />
+      <Dialog open={toDelete !== null} onOpenChange={(o) => !deleting && !o && setToDelete(null)}>
+        <DialogContent
+          title={
+            toDelete === 'folder'
+              ? `Delete the folder “${namedFolder}”?`
+              : `Delete ${selected.length} question${selected.length === 1 ? '' : 's'}?`
+          }
+          icon={<Trash2 />}
+          description={
+            <>
+              {toDelete === 'folder'
+                ? `All ${formatNumber(total)} question${total === 1 ? '' : 's'} in this folder will be deleted. `
+                : 'The selected questions will be deleted. '}
+              This can’t be undone. Questions already used in an exam are archived instead, so that
+              exam’s results stay complete.
+            </>
+          }
+        >
+          <div className="mt-4 flex justify-end gap-3 rounded-b-2xl border-t border-ink-100 bg-ink-50/60 px-6 py-4">
+            <Button variant="secondary" disabled={deleting} onClick={() => setToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={deleting}
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={() => void deleteNow()}
+            >
+              <Trash2 /> Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <FolderDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}

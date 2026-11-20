@@ -262,6 +262,15 @@ export const renameQuestionFolderSchema = z.object({
 });
 export type RenameQuestionFolderInput = z.infer<typeof renameQuestionFolderSchema>;
 
+/** Deletes chosen questions, or a whole folder (questions used in an exam are archived instead). */
+export const deleteQuestionsSchema = z
+  .object({
+    ids: z.array(z.uuid()).max(2000).optional(),
+    folder: z.string().trim().min(1).max(80).optional(),
+  })
+  .refine((v) => (v.ids?.length ?? 0) > 0 || Boolean(v.folder), 'Choose questions or a folder');
+export type DeleteQuestionsInput = z.infer<typeof deleteQuestionsSchema>;
+
 // ───────── Exams ─────────
 
 const isoDate = z.coerce.date();

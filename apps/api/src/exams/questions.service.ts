@@ -27,6 +27,7 @@ import {
   type CompileCheckInput,
   type ListQuestionsQuery,
   type MoveQuestionsInput,
+  type DeleteQuestionsInput,
   type QuestionInputParsed,
   type RenameQuestionFolderInput,
 } from '@arc/validation';
@@ -437,6 +438,42 @@ export class QuestionsService {
       meta: { from: input.from, to, count: r.count },
     });
     return { renamed: r.count, folder: to };
+  }
+
+  /**
+   * Deletes questions (chosen ones, or every question in a folder). Questions that an exam uses
+   * can't be removed — the exam's results need them — so those are archived and leave the folder.
+   */
+  async removeMany(actor: User, orgId: string, input: DeleteQuestionsInput) {
+    const where = {
+      organizationId: orgId,
+      ...(input.ids?.length ? { id: { in: input.ids } } : {}),
+      ...(input.folder ? { folder: { equals: input.folder, mode: 'insensitive' as const } } : {}),
+    };
+    const rows = await this.prisma.question.findMany({
+      where,
+      select: { id: true, _count: { select: { quizzes: true } } },
+    });
+    if (!rows.length)
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Nothing to delete' });
+    const used = rows.filter((r) => r._count.quizzes > 0).map((r) => r.id);
+    const free = rows.filter((r) => r._count.quizzes === 0).map((r) => r.id);
+    const [deleted, archived] = await this.prisma.$transaction([
+      this.prisma.question.deleteMany({ where: { id: { in: free } } }),
+      this.prisma.question.updateMany({
+        where: { id: { in: used } },
+        data: { archived: true, ...(input.folder ? { folder: null } : {}) },
+      }),
+    ]);
+    await this.audit.log({
+      actorId: actor.id,
+      organizationId: orgId,
+      action: input.folder ? 'question.folder_deleted' : 'question.bulk_deleted',
+      entityType: 'question',
+      entityId: orgId,
+      meta: { folder: input.folder ?? null, deleted: deleted.count, archived: archived.count },
+    });
+    return { deleted: deleted.count, archived: archived.count };
   }
 
   async create(actor: User, orgId: string, input: QuestionInputParsed): Promise<QuestionItem> {

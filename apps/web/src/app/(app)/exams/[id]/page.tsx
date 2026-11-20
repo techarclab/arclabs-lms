@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   BarChart3,
   CheckCircle2,
@@ -83,6 +84,13 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState('questions');
+  // Highlights the publish card after the last setup step.
+  const [pulse, setPulse] = useState(false);
+  /** Setup is a sequence: Questions → Settings → Audience → Publish. */
+  const goStep = (next: string) => {
+    setTab(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   if (error) {
     return (
@@ -157,7 +165,14 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
         !exam.publishIssues.some((i) => /window|past|closing/i.test(i)),
       tab: 'settings',
     },
-    { label: 'Audience chosen', done: exam.assignedCount > 0, tab: 'audience' },
+    {
+      label: 'Audience chosen',
+      done:
+        exam.audience.assignToAll ||
+        exam.audience.departments.length > 0 ||
+        exam.audience.users.length > 0,
+      tab: 'audience',
+    },
   ];
   const firstMissing = checklist.find((c) => !c.done);
   /** Publish when ready; otherwise explain what's missing and jump to the right tab. */
@@ -285,16 +300,16 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-6">
             <TabsTrigger value="questions">
-              <ListChecks /> Questions{' '}
+              <ListChecks /> 1. Questions{' '}
               <span className="tabular rounded-full bg-ink-100 px-1.5 text-[11px] text-ink-600">
                 {exam.questionCount}
               </span>
             </TabsTrigger>
             <TabsTrigger value="settings">
-              <Settings2 /> Settings
+              <Settings2 /> 2. Settings
             </TabsTrigger>
             <TabsTrigger value="audience">
-              <Users /> Audience{' '}
+              <Users /> 3. Audience{' '}
               <span className="tabular rounded-full bg-ink-100 px-1.5 text-[11px] text-ink-600">
                 {exam.assignedCount}
               </span>
@@ -360,23 +375,63 @@ function Builder({ id, orgId }: { id: string; orgId: string }) {
               ) : (
                 <ExamQuestionList exam={exam} onSave={save} />
               )}
+              {exam.state === 'DRAFT' && exam.questions.length > 0 && (
+                <div className="flex items-center justify-end gap-3 border-t border-ink-100 bg-ink-50/60 px-5 py-3.5">
+                  <span className="mr-auto text-sm text-ink-500">
+                    {exam.questionCount} questions · {exam.totalMarks} marks
+                  </span>
+                  <Button onClick={() => goStep('settings')}>
+                    Next: Settings <ArrowRight />
+                  </Button>
+                </div>
+              )}
             </Card>
           </TabsContent>
 
           <TabsContent value="settings">
-            <ExamSettingsForm exam={exam} orgId={orgId} onSaved={update} />
+            <ExamSettingsForm
+              exam={exam}
+              orgId={orgId}
+              saveLabel={exam.state === 'DRAFT' ? 'Save & continue →' : 'Save settings'}
+              onSaved={(e) => {
+                update(e);
+                if (e.state === 'DRAFT') goStep('audience');
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="audience">
-            <AudiencePicker exam={exam} orgId={orgId} onSaved={update} />
+            <AudiencePicker
+              exam={exam}
+              orgId={orgId}
+              saveLabel={exam.state === 'DRAFT' ? 'Save & continue →' : 'Save audience'}
+              onSaved={(e) => {
+                update(e);
+                if (e.state === 'DRAFT') {
+                  setPulse(true);
+                  setTimeout(() => setPulse(false), 4000);
+                  document
+                    .getElementById('publish-card')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  if (!e.publishIssues.length)
+                    toast.success('All set — click “Publish exam” to make it live');
+                }
+              }}
+            />
           </TabsContent>
         </Tabs>
 
         <div className="space-y-6">
           {exam.state === 'DRAFT' ? (
-            <Card>
+            <Card
+              id="publish-card"
+              className={cn(
+                'transition-shadow duration-500',
+                pulse && 'shadow-lg ring-2 shadow-brand-500/20 ring-brand-500',
+              )}
+            >
               <CardHeader>
-                <CardTitle>Ready to publish?</CardTitle>
+                <CardTitle>4. Publish</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2.5">

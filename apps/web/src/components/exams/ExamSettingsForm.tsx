@@ -65,10 +65,13 @@ export function ExamSettingsForm({
   exam,
   orgId,
   onSaved,
+  saveLabel = 'Save settings',
 }: {
   exam: ExamDetail;
   orgId: string;
   onSaved: (e: ExamDetail) => void;
+  /** e.g. "Save & continue" while the exam is being set up. */
+  saveLabel?: string;
 }) {
   const mutate = useApiMutation();
   const { data: campus } = useApi<CampusSettings>('/campus', { orgId });
@@ -383,7 +386,7 @@ export function ExamSettingsForm({
             Discard
           </Button>
           <Button loading={busy} onClick={save}>
-            Save settings
+            {saveLabel}
           </Button>
         </CardFooter>
       </Card>

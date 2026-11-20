@@ -51,6 +51,8 @@ import {
   setExamAudienceSchema,
   setExamQuestionsSchema,
   setPassMarkSchema,
+  deleteQuestionsSchema,
+  type DeleteQuestionsInput,
   type SetPassMarkInput,
   updateExamSchema,
   type CreateExamParsed,
@@ -125,6 +127,17 @@ export class QuestionsController {
     @Body(new ZodValidationPipe(renameQuestionFolderSchema)) body: RenameQuestionFolderInput,
   ) {
     return this.questions.renameFolder(u, org.organizationId, body);
+  }
+
+  /** Deletes chosen questions or a whole folder; questions used by an exam are archived instead. */
+  @Post('delete')
+  @HttpCode(200)
+  removeMany(
+    @CurrentUser() u: User,
+    @OrgContext() org: OrgContextInfo,
+    @Body(new ZodValidationPipe(deleteQuestionsSchema)) body: DeleteQuestionsInput,
+  ) {
+    return this.questions.removeMany(u, org.organizationId, body);
   }
 
   /** Reads questions from the text of an uploaded PDF / Word file (nothing is saved). */
