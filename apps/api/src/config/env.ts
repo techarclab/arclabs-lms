@@ -28,8 +28,9 @@ const envSchema = z.object({
    * CODE_RUNNER_URL is set.
    */
   CODE_RUNNER: z.enum(['arc', 'judge0', 'local']).optional(),
-  CODE_RUNNER_URL: z.string().optional(),
-  CODE_RUNNER_TOKEN: z.string().optional(),
+  CODE_RUNNER_URL: z.string().trim().optional(),
+  // Trimmed: a pasted value often carries a space or line break, which breaks the Bearer header.
+  CODE_RUNNER_TOKEN: z.string().trim().optional(),
   /**
    * AI marking for coding questions without test cases. Any OpenAI-compatible API:
    * Groq (default, free tier), OpenRouter, Google Gemini's OpenAI endpoint, OpenAI…

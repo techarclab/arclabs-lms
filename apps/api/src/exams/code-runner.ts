@@ -280,6 +280,15 @@ export class LocalRunner implements CodeRunnerImpl {
 
 // ───────── Facade ─────────
 
+/** An error message with its cause (fetch hides the real reason, e.g. DNS or TLS, in `cause`). */
+function why(e: unknown) {
+  const err = e as Error & { cause?: { code?: string; message?: string } };
+  const c = err.cause;
+  return c
+    ? `${err.message} (${c.code ?? ''} ${c.message ?? ''})`.replace(/\s+\)/, ')')
+    : err.message;
+}
+
 export const CODE_RUNNER_IMPL = Symbol('CODE_RUNNER_IMPL');
 
 export function codeRunnerFactory(env: Env): CodeRunnerImpl | null {
@@ -365,7 +374,7 @@ export class CodeRunner {
     try {
       return await this.impl.run(language, code, stdin, timeLimitMs);
     } catch (e) {
-      this.logger.warn(`Code run failed: ${(e as Error).message}`);
+      this.logger.warn(`Code run failed: ${why(e)}`);
       throw new RunnerUnavailableError('The code runner is not responding');
     }
   }
@@ -386,7 +395,7 @@ export class CodeRunner {
       try {
         return await this.impl.runBatch(language, code, inputs, timeLimitMs);
       } catch (e) {
-        this.logger.warn(`Code run failed: ${(e as Error).message}`);
+        this.logger.warn(`Code run failed: ${why(e)}`);
         throw new RunnerUnavailableError('The code runner is not responding');
       }
     }
