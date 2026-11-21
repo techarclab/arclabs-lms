@@ -462,6 +462,8 @@ export function ExamRunner({
   const sectionLeft = current.ids.filter((i) => !isAnswered(qs[i]!.id));
   const firstOfSection = inOrder && index === current.ids[0];
   const endOfSection = inOrder && index === current.ids[current.ids.length - 1];
+  const showNextSection = endOfSection && !lastSection && inOrder;
+  const onLastQuestion = index >= qs.length - 1;
   const pct = qs.length ? Math.round((answeredCount / qs.length) * 100) : 0;
 
   return (
@@ -737,11 +739,11 @@ export function ExamRunner({
               >
                 <ChevronLeft /> Previous
               </Button>
-              {endOfSection && !lastSection && inOrder ? (
+              {showNextSection ? (
                 <Button className="flex-[1.4]" onClick={() => setNextOpen(true)}>
                   Next section <ChevronRight />
                 </Button>
-              ) : index < qs.length - 1 ? (
+              ) : !onLastQuestion ? (
                 <Button className="flex-[1.4]" onClick={() => go(index + 1)}>
                   Save & next <ChevronRight />
                 </Button>
@@ -768,20 +770,23 @@ export function ExamRunner({
                   <Eraser /> Clear answer
                 </Button>
               )}
-              <Button
-                size="sm"
-                className={cn(
-                  'h-8 flex-[1.4]',
-                  unansweredCount === 0 && 'bg-emerald-600 hover:bg-emerald-700',
-                )}
-                variant={unansweredCount ? 'secondary' : 'primary'}
-                disabled={unansweredCount > 0}
-                title={unansweredCount ? 'Answer every question to submit' : undefined}
-                onClick={() => setConfirmOpen(true)}
-              >
-                <Send />
-                {unansweredCount ? `Submit (${unansweredCount} left)` : 'Submit exam'}
-              </Button>
+              {/* On the last question the button above already submits — don't show it twice. */}
+              {(showNextSection || !onLastQuestion) && (
+                <Button
+                  size="sm"
+                  className={cn(
+                    'h-8 flex-[1.4]',
+                    unansweredCount === 0 && 'bg-emerald-600 hover:bg-emerald-700',
+                  )}
+                  variant={unansweredCount ? 'secondary' : 'primary'}
+                  disabled={unansweredCount > 0}
+                  title={unansweredCount ? 'Answer every question to submit' : undefined}
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  <Send />
+                  {unansweredCount ? `Submit (${unansweredCount} left)` : 'Submit exam'}
+                </Button>
+              )}
             </div>
           </div>
 
